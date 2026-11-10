@@ -1,0 +1,242 @@
+name: publish-pypi
+
+# The release pipeline for one `v*` tag: the `continuo-contracts` distribution, an sdist and a
+# wheel, on PyPI. The filename stays `publish-pypi.yml` because the PyPI and TestPyPI trusted
+# publishers are registered against it, and against the `pypi` and `testpypi` environments, so
+# renaming the file or either environment breaks publishing. PyPI does not honour a reusable
+# workflow there, so the upload job must live in this file.
+#
+# PRINCIPLE: build once, test the exact artifact, publish the same bytes.
+#
+#   prepare       refuses a tag that names another version, runs the tests, builds the sdist
+#                 and the wheel ONCE into `dist`, refuses a wheel that lacks a module or a data
+#                 file, and runs the installed wheel's smoke test on the oldest and the newest
+#                 supported Python
+#   publish       uploads THE SAME `dist` files. Irreversible. Needs `prepare` to have passed.
+#   verify-index  downloads the published wheel from the index, checks that it is byte for
+#                 byte the wheel `prepare` built, installs it and runs the same smoke test
+#
+# release.yml creates the GitHub Release only if this whole workflow succeeds.
+#
+# THREE MODES, decided in `prepare`:
+#   real   tag `vX.Y.Z`        -> PyPI
+#   test   tag `vX.Y.Z-testN`  -> TestPyPI. A real dress rehearsal of every step. The version
+#                                 is rewritten to a unique `<version>.dev<N>` first: TestPyPI
+#                                 never replaces a file, so a second rehearsal at the same
+#                                 version would be refused. verify-index compares the file the
+#                                 index serves byte for byte with the one this run built.
+#   dry    workflow_dispatch   -> the same graph, but the upload is skipped and verify-index
+#                                 does not run. Start with:
+#                                   gh workflow run publish-pypi.yml \
+#                                     --ref <branch> -f dry_run=true
+#
+# RECOVERY. PyPI uploads are immutable: if anything fails AFTER `publish` the files are on the
+# index for good. Yank them on pypi.org (a yank keeps the file but stops resolvers choosing it)
+# and FIX FORWARD with a new version. A failure BEFORE `publish` leaves nothing behind except the
+# git tag: delete it, fix, re-tag. A failure IN `publish` can leave some of the files on the
+# index, and a file already there fails the upload, so look at the index before re-running. No
+# GitHub Release exists for a failed run. See CONTRIBUTING.md for the full failure table.
+#
+# Tag glob: `v*` is the only pattern this workflow listens to. A tag that matches it but names
+# no version fails the version check in `prepare`, before anything is built.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build and check the package; publish nothing
+        type: boolean
+        default: true
+
+concurrency:
+  group: release-pipeline-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      mode: ${{ steps.mode.outputs.mode }}
+      version: ${{ steps.build.outputs.version }}
+    steps:
+      - name: Decide the mode
+        id: mode
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -eu
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            # A manual run can never publish: there is no tag to publish under.
+            [ "$DRY_RUN" = "true" ] || { echo "::error::workflow_dispatch only supports dry_run=true"; exit 1; }
+            mode="dry"
+          else
+            case "$REF" in refs/tags/v*) ;; *) echo "::error::not a v* tag: $REF"; exit 1;; esac
+            # release.yml's `contains(..., '-test')` is case-insensitive, so this
+            # must be too: `v1.2.3-Test1` is a rehearsal, never a real release.
+            lower="$(printf '%s' "$REF_NAME" | tr '[:upper:]' '[:lower:]')"
+            case "$lower" in
+              *-test*) mode="test";;
+              *)       mode="real";;
+            esac
+          fi
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "mode: $mode" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - name: Refuse a tag that names another version
+        if: github.event_name == 'push'
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # `vX.Y.Z` and `vX.Y.Z-testN` (in any case) both name version X.Y.Z.
+          named="${REF_NAME#v}"
+          named="${named%%-[Tt][Ee][Ss][Tt]*}"
+          declared="$(uv version --short)"
+          if [ "$named" != "$declared" ]; then
+            echo "::error::tag $REF_NAME names version $named but pyproject.toml declares $declared"
+            exit 1
+          fi
+      - name: Test before publishing
+        # The gate in front of the immutable upload. `--locked` fails when uv.lock does not
+        # match pyproject.toml.
+        run: uv sync --locked && uv run --locked pytest
+      - name: Rewrite the version to a unique dev release (rehearsal only)
+        if: steps.mode.outputs.mode != 'real'
+        # TestPyPI never replaces a file, so each rehearsal needs a version of its own. `--frozen`
+        # leaves uv.lock alone: the build does not read it.
+        run: uv version "$(uv version --short).dev$((GITHUB_RUN_NUMBER * 100 + GITHUB_RUN_ATTEMPT))" --frozen
+      - name: Build once
+        id: build
+        run: |
+          set -euo pipefail
+          uv build -o dist
+          test "$(find dist -name '*.whl' | wc -l)" -eq 1
+          test "$(find dist -name '*.tar.gz' | wc -l)" -eq 1
+          echo "version=$(uv version --short)" >> "$GITHUB_OUTPUT"
+          (cd dist && sha256sum -- *) >> "$GITHUB_STEP_SUMMARY"
+      - name: Refuse a wheel that lacks a module or a data file
+        run: uv run --no-project --python 3.12 scripts/check_wheel.py dist
+      - name: Install the wheel in clean environments and run the smoke test
+        run: |
+          set -euo pipefail
+          for py in 3.12 3.14; do
+            uv venv -q --python "$py" "$RUNNER_TEMP/venv-$py"
+            uv pip install -q --python "$RUNNER_TEMP/venv-$py/bin/python" dist/*.whl
+            (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/venv-$py/bin/python" -I "$GITHUB_WORKSPACE/scripts/smoke_installed.py")
+          done
+      # Everything below, including the upload, uses THIS artifact: never rebuild.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7
+          overwrite: true
+
+  # ---- the irreversible step ------------------------------------------------
+
+  publish:
+    needs: prepare
+    runs-on: ubuntu-latest
+    # `dry-run` is an unprotected environment with no PyPI trust: a dry run
+    # still starts this job (so the graph is the same in every mode) but every
+    # upload step below is skipped.
+    environment: ${{ (needs.prepare.outputs.mode == 'real' && 'pypi') || (needs.prepare.outputs.mode == 'test' && 'testpypi') || 'dry-run' }}
+    permissions:
+      id-token: write # OIDC token for Trusted Publishing
+      contents: read
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist
+      - name: Dry run, nothing is uploaded
+        if: needs.prepare.outputs.mode == 'dry'
+        run: |
+          echo "dry run: would upload $(find dist -type f | wc -l) files" >> "$GITHUB_STEP_SUMMARY"
+      # Rehearsal versions are unique per run, so there is nothing to skip: an
+      # existing file means something is wrong, and the upload must say so.
+      - name: Publish to TestPyPI
+        if: needs.prepare.outputs.mode == 'test'
+        # Pinned to a commit SHA. release/v1 is a moving branch, and this job
+        # holds id-token: write for PyPI Trusted Publishing, so a compromised
+        # revision could mint a token and publish under this project's name.
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: dist
+          skip-existing: false
+      # There is one distribution, so a file already on the index means this
+      # version was published before: the upload must fail, not skip it.
+      # Skipping would report success for bytes this run never uploaded.
+      - name: Publish to PyPI
+        if: needs.prepare.outputs.mode == 'real'
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        with:
+          packages-dir: dist
+
+  # ---- the published file, read back ----------------------------------------
+
+  verify-index:
+    needs: [prepare, publish]
+    if: needs.prepare.outputs.mode != 'dry'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.14"]
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      INDEX: ${{ needs.prepare.outputs.mode == 'test' && 'https://test.pypi.org/simple/' || 'https://pypi.org/simple/' }}
+      PY_VERSION: ${{ matrix.python }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist
+      - name: Install the published wheel and run the smoke test
+        run: |
+          set -euo pipefail
+          # The index can lag the upload, so ask every 20 s, up to 30 times. pip's own
+          # cache is off: it would keep serving the index page it read before the upload.
+          downloaded=false
+          for attempt in $(seq 1 30); do
+            if python3 -m pip download --no-cache-dir --no-deps --only-binary :all: \
+                --index-url "$INDEX" "continuo-contracts==$VERSION" -d "$RUNNER_TEMP/dl"; then
+              downloaded=true
+              break
+            fi
+            echo "attempt $attempt of 30: continuo-contracts==$VERSION is not served by $INDEX yet"
+            if [ "$attempt" -lt 30 ]; then
+              sleep 20
+            fi
+          done
+          if [ "$downloaded" != true ]; then
+            echo "::error::continuo-contracts==$VERSION was not served by $INDEX after 30 attempts"
+            exit 1
+          fi
+          fetched=("$RUNNER_TEMP"/dl/*.whl)
+          built=(dist/*.whl)
+          test "${#fetched[@]}" -eq 1
+          test "${#built[@]}" -eq 1
+          # The index must serve the very file this run built.
+          cmp "${fetched[0]}" "${built[0]}"
+          uv venv -q --python "$PY_VERSION" "$RUNNER_TEMP/venv"
+          # PyYAML comes from PyPI first: TestPyPI holds copies of real project names,
+          # so it must not supply a dependency.
+          uv pip install -q --python "$RUNNER_TEMP/venv/bin/python" "PyYAML>=6.0"
+          uv pip install -q --python "$RUNNER_TEMP/venv/bin/python" --no-deps "${fetched[0]}"
+          (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/venv/bin/python" -I "$GITHUB_WORKSPACE/scripts/smoke_installed.py")
