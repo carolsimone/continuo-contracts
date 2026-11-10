@@ -131,6 +131,48 @@ Read them with `importlib.resources.files("continuo_contracts") / "vectors" / "<
 consumer, in any language, runs every case: it builds each node, computes the projection and its
 hash, and compares them with the pinned values.
 
+## fingerprints
+
+```python
+from continuo_contracts.fingerprints import (
+    classify, hashed_config_denylist, projection_keys, unclassified,
+)
+```
+
+`continuo_contracts/fingerprints.yaml` says which fingerprint each input of a node moves, so a
+producer's CI, continuo's topology-controller and the guards that check them agree on it. It holds
+two lists, the `config` keys that stay out of a dbt node's hashed config and the keys of the Python
+code projection, and one list of entries for each of eight sections: `every` (what every family
+shares) and the seven node families `dbt-model`, `dbt-seed`, `dbt-snapshot`, `dbt-test`,
+`python-node`, `python-csv` and `python-api`. An entry names the inputs it classifies and the
+fingerprint they move: `content` (`content_hash`, with the parts of it that the input is folded
+into), `contract` (`contract_hash`), `both` or `neither`.
+
+- `hashed_config_denylist()` returns the dbt `config` keys that stay out of the hashed config, as a
+  `frozenset`.
+- `projection_keys()` returns the twelve keys of the code projection, in projection order.
+- `classify(family, name)` returns the entry that classifies the input `name` of a node of
+  `family`, or `None`. An entry has `id`, `field`, `source`, `fingerprint`, `parts`, `why`,
+  `inputs`, `when` and `rule`, and `entry.moves(part)` says whether the input moves that part of
+  `content_hash`. In a dbt family, a `config.<key>` that no entry names and whose key is not in the
+  denylist belongs to the family's `other_config` entry. It raises `ValueError` for a `family`
+  that is not one of the seven.
+- `unclassified(family, names)` returns the distinct `names` that no entry classifies, sorted. A
+  guard test passes it every input of a hash and expects `[]`.
+
+```python
+classify("dbt-model", "config.persist_docs").id  # "other_config"
+classify("python-node", "ci.shared_code_hash").parts  # ("shared",)
+```
+
+[docs/fingerprints.md](docs/fingerprints.md) shows every entry as a table and lists the input names:
+`raw_code`, `config.<key>`, `relation.schema`, `projection.<key>`, `ci.source_hash` and the others.
+The file is generated from `fingerprints.yaml`.
+
+A pull request that adds an input to a hash adds it to `fingerprints.yaml` in the same change. A
+projection key or a denylisted `config` key without an entry fails this repository's guard test, and
+`unclassified()` finds any other input without one.
+
 ## Who pins it
 
 Every consumer pins an exact version, because a hash is only comparable across processes that

@@ -57,6 +57,9 @@ These are the checks `.github/workflows/ci.yml` runs on Python 3.12, 3.13 and 3.
 - **Python logging.** Use the standard `logging` module for diagnostic output, written to
   stderr, never `print`. The library modules log nothing. The only exception is a
   machine-read stdout value, which stays an explicit `print`.
+- **Fingerprint declaration.** Change `continuo_contracts/fingerprints.yaml`, never
+  `docs/fingerprints.md`; then run `uv run python scripts/render_fingerprints.py`. The test
+  `test_the_docs_are_the_rendered_file` fails until you do.
 - **No per-file license headers.** See above.
 - **Hash stability.** A change that moves any hash pinned in `continuo_contracts/vectors/`
   or in the tests moves `content_hash` for every node of every install. It ships only
