@@ -52,10 +52,11 @@ by `|`, each part encoded as UTF-8.
 - `shared_fold(unit_digests)` takes a mapping from a unit id or a repo-relative POSIX path to the
   64 lowercase hex characters of the SHA-256 of that unit's bytes. It writes one line per unit,
   the key, a NUL character and the digest, sorts the lines by key, joins them with a line feed
-  and returns the lowercase hex SHA-256 of the UTF-8 text. The key is part of the line, so two
-  files that swap their contents change the hash. An empty mapping gives `""`. A key that is
-  empty or holds NUL or LF, and a digest in any other form, raise `HashInputError` (a
-  `ContractsError`) that names the key.
+  and returns the lowercase hex SHA-256 of the UTF-8 text. The lines are sorted by Unicode code
+  point of the key, which is the order of its UTF-8 bytes (not UTF-16 order). The key is part of
+  the line, so two files that swap their contents change the hash. An empty mapping gives `""`.
+  A key that is empty or holds NUL or LF, and a digest in any other form, raise `HashInputError`
+  (a `ContractsError`) that names the key.
 - `shared_hash(units)` takes a mapping from a path to the bytes of that file, one entry per file
   (a file that is both imported and listed as an asset appears once), and returns `shared_fold`
   of the SHA-256 of each value.

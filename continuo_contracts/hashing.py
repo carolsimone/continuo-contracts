@@ -13,8 +13,9 @@ carries dbt's `path` checksum as its source part, so a part is not always hex.
 The shared part folds the units a node imports, each unit named by an id or a repo-relative POSIX
 path and carrying the digest of its bytes. `shared_fold` writes one line per unit, the key, a
 NUL character and the digest, sorts the lines by key, joins them with a line feed, and returns the
-lowercase hex SHA-256 of the UTF-8 text. The key is part of the line, so two units that swap
-their contents change the hash. An empty set of units folds to `""`.
+lowercase hex SHA-256 of the UTF-8 text. The lines are sorted by Unicode code point of the key,
+which is the order of its UTF-8 bytes (not UTF-16 order). The key is part of the line, so two
+units that swap their contents change the hash. An empty set of units folds to `""`.
 """
 
 import hashlib

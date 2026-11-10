@@ -77,3 +77,18 @@ def test_shared_fold_error_names_the_key():
 def test_shared_fold_refuses_a_key_utf8_cannot_encode():
     with pytest.raises(HashInputError, match="UTF-8"):
         shared_fold({"lib/p" + chr(0xD800) + ".py": "a" * 64})
+
+
+def test_shared_fold_sorts_keys_by_code_point_not_by_utf16_code_unit():
+    # U+FF5E is in the BMP and U+1F600 is astral: code point and UTF-8 order put the first key
+    # first, UTF-16 code unit order puts the second key first.
+    units = {"lib/\uff5e.py": "a" * 64, "lib/\U0001f600.py": "b" * 64}
+
+    def fold_sorted_by(order):
+        lines = [key + "\x00" + units[key] for key in sorted(units, key=order)]
+        return hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()
+
+    pinned = "3efc50e8470b5796cd7170558f57580a2533d41b4a79ac1aebac1124ddaf564e"
+    assert fold_sorted_by(lambda key: key.encode("utf-8")) == pinned
+    assert fold_sorted_by(lambda key: key.encode("utf-16-be")) != pinned
+    assert shared_fold(units) == pinned
