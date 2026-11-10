@@ -27,13 +27,15 @@ An entry classifies the `inputs` it names:
   content` and `parts: [config]`.
 
 `parse_fingerprints` refuses a file that is not in this form with a `FingerprintsFileError` that
-names the location. `render_markdown` writes the file as the tables of `docs/fingerprints.md`.
+names the location. A mapping that writes a key twice is refused too, naming the key and its line,
+so a second `fingerprint:` in an entry cannot silently replace the first. `render_markdown` writes
+the file as the tables of `docs/fingerprints.md`.
 """
 
 import functools
 import importlib.resources
 import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Hashable, Iterable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any
@@ -142,13 +144,43 @@ class Fingerprints:
         return sorted({name for name in names if self.classify(family, name) is None})
 
 
+class _StrictLoader(yaml.SafeLoader):
+    """A `SafeLoader` that refuses a mapping in which a key occurs twice.
+
+    PyYAML keeps the last of two equal keys, so a repeated `fingerprint:` would change the
+    classification of an entry with no error. A key that a `<<` merge brings in counts as written
+    in the mapping it lands in.
+    """
+
+    def construct_mapping(self, node: yaml.MappingNode, deep: bool = False) -> dict[Hashable, Any]:
+        # A scalar tagged `!!map` also arrives here, and the base class refuses it.
+        if isinstance(node, yaml.MappingNode):
+            self.flatten_mapping(node)
+            first: dict[Hashable, yaml.Node] = {}
+            for key_node, _ in node.value:
+                key = self.construct_object(key_node, deep=True)  # type: ignore[no-untyped-call]
+                if not isinstance(key, Hashable):
+                    continue
+                if key in first:
+                    raise yaml.constructor.ConstructorError(
+                        None,
+                        None,
+                        f"duplicate key {key!r}, first written at line "
+                        f"{first[key].start_mark.line + 1}",
+                        key_node.start_mark,
+                    )
+                first[key] = key_node
+        return super().construct_mapping(node, deep=deep)
+
+
 def parse_fingerprints(text: str) -> Fingerprints:
     """Read and check the YAML `text` of a fingerprints file.
 
-    Raises `FingerprintsFileError` for a file that is not in the form this module describes.
+    Raises `FingerprintsFileError` for a file that is not in the form this module describes,
+    including a mapping that writes a key twice.
     """
     try:
-        document = yaml.safe_load(text)
+        document = yaml.load(text, Loader=_StrictLoader)
     except yaml.YAMLError as error:
         raise _fail("fingerprints file", f"is not valid YAML: {error}") from error
     root = _mapping(document, "fingerprints file", ("version", "lists", "families"))

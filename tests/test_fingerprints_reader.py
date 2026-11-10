@@ -1,3 +1,4 @@
+import importlib.resources
 import re
 
 import pytest
@@ -7,7 +8,9 @@ from continuo_contracts.errors import FingerprintsFileError
 from continuo_contracts.fingerprints import (
     Entry,
     When,
+    _StrictLoader,
     hashed_config_denylist,
+    load,
     parse_fingerprints,
     projection_keys,
     render_in,
@@ -190,3 +193,87 @@ def test_a_cell_stays_on_one_line():
     doc["families"]["dbt-model"][0]["why"] = "source\npart"
     md = render_markdown(parse_fingerprints(yaml.safe_dump(doc, sort_keys=False)))
     assert "| source part |" in md
+
+
+def _repeat(old, new):
+    """Return MINIMAL with its text `old` once replaced by `new`."""
+    assert MINIMAL.count(old) == 1
+    return MINIMAL.replace(old, new, 1)
+
+
+def _line_of(text, needle):
+    return next(i for i, line in enumerate(text.splitlines(), 1) if needle in line)
+
+
+REPEATED_KEYS = [
+    ("an entry in flow style", "fingerprint",
+     _repeat('parts: ["source"], why: "source part"',
+             'parts: ["source"], fingerprint: "neither", why: "source part"'),
+     'id: "raw_code"'),
+    ("a section under families", "dbt-seed",
+     _repeat("  dbt-snapshot: []\n", "  dbt-snapshot: []\n  dbt-seed: []\n"),
+     "  dbt-seed: []"),
+    ("a key under lists", "hashed_config_denylist",
+     _repeat('  hashed_config_denylist: ["meta", "tags"]\n',
+             '  hashed_config_denylist: ["meta", "tags"]\n  hashed_config_denylist: ["x"]\n'),
+     "  hashed_config_denylist:"),
+    ("a top-level key", "version", MINIMAL + "version: 1\n", "version: 1"),
+]
+
+
+@pytest.mark.parametrize(("where", "key", "text", "first"), REPEATED_KEYS,
+                         ids=[case[0] for case in REPEATED_KEYS])
+def test_a_repeated_key_is_refused_with_its_name_and_line(where, key, text, first):
+    first_line = _line_of(text, first)
+    repeated_line = len(text.splitlines()) if where == "a top-level key" else None
+    with pytest.raises(FingerprintsFileError, match=re.escape(f"duplicate key {key!r}")) as caught:
+        parse_fingerprints(text)
+    message = str(caught.value)
+    assert f"first written at line {first_line}" in message
+    if repeated_line is not None:
+        assert f"line {repeated_line}, column" in message
+
+
+def test_a_repeated_key_in_a_block_entry_is_refused_at_its_line():
+    block = yaml.safe_dump(yaml.safe_load(MINIMAL), sort_keys=False)
+    line = "    fingerprint: content\n"
+    text = block.replace(line, line + "    fingerprint: neither\n", 1)
+    assert text != block
+    repeated = text[: text.index(line)].count("\n") + 2
+    with pytest.raises(FingerprintsFileError, match="duplicate key 'fingerprint'") as caught:
+        parse_fingerprints(text)
+    assert f"first written at line {repeated - 1}" in str(caught.value)
+    assert f"line {repeated}, column 5" in str(caught.value)
+
+
+def test_a_second_fingerprint_in_a_packaged_entry_is_refused():
+    shipped = importlib.resources.files("continuo_contracts").joinpath("fingerprints.yaml")
+    text = shipped.read_text(encoding="utf-8")
+    lines = text.splitlines(keepends=True)
+    seed = lines.index("  dbt-seed:\n")
+    grants = next(i for i in range(seed, len(lines)) if lines[i] == '    - id: "grants"\n')
+    fingerprint = next(i for i in range(grants, len(lines))
+                       if lines[i].lstrip().startswith("fingerprint:"))
+    lines.insert(fingerprint + 1, lines[fingerprint].replace('"contract"', '"neither"'))
+    assert lines[fingerprint + 1] != lines[fingerprint]
+    with pytest.raises(FingerprintsFileError, match="duplicate key 'fingerprint'"):
+        parse_fingerprints("".join(lines))
+
+
+def test_a_key_that_a_merge_brings_in_counts_as_written():
+    text = "base: &base {k: 1}\nentry: {<<: *base, k: 2}\n"
+    with pytest.raises(FingerprintsFileError, match="duplicate key 'k'"):
+        parse_fingerprints(text)
+
+
+@pytest.mark.parametrize("text", ["? [a]\n: 1\n", "x: !!map 1\n"])
+def test_a_key_or_tag_pyyaml_refuses_is_still_a_file_error(text):
+    with pytest.raises(FingerprintsFileError, match="is not valid YAML"):
+        parse_fingerprints(text)
+
+
+def test_the_packaged_file_loads_under_the_strict_loader():
+    shipped = importlib.resources.files("continuo_contracts").joinpath("fingerprints.yaml")
+    text = shipped.read_text(encoding="utf-8")
+    assert yaml.load(text, Loader=_StrictLoader) == yaml.safe_load(text)
+    assert parse_fingerprints(text) == load()

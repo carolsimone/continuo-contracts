@@ -30,3 +30,6 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   refusal of U+200B around a type.
 - `fingerprints.yaml` classifies every input of `content_hash` for each node family, and the dbt
   `config` keys `hashed_config` leaves out; `docs/fingerprints.md` shows it.
+- `parse_fingerprints()` refuses a key written twice in a mapping, in an entry, under `lists`,
+  under `families` or at the top level, with a `FingerprintsFileError` that says `duplicate key`
+  and names the key and its line, instead of keeping the last.

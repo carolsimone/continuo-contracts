@@ -180,7 +180,9 @@ code projection, and one list of entries for each of eight sections: `every` (wh
 shares) and the seven node families `dbt-model`, `dbt-seed`, `dbt-snapshot`, `dbt-test`,
 `python-node`, `python-csv` and `python-api`. An entry names the inputs it classifies and the
 fingerprint they move: `content` (`content_hash`, with the parts of it that the input is folded
-into), `contract` (`contract_hash`), `both` or `neither`.
+into), `contract` (`contract_hash`), `both` or `neither`. The reader refuses a repeated key in any
+mapping of the file with a `FingerprintsFileError` that names the key and its line, so a second
+`fingerprint:` in an entry cannot replace the first.
 
 - `hashed_config_denylist()` returns the dbt `config` keys that stay out of the hashed config, as a
   `frozenset`.
