@@ -1,6 +1,7 @@
 [
  {"raw": "INTEGER", "canonical": "INTEGER"}, {"raw": "int", "canonical": "INTEGER"}, {"raw": " Int ", "canonical": "INTEGER"},
  {"raw": "\u00a0int\u2003", "canonical": "INTEGER"}, {"raw": "bigint", "canonical": "BIGINT"},
+ {"raw": "\u0085int\u0085", "canonical": "INTEGER"}, {"raw": "\u2028int\u2028", "canonical": "INTEGER"}, {"raw": "\u001fint\u001f", "canonical": "INTEGER"},
  {"raw": "double precision", "canonical": "DOUBLE PRECISION"}, {"raw": "Double Precision", "canonical": "DOUBLE PRECISION"},
  {"raw": "text", "canonical": "TEXT"}, {"raw": "timestamp", "canonical": "TIMESTAMP"}, {"raw": "date", "canonical": "DATE"},
  {"raw": "boolean", "canonical": "BOOLEAN"}, {"raw": "numeric(12,2)", "canonical": "NUMERIC(12,2)"},
@@ -10,6 +11,7 @@
  {"raw": "varchar(64)", "canonical": "VARCHAR(64)"}, {"raw": "VARCHAR(064)", "canonical": "VARCHAR(64)"},
  {"raw": "char(3)", "canonical": "CHAR(3)"},
  {"raw": "", "canonical": null}, {"raw": "VARCHAR", "canonical": null}, {"raw": "VARCHAR (64)", "canonical": null},
+ {"raw": "\u200bint\u200b", "canonical": null},
  {"raw": "NUMERIC( 12,2)", "canonical": null}, {"raw": "NUMERIC(12 ,2)", "canonical": null},
  {"raw": "NUMERIC(39,2)", "canonical": null}, {"raw": "NUMERIC(0,0)", "canonical": null}, {"raw": "NUMERIC(5,6)", "canonical": null},
  {"raw": "DOUBLE  PRECISION", "canonical": null}, {"raw": "FLOAT", "canonical": null}, {"raw": "INT4", "canonical": null},

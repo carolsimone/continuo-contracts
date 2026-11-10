@@ -25,5 +25,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `continuo_contracts.python`: `PythonNode`, `code_projection()` and `projection_hash()` give a
   Python node's config part with a fixed shape; `canonical_sql_type()` spells a type as the runtime
   does (`INT` is `INTEGER`). `vectors/projection.json` and `vectors/sql_types.json` pin both.
+- `canonical_sql_type()` strips exactly 29 code points from both ends of a type, listed in the
+  README and the docstring, and `vectors/sql_types.json` pins U+0085, U+2028, U+001F and the
+  refusal of U+200B around a type.
 - `fingerprints.yaml` classifies every input of `content_hash` for each node family, and the dbt
   `config` keys `hashed_config` leaves out; `docs/fingerprints.md` shows it.

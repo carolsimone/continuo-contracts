@@ -115,9 +115,14 @@ bytes. The projection is the node's `raw_code` in continuo's code bundle, and `p
   `INT`, `INTEGER`, `DOUBLE PRECISION`, `TEXT`, `TIMESTAMP`, `DATE`, `BOOLEAN`, `NUMERIC(p,s)`,
   `DECIMAL(p,s)`, `VARCHAR(n)` and `CHAR(n)`, and refuses everything else, and a `NUMERIC`
   precision outside 1 to 38 or a scale above the precision. The outer whitespace that it removes
-  is whatever Python's `str.strip()` removes (Unicode whitespace, so a no-break space around a
-  type is stripped), and after the comma of `NUMERIC(p, s)` any run of ASCII whitespace is
-  accepted. `normalise_text` strips only the six ASCII characters, so the two rules differ.
+  is exactly these 29 code points and no other character: U+0009 to U+000D, U+001C to U+001F,
+  U+0020, U+0085, U+00A0, U+1680, U+2000 to U+200A, U+2028, U+2029, U+202F, U+205F and U+3000.
+  A zero width space (U+200B) or a byte order mark (U+FEFF) around a type is not stripped, so the
+  type is refused. A port to another language strips these code points and no others, whatever
+  its own trim function removes. They are the code points that Python's `str.strip()` removes,
+  the same on Python 3.12, 3.13 and 3.14. After the comma of `NUMERIC(p, s)` any run of ASCII
+  whitespace is accepted. `normalise_text` strips only the six ASCII characters, so the two rules
+  differ.
 - Every other string of the projection is written as given: no trimming, no case change, no
   Unicode normalisation. That holds for `schema`, `table`, `script`, the names in `reads`, the
   CSV URI of a `python-csv` node, `secret_ref`, the entries of `primary_key` and `assets`, the

@@ -130,6 +130,22 @@ def test_a_type_that_is_not_text_is_refused_as_a_type():
         canonical_sql_type(5)
 
 
+def test_canonical_sql_type_strips_exactly_the_code_points_the_readme_lists():
+    listed = [
+        *range(0x09, 0x0E), *range(0x1C, 0x20), 0x20, 0x85, 0xA0, 0x1680, *range(0x2000, 0x200B),
+        0x2028, 0x2029, 0x202F, 0x205F, 0x3000,
+    ]
+    stripped = []
+    for code in range(0x110000):
+        try:
+            canonical_sql_type(chr(code) + "int" + chr(code))
+        except ProjectionError:
+            continue
+        stripped.append(code)
+    assert len(listed) == 29
+    assert stripped == listed
+
+
 def test_a_very_long_number_in_a_type_does_not_reach_int():
     assert canonical_sql_type("VARCHAR(" + "0" * 5000 + "7)") == "VARCHAR(7)"
     with pytest.raises(ProjectionError, match="out of range"):
