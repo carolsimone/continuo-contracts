@@ -22,7 +22,7 @@ The names in the *Inputs* column are these:
 
 | Field or input | Source | In | Part, or why neither | Inputs |
 |---|---|---|---|---|
-| Upstream edges, `upstream_unique_ids` | sqlglot over compiled SQL and Python read queries | neither | the Flow layer, which the topology artifact carries; DAG reads stay out of the contract | |
+| Upstream edges, `upstream_unique_ids` | sqlglot over compiled SQL and Python read queries | neither | the topology artifact carries them as the graph's edges; DAG reads stay out of the contract | |
 | Image tag, manifest metadata; library, runtime and Python versions | the release, the manifest, compile extras, the producer bundle | neither | provenance | |
 | Install settings: hosts, database names, the engine | the chart | neither | never stored; a node's own database name is masked in compiled SQL | |
 
@@ -47,8 +47,8 @@ The names in the *Inputs* column are these:
 | Config keys with null values | `config` | neither | dropped: a dbt upgrade adds them with no meaning | |
 | `tags` | node `tags` | contract | `tags`, and the first as `schedule`; outside `hashed_config`. A tag set in the SQL file's `config()` line moves the source part anyway | `config.tags` |
 | `meta.owner`, `meta.criticality`, `meta.timeout_minutes` | `config.meta` | contract; both (compiled) while SQL reads it | contract: `team.name`, `criticality`, `timeoutMinutes`; `meta` is outside `hashed_config`. Content: the compiled part, while SQL reads the value | |
-| `meta.continuo.readers`, `.reads`, `.tests`, `.classification` | `config.meta`, column `meta` | contract; both (compiled) while SQL reads it | contract: `roles`, `reads`, table tests as quality rules, `classification`, carried with the switch off. Content: the compiled part, while SQL reads the value | |
-| `meta.continuo` bindings: `entity`, `grain`, `fixed`, `filter`, a column's `property`, `local` and aggregate keys | `config.meta`, column `meta` | contract; both (compiled) while SQL reads it | contract: the ontology part, written only with the switch on. Content: the compiled part, while SQL reads the value | |
+| `meta.continuo.readers`, `.reads`, `.tests`, `.classification` | `config.meta`, column `meta` | contract; both (compiled) while SQL reads it | contract: `roles`, `reads`, table tests as quality rules, `classification`, carried whether or not the install uses an ontology. Content: the compiled part, while SQL reads the value | |
+| `meta.continuo` bindings: `entity`, `grain`, `fixed`, `filter`, a column's `property`, `local` and aggregate keys | `config.meta`, column `meta` | contract; both (compiled) while SQL reads it | contract: the ontology part, written only when the install uses an ontology. Content: the compiled part, while SQL reads the value | |
 | Every other `meta` key | `config.meta` | neither; content (compiled) while SQL reads it | not in `hashed_config`, since `meta` is outside it, and not a contract fact, since no field holds it and the continuo vocabulary is closed. Content: the compiled part, while SQL reads the value | `config.meta` |
 | `docs` | `config.docs` | neither | whether dbt's documentation site shows the node, and in which colour (`show`, `node_color`): not code, and no contract field | `config.docs` |
 | `description` as a `config` key, if a project sets one | `config` | neither | dbt declares no such key; the denylist keeps it out of `hashed_config`, and the contract's description comes from the node's `description` | `config.description` |
@@ -57,7 +57,7 @@ The names in the *Inputs* column are these:
 | `grants` | `config` | contract | `roles`; outside `hashed_config` | `config.grants` |
 | Declared columns: name and order | `schema.yml` | contract; both (config) under an enforced dbt contract | contract: `properties` in declared order; content: `hashed_config`, only when enforced | `contract.columns` |
 | Column `data_type` | `schema.yml` | contract; both (config) under an enforced dbt contract | contract: `physicalType`, with the `logicalType` derived from it; content: `hashed_config`, only when enforced | |
-| Column and model constraints | `schema.yml`, model `constraints` | neither; content (config) under an enforced dbt contract | `hashed_config`. A primary key also reaches the contract; no other constraint does, since `required` and `unique` come from tests | `constraints` |
+| Column and model constraints | `schema.yml`, model `constraints` | neither; content (config) under an enforced dbt contract | `hashed_config`. A primary key also reaches the contract through the manifest's `primary_key`; no other constraint does, since `required` and `unique` come from tests | `constraints` |
 | Column `quote` | `schema.yml` | neither; content (config) under an enforced dbt contract | `hashed_config`; it only decides how dbt quotes the name in DDL, so it has no contract field | |
 
 ## dbt seed
@@ -65,8 +65,8 @@ The names in the *Inputs* column are these:
 | Field or input | Source | In | Part, or why neither | Inputs |
 |---|---|---|---|---|
 | Schema, name, resolved alias | node `schema`, `name`, `alias` | both (config, identity) | as for a model | `relation.schema`, `relation.alias` |
-| CSV bytes, any size, outer whitespace included | compile extras' `sha256` | content (source) | source part. A stored artifact with no extras keeps dbt's checksum, a path for a seed over 1 MiB, until its service's rebaseline | `seed_bytes`, `seed_checksum` |
-| CSV header | the CSV, and compile extras' `header` | content (source) | through the bytes; the contract holds the declared columns instead, which the lite check keeps equal to the header | |
+| CSV bytes, any size, outer whitespace included | compile extras' `sha256` | content (source) | source part. A stored artifact with no extras keeps dbt's checksum, which is the file path for a seed over 1 MiB, until its service's re-baseline release compiles the service again | `seed_bytes`, `seed_checksum` |
+| CSV header | the CSV, and compile extras' `header` | content (source) | through the bytes; the contract holds the declared columns instead, which the producer's CI check keeps equal to the header | |
 | `seed_columns_hash`, `seed_columns` | compile extras' `header` and `column_types` | neither | topology fields that tell a column change from a row change; their inputs are already in `content_hash`, through the bytes and `hashed_config` | |
 | Compiled part | none | neither | a seed has no compiled SQL; the part is `""` | |
 | Seed materialization and loader macros the team overrides; package macros in the closure | the manifest's `macros` | content (shared) | shared part: closure roots and root overrides | `macros` |
@@ -82,7 +82,7 @@ The names in the *Inputs* column are these:
 | Every other `meta` key, `docs` | `config` | neither | as for a model; a seed has no SQL to read a `meta` value | `config.meta`, `config.docs` |
 | `grants` | `config` | contract | `roles` | `config.grants` |
 | `group` | `config` | contract | `group`, as on a model; outside `hashed_config`. dbt declares `group` on every node's config | `config.group` |
-| `access`, `freshness`, or `description` as a `config` key, if a project sets one on a seed | `config` | neither | dbt declares none of them on a seed's config (`access` and `freshness` are a model's); the denylist keeps them out of `hashed_config`, and the generator maps `access` and `freshness` for a model only | `config.access`, `config.freshness`, `config.description` |
+| `access`, `freshness`, or `description` as a `config` key, if a project sets one on a seed | `config` | neither | dbt declares none of them on a seed's config (`access` and `freshness` are a model's); the denylist keeps them out of `hashed_config`, and the contract generator maps `access` and `freshness` for a model only | `config.access`, `config.freshness`, `config.description` |
 
 ## dbt snapshot
 
@@ -97,7 +97,7 @@ The names in the *Inputs* column are these:
 | Bodies of the dbt functions the snapshot calls | the manifest | content (shared) | shared part | `functions` |
 | Service units | the manifest, compile extras | content (shared) | shared part | `on_run_start`, `on_run_end`, `project_flags`, `generate_schema_name`, `generate_alias_name` |
 | `strategy`, `unique_key`, `updated_at`, `check_cols`, `hard_deletes`, `snapshot_meta_column_names`, `dbt_valid_to_current` | snapshot `config` | both (config) | content: `hashed_config`; contract: `snapshot` | `config.strategy`, `config.unique_key`, `config.updated_at`, `config.check_cols`, `config.hard_deletes`, `config.snapshot_meta_column_names`, `config.dbt_valid_to_current` |
-| The columns dbt adds to the history table: `dbt_scd_id`, `dbt_updated_at`, `dbt_valid_from` and `dbt_valid_to`, and `dbt_is_deleted` when `hard_deletes` is `new_record`, under the names `snapshot_meta_column_names` sets | derived from the snapshot `config` | both (config) | contract: `properties`, added by the generator; content: through the snapshot config in `hashed_config` | |
+| The columns dbt adds to the history table: `dbt_scd_id`, `dbt_updated_at`, `dbt_valid_from` and `dbt_valid_to`, and `dbt_is_deleted` when `hard_deletes` is `new_record`, under the names `snapshot_meta_column_names` sets | derived from the snapshot `config` | both (config) | contract: `properties`, added by the contract generator; content: through the snapshot config in `hashed_config` | |
 | `materialized: snapshot` | `config` | both (config) | content: `hashed_config`; contract: `materialization`, and `schema[0].physicalType`, always `table` for a snapshot | `config.materialized` |
 | Every other config key outside the denylist | `config` | content (config) | `hashed_config` | `config.*` |
 | Config keys with null values | `config` | neither | dropped | |
@@ -128,7 +128,7 @@ The names in the *Inputs* column are these:
 | `group` | `config` | neither | outside `hashed_config`, and no field of a quality rule holds it. dbt declares `group` on a test's config too | `config.group` |
 | Config keys with null values: `alias`, `database`, `group`, `static_analysis`, `store_failures`, `store_failures_as`, `sql_header`, `where` and `limit`, while a project leaves them unset | `config` | neither | dropped; dbt writes each as null until it is set | |
 | `docs`, `grants`, `access`, `freshness`, or `description` as a `config` key, if a project sets one on a test | `config` | neither | dbt declares none of them on a test's config; the denylist keeps them out of `hashed_config`, and no field of a quality rule holds them | `config.docs`, `config.grants`, `config.access`, `config.freshness`, `config.description` |
-| A test of a source, or of a node the gates skip | the manifest | neither | the parser keeps only tests of tracked nodes; whether a contract states them is open | |
+| A test of a source, or of a node that continuo's topology-controller skips | the manifest | neither | continuo's topology-controller, which parses the dbt manifest, keeps only the tests of the nodes it tracks | |
 
 ## python-node
 
@@ -136,9 +136,9 @@ The names in the *Inputs* column are these:
 |---|---|---|---|---|
 | `id` | authored, lower case | both (config) | content: its schema part, the projection's `schema`; contract: `id` | `projection.schema` |
 | The table, `schema[0].name`, and `name` | authored; `name` defaults to the table | both (config) | content: the projection's `table`; contract: `schema[0].name`, `name` | `projection.table` |
-| Script bytes | the script file | content (source) | source part (CI) | `ci.source_hash` |
+| Script bytes | the script file | content (source) | source part, computed by the producer's CI | `ci.source_hash` |
 | `script` | authored path | both (config) | content: the projection's `script`; contract: `script` | `projection.script` |
-| In-repo import closure | the files the script imports | content (shared) | shared part, each folded with its path (CI) | `ci.shared_code_hash` |
+| In-repo import closure | the files the script imports | content (shared) | shared part, each folded with its path, computed by the producer's CI | `ci.shared_code_hash` |
 | `assets` | authored list | both (config, shared) | content: the list in the projection, the files' bytes in the shared part; contract: `assets` | `projection.assets` |
 | `readQueries` | authored | both (config) | content: the projection's `reads`, exact text; contract: `readQueries` | `projection.reads` |
 | Columns: name and order | `schema[0].properties` | both (config) | content: the projection's `output_columns`; contract: `properties` in file order | `projection.output_columns` |
@@ -156,7 +156,7 @@ The names in the *Inputs* column are these:
 | Field or input | Source | In | Part, or why neither | Inputs |
 |---|---|---|---|---|
 | `id`, the table and `name` | authored | both (config) | as for a `python-node` | `projection.schema`, `projection.table` |
-| CSV URI | authored `csvSource` | both (source, config) | content: the source part, `sha256(uri)` (CI), and the projection's `reads.csv`; contract: `csvSource` | `projection.reads`, `ci.source_hash` |
+| CSV URI | authored `csvSource` | both (source, config) | content: the source part, `sha256(uri)` computed by the producer's CI, and the projection's `reads.csv`; contract: `csvSource` | `projection.reads`, `ci.source_hash` |
 | The CSV's content at the URI | the object | neither | data, not a new node version | |
 | `script`, `readQueries`, `secretRef`, `assets` | refused on a csv node | neither | the projection holds `script: ""`, `reads: {csv: <uri>}`, `secret_ref: ""` and `assets: []`, and the shared part is empty | `projection.script`, `projection.secret_ref`, `projection.assets`, `ci.shared_code_hash` |
 | Columns, each column's `physicalType` and `required` | authored | both (config) | as for a `python-node` | `projection.output_columns` |

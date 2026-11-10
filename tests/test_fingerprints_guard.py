@@ -68,7 +68,7 @@ def test_every_python_hash_input_is_classified(family):
     ("python-api", "projection.reads", "refused_reads", "neither", ()),
     ("python-api", "ci.source_hash", "repo_inputs", "content", ("source", "shared")),
 ])
-def test_inputs_classify_as_appendix_a_says(family, name, entry_id, fingerprint, parts):
+def test_inputs_classify_as_declared(family, name, entry_id, fingerprint, parts):
     entry = FP.classify(family, name)
     assert (entry.id, entry.fingerprint, entry.parts) == (entry_id, fingerprint, parts)
 

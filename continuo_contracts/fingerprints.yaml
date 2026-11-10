@@ -10,7 +10,7 @@ families:
       field: "Upstream edges, `upstream_unique_ids`"
       source: "sqlglot over compiled SQL and Python read queries"
       fingerprint: "neither"
-      why: "the Flow layer, which the topology artifact carries; DAG reads stay out of the contract"
+      why: "the topology artifact carries them as the graph's edges; DAG reads stay out of the contract"
       inputs: []
     - id: "provenance"
       field: "Image tag, manifest metadata; library, runtime and Python versions"
@@ -146,14 +146,14 @@ families:
       source: "`config.meta`, column `meta`"
       fingerprint: "contract"
       when: {condition: "sql_reads", fingerprint: "both", parts: ["compiled"]}
-      why: "contract: `roles`, `reads`, table tests as quality rules, `classification`, carried with the switch off. Content: the compiled part, while SQL reads the value"
+      why: "contract: `roles`, `reads`, table tests as quality rules, `classification`, carried whether or not the install uses an ontology. Content: the compiled part, while SQL reads the value"
       inputs: []
     - id: "meta_bindings"
       field: "`meta.continuo` bindings: `entity`, `grain`, `fixed`, `filter`, a column's `property`, `local` and aggregate keys"
       source: "`config.meta`, column `meta`"
       fingerprint: "contract"
       when: {condition: "sql_reads", fingerprint: "both", parts: ["compiled"]}
-      why: "contract: the ontology part, written only with the switch on. Content: the compiled part, while SQL reads the value"
+      why: "contract: the ontology part, written only when the install uses an ontology. Content: the compiled part, while SQL reads the value"
       inputs: []
     - id: "meta_other"
       field: "Every other `meta` key"
@@ -211,7 +211,7 @@ families:
       source: "`schema.yml`, model `constraints`"
       fingerprint: "neither"
       when: {condition: "enforced", fingerprint: "content", parts: ["config"]}
-      why: "`hashed_config`. A primary key also reaches the contract; no other constraint does, since `required` and `unique` come from tests"
+      why: "`hashed_config`. A primary key also reaches the contract through the manifest's `primary_key`; no other constraint does, since `required` and `unique` come from tests"
       inputs: ["constraints"]
     - id: "column_quote"
       field: "Column `quote`"
@@ -233,14 +233,14 @@ families:
       source: "compile extras' `sha256`"
       fingerprint: "content"
       parts: ["source"]
-      why: "source part. A stored artifact with no extras keeps dbt's checksum, a path for a seed over 1 MiB, until its service's rebaseline"
+      why: "source part. A stored artifact with no extras keeps dbt's checksum, which is the file path for a seed over 1 MiB, until its service's re-baseline release compiles the service again"
       inputs: ["seed_bytes", "seed_checksum"]
     - id: "csv_header"
       field: "CSV header"
       source: "the CSV, and compile extras' `header`"
       fingerprint: "content"
       parts: ["source"]
-      why: "through the bytes; the contract holds the declared columns instead, which the lite check keeps equal to the header"
+      why: "through the bytes; the contract holds the declared columns instead, which the producer's CI check keeps equal to the header"
       inputs: []
     - id: "seed_columns"
       field: "`seed_columns_hash`, `seed_columns`"
@@ -343,7 +343,7 @@ families:
       field: "`access`, `freshness`, or `description` as a `config` key, if a project sets one on a seed"
       source: "`config`"
       fingerprint: "neither"
-      why: "dbt declares none of them on a seed's config (`access` and `freshness` are a model's); the denylist keeps them out of `hashed_config`, and the generator maps `access` and `freshness` for a model only"
+      why: "dbt declares none of them on a seed's config (`access` and `freshness` are a model's); the denylist keeps them out of `hashed_config`, and the contract generator maps `access` and `freshness` for a model only"
       inputs: ["config.access", "config.freshness", "config.description"]
   dbt-snapshot:
     - id: "identity"
@@ -412,7 +412,7 @@ families:
       source: "derived from the snapshot `config`"
       fingerprint: "both"
       parts: ["config"]
-      why: "contract: `properties`, added by the generator; content: through the snapshot config in `hashed_config`"
+      why: "contract: `properties`, added by the contract generator; content: through the snapshot config in `hashed_config`"
       inputs: []
     - id: "materialization"
       field: "`materialized: snapshot`"
@@ -584,10 +584,10 @@ families:
       why: "dbt declares none of them on a test's config; the denylist keeps them out of `hashed_config`, and no field of a quality rule holds them"
       inputs: ["config.docs", "config.grants", "config.access", "config.freshness", "config.description"]
     - id: "untracked_tests"
-      field: "A test of a source, or of a node the gates skip"
+      field: "A test of a source, or of a node that continuo's topology-controller skips"
       source: "the manifest"
       fingerprint: "neither"
-      why: "the parser keeps only tests of tracked nodes; whether a contract states them is open"
+      why: "continuo's topology-controller, which parses the dbt manifest, keeps only the tests of the nodes it tracks"
       inputs: []
   python-node:
     - id: "schema"
@@ -609,7 +609,7 @@ families:
       source: "the script file"
       fingerprint: "content"
       parts: ["source"]
-      why: "source part (CI)"
+      why: "source part, computed by the producer's CI"
       inputs: ["ci.source_hash"]
     - id: "script"
       field: "`script`"
@@ -623,7 +623,7 @@ families:
       source: "the files the script imports"
       fingerprint: "content"
       parts: ["shared"]
-      why: "shared part, each folded with its path (CI)"
+      why: "shared part, each folded with its path, computed by the producer's CI"
       inputs: ["ci.shared_code_hash"]
     - id: "assets"
       field: "`assets`"
@@ -714,7 +714,7 @@ families:
       source: "authored `csvSource`"
       fingerprint: "both"
       parts: ["source", "config"]
-      why: "content: the source part, `sha256(uri)` (CI), and the projection's `reads.csv`; contract: `csvSource`"
+      why: "content: the source part, `sha256(uri)` computed by the producer's CI, and the projection's `reads.csv`; contract: `csvSource`"
       inputs: ["projection.reads", "ci.source_hash"]
     - id: "csv_content"
       field: "The CSV's content at the URI"
