@@ -57,6 +57,29 @@ DBT_FAMILIES = FAMILIES[:4]
 PYTHON_FAMILIES = FAMILIES[4:]
 EVERY = "every"
 SECTIONS = (EVERY, *FAMILIES)
+# The input names an entry may list that are written out in full. The rest of the closed
+# vocabulary is the pattern `config.<key>` (and `config.*`) for a dbt config key and
+# `projection.<key>` for a key of the Python code projection.
+FIXED_INPUT_NAMES = (
+    "raw_code",
+    "compiled_code",
+    "seed_bytes",
+    "seed_checksum",
+    "relation.schema",
+    "relation.alias",
+    "contract.columns",
+    "constraints",
+    "macros",
+    "functions",
+    "unit_tests",
+    "on_run_start",
+    "on_run_end",
+    "project_flags",
+    "generate_schema_name",
+    "generate_alias_name",
+    "ci.source_hash",
+    "ci.shared_code_hash",
+)
 
 _VERSION = 1
 _FINGERPRINTS = ("content", "contract", "both", "neither")

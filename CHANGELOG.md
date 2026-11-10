@@ -33,3 +33,5 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `parse_fingerprints()` refuses a key written twice in a mapping, in an entry, under `lists`,
   under `families` or at the top level, with a `FingerprintsFileError` that says `duplicate key`
   and names the key and its line, instead of keeping the last.
+- `continuo_contracts.fingerprints.FIXED_INPUT_NAMES` lists the input names written out in full;
+  a guard test ties it to the input names that `docs/fingerprints.md` shows.

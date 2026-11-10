@@ -207,7 +207,10 @@ classify("python-node", "ci.shared_code_hash").parts  # ("shared",)
 [docs/fingerprints.md](https://github.com/carolsimone/continuo-contracts/blob/main/docs/fingerprints.md)
 shows every entry as a table and lists the input names: `raw_code`, `config.<key>`,
 `relation.schema`, `projection.<key>`, `ci.source_hash` and the others. The file is generated from
-`fingerprints.yaml`.
+`fingerprints.yaml`. The input names written out in full are the tuple `FIXED_INPUT_NAMES` of
+`continuo_contracts.fingerprints`, and every other input name is `config.<key>`, `config.*` or
+`projection.<key>`. This repository's guard tests check that an entry names nothing outside that
+vocabulary and that `docs/fingerprints.md` writes each name of the tuple and no other fixed name.
 
 A pull request that adds an input to a hash adds it to `fingerprints.yaml` in the same change. A
 projection key or a denylisted `config` key without an entry fails this repository's guard test, and
