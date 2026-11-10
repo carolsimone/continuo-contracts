@@ -16,3 +16,6 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `continuo_contracts.fingerprints`: reads and checks `fingerprints.yaml`; `classify()` and
   `unclassified()` say which entry classifies an input of a node family;
   `hashed_config_denylist()` and `projection_keys()` hand the hashing code its lists.
+- `continuo_contracts.python`: `PythonNode`, `code_projection()` and `projection_hash()` give a
+  Python node's config part with a fixed shape; `canonical_sql_type()` spells a type as the runtime
+  does (`INT` is `INTEGER`). `vectors/projection.json` and `vectors/sql_types.json` pin both.

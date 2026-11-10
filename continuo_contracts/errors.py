@@ -20,6 +20,14 @@ class HashInputError(ContractsError):
     """
 
 
+class ProjectionError(ContractsError):
+    """A Python node that the code projection refuses, or an SQL type that is not supported.
+
+    The message of an error about a node starts with its relation, `<schema>.<table>`, then
+    `: ` and the reason. `canonical_sql_type` has no node, so its messages carry no relation.
+    """
+
+
 class FingerprintsFileError(ContractsError):
     """A fingerprints file in a form this package refuses.
 

@@ -66,6 +66,69 @@ shared_hash({"lib/p.py": b"P = 7\n", "lib/q.py": b"Q = -7\n"})
 fold3("1" * 64, shared_hash({}), "2" * 64)  # "sha256:23208c80..."
 ```
 
+## python
+
+```python
+from continuo_contracts.python import (
+    PythonColumn, PythonNode, canonical_sql_type, code_projection, projection_hash,
+)
+```
+
+A Python node is a table that a script (`python-node`), a CSV file (`python-csv`) or an API call
+(`python-api`) fills. Its code projection is the part of its declaration that decides what it
+computes, written in one fixed shape, so two producers that declare the same node write the same
+bytes. The projection is the node's `raw_code` in continuo's code bundle, and `projection_hash`
+(the lowercase hex SHA-256 of its canonical JSON) is the config part of its `content_hash`.
+
+- `PythonNode` holds the twelve fields of a node's wire entry: `schema`, `table`, `kind`,
+  `script`, `reads`, `output_columns` (a sequence of `PythonColumn(name, type, nullable=True)`),
+  `extra_columns`, `config`, `secret_ref`, `mode_type`, `primary_key` and `assets`.
+  `PythonNode.from_mapping(entry)` builds one from a wire entry: it ignores every other key and
+  fills the fields that are absent with their defaults. `relation` is `<schema>.<table>`.
+- `code_projection(node)` returns the twelve keys that `fingerprints.projection_keys()` lists, in
+  that order. A stored `python-model` kind is `python-node`. The SQL of each read of a
+  `python-node` has LF line endings and no ASCII whitespace around it. Each column type is
+  written by `canonical_sql_type`. `config` is a deep copy. `primary_key` is the node's key on an
+  `upsert` node and `[]` on `replace` and `append`, where the key only describes the table. The
+  `assets` are sorted. A `python-csv` node has no script and no assets, reads exactly `csv`, and
+  only replaces. Only a `python-api` node has a `secret_ref`, and it reads nothing.
+- `projection_hash(node)` returns the hash of that projection.
+- `canonical_sql_type(raw)` strips outer whitespace, ignores case and writes `INT` as `INTEGER`,
+  `DECIMAL(p, s)` as `NUMERIC(p,s)` and `VARCHAR(064)` as `VARCHAR(64)`. It supports `BIGINT`,
+  `INT`, `INTEGER`, `DOUBLE PRECISION`, `TEXT`, `TIMESTAMP`, `DATE`, `BOOLEAN`, `NUMERIC(p,s)`,
+  `DECIMAL(p,s)`, `VARCHAR(n)` and `CHAR(n)`, and refuses everything else, and a `NUMERIC`
+  precision outside 1 to 38 or a scale above the precision.
+- A node that cannot be projected the same way everywhere raises `ProjectionError` (a
+  `ContractsError`). The message of an error about a node starts with `<schema>.<table>: `, and
+  the error of a `config` value that canonical JSON cannot write goes on with its JSON path.
+
+```python
+node = PythonNode(
+    schema="analytics",
+    table="py_daily_kpis",
+    script="scripts/py_daily_kpis.py",
+    reads={"daily": "select created_at, amount_eur from analytics.daily_transactions"},
+    output_columns=(
+        PythonColumn("day", "date", nullable=False),
+        PythonColumn("tx_count", "int", nullable=False),
+        PythonColumn("total_amount", "decimal(12, 2)", nullable=False),
+    ),
+)
+code_projection(node)["output_columns"][1]  # {"name": "tx_count", "nullable": False, "type": "INTEGER"}
+projection_hash(node)  # "a01d7d6065f055bb2d87959aaf178d08f5a3f96c86912099b9876239d84f6efe"
+```
+
+Two data files pin this behaviour, and the wheel ships both:
+
+- `vectors/projection.json` is a list of `{"name", "node", "projection", "projection_hash"}`.
+  `node` holds the twelve fields as a wire entry carries them.
+- `vectors/sql_types.json` is a list of `{"raw", "canonical"}`, with `canonical` null when the type
+  is refused.
+
+Read them with `importlib.resources.files("continuo_contracts") / "vectors" / "<file>"`. Every
+consumer, in any language, runs every case: it builds each node, computes the projection and its
+hash, and compares them with the pinned values.
+
 ## Who pins it
 
 Every consumer pins an exact version, because a hash is only comparable across processes that
