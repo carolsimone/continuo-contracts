@@ -5,6 +5,7 @@ from types import MappingProxyType
 
 import pytest
 
+from continuo_contracts.canonical import MAX_DEPTH
 from continuo_contracts.errors import ProjectionError
 from continuo_contracts.fingerprints import projection_keys
 from continuo_contracts.python import (
@@ -224,3 +225,60 @@ def test_assets_are_sorted_by_code_point_not_by_utf_16_unit():
     # unit the emoji does.
     tilde, emoji = chr(0xFF5E) + ".csv", chr(0x1F600) + ".csv"
     assert code_projection(node(assets=(emoji, tilde)))["assets"] == [tilde, emoji]
+
+
+TOO_DEEP = "nesting is too deep, a container may be at most 100 levels down"
+NESTED_CONFIG_KINDS = [
+    pytest.param(lambda inner: {"k": inner}, ".k", id="mappings"),
+    pytest.param(lambda inner: [inner], "[0]", id="lists"),
+    pytest.param(lambda inner: (inner,), "[0]", id="tuples"),
+]
+
+
+def _nested_config(levels, wrap):
+    """Return a config of `levels` nested containers (the config itself is level 1), a mapping
+    whose entry `k` holds the next container, and the innermost one holds the integer 1."""
+    value = 1
+    for _ in range(levels - 1):
+        value = wrap(value)
+    return {"k": value}
+
+
+def _config_path(level, segment):
+    """Return the path in the projection of the container on `level` (2 or more) of a nested
+    config: the config is `$.config` and its entry `k` is level 2."""
+    return "$.config.k" + segment * (level - 2)
+
+
+@pytest.mark.parametrize(("wrap", "segment"), NESTED_CONFIG_KINDS)
+def test_a_config_nested_so_the_projection_reaches_the_limit_hashes(wrap, segment):
+    # The projection is a mapping on level 1 and `config` is its value on level 2.
+    config = _nested_config(MAX_DEPTH - 1, wrap)
+    assert len(projection_hash(node(config=config))) == 64
+
+
+@pytest.mark.parametrize(("wrap", "segment"), NESTED_CONFIG_KINDS)
+@pytest.mark.parametrize("levels", [MAX_DEPTH, 500, 5000])
+def test_a_config_nested_deeper_than_the_limit_is_refused_with_its_node_and_its_path(
+    wrap, segment, levels
+):
+    config = _nested_config(levels, wrap)
+    assert isinstance(code_projection(node(config=config)), dict)
+    with pytest.raises(ProjectionError) as err:
+        projection_hash(node(config=config))
+    assert str(err.value) == f"analytics.t: {_config_path(MAX_DEPTH, segment)}: {TOO_DEEP}"
+
+
+def test_the_copy_of_a_config_stops_at_the_limit_and_leaves_the_deeper_container_in_place():
+    config = _nested_config(5000, lambda inner: (inner,))
+    original = config["k"]
+    for _ in range(MAX_DEPTH - 2):
+        original = original[0]
+    copied = code_projection(node(config=config))["config"]
+    assert type(copied) is dict
+    last_copy = copied["k"]
+    for _ in range(MAX_DEPTH - 2):
+        last_copy = last_copy[0]
+    assert type(last_copy) is list
+    assert type(last_copy[0]) is tuple
+    assert last_copy[0] is original[0]

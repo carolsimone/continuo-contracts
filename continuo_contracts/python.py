@@ -24,7 +24,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, fields
 from typing import Any, Final, Self
 
-from continuo_contracts.canonical import canonical_json, normalise_text
+from continuo_contracts.canonical import MAX_DEPTH, canonical_json, normalise_text
 from continuo_contracts.errors import CanonicalJsonError, ProjectionError
 from continuo_contracts.fingerprints import projection_keys
 from continuo_contracts.hashing import sha256_hex
@@ -157,10 +157,11 @@ def code_projection(node: PythonNode) -> dict[str, Any]:
     """Return the code projection of `node`: one entry for each key of
     `fingerprints.projection_keys()`, in that order.
 
-    The result holds no container of `node`, so changing it does not change `node`: `config` is
-    copied with every mapping as a `dict` and every list or tuple as a `list`, at every depth, and
-    a value that is none of these is left in place. Assets are sorted by Unicode code point, which
-    is the order of their UTF-8 bytes (not UTF-16 order).
+    `config` is copied with every mapping as a `dict` and every list or tuple as a `list`, down to
+    level `canonical.MAX_DEPTH` (the config itself is level 1), so changing the result does not
+    change `node` down to that level. A value that is none of these is left in place, and so is a
+    container on a deeper level, which `projection_hash` refuses. Assets are sorted by Unicode
+    code point, which is the order of their UTF-8 bytes (not UTF-16 order).
 
     Raises `ProjectionError`, whose message starts with `<schema>.<table>: `, for a node it cannot
     project: a field that is not of its type or that holds a value outside its set, a field that
@@ -179,7 +180,9 @@ def projection_hash(node: PythonNode) -> str:
     This is the Python config part of the node's `content_hash`. Raises `ProjectionError`, whose
     message starts with `<schema>.<table>: `, for a node that `code_projection` refuses and for a
     value of its `config` that canonical JSON cannot write, in which case the reason starts with
-    the JSON path of that value.
+    the JSON path of that value. The projection is a mapping on level 1 of the canonical JSON and
+    `config` is its value on level 2, so a `config` is refused when it nests containers deeper
+    than `canonical.MAX_DEPTH - 1` levels, counting the config itself as level 1.
     """
     projection = code_projection(node)
     try:
@@ -335,42 +338,48 @@ def _config(node: PythonNode, kind: str) -> dict[str, Any]:
     config = _mapping(node.config, "config")
     for key in config:
         _text(key, "a key of config", allow_empty=True)
-    return _copy_mapping(config, {})
+    return _copy_mapping(config, {}, 1)
 
 
-def _json_copy(value: object, on_path: dict[int, object]) -> object:
-    """Copy `value` by its JSON shape: a mapping becomes a `dict`, a list or tuple becomes a
-    `list`, and anything else is returned as it is, for `canonical_json` to accept or to refuse
-    with the path of the value.
+def _json_copy(value: object, on_path: dict[int, object], depth: int) -> object:
+    """Copy `value`, a container on level `depth` of `config`, by its JSON shape: a mapping
+    becomes a `dict`, a list or tuple becomes a `list`, and anything else is returned as it is,
+    for `canonical_json` to accept or to refuse with the path of the value.
 
     `on_path` maps each container that is being copied, from the root down to `value`, to its
     copy. A container that contains itself is copied as a copy that contains itself, so the copy
-    ends and `canonical_json` names the path where the cycle closes.
+    ends and `canonical_json` names the path where the cycle closes. A container on a level deeper
+    than `MAX_DEPTH` is returned as it is and not copied, so the copy never recurses deeper than
+    the limit and `canonical_json` refuses the nesting with the path of the container.
     """
     if not isinstance(value, Mapping | list | tuple):
         return value
     if id(value) in on_path:
         return on_path[id(value)]
+    if depth > MAX_DEPTH:
+        return value
     if isinstance(value, Mapping):
-        return _copy_mapping(value, on_path)
-    return _copy_list(value, on_path)
+        return _copy_mapping(value, on_path, depth)
+    return _copy_list(value, on_path, depth)
 
 
-def _copy_mapping(source: Mapping[Any, Any], on_path: dict[int, object]) -> dict[Any, Any]:
+def _copy_mapping(
+    source: Mapping[Any, Any], on_path: dict[int, object], depth: int
+) -> dict[Any, Any]:
     # A key is kept as it is, so a key that is not a string reaches `canonical_json`.
     copied: dict[Any, Any] = {}
     on_path[id(source)] = copied
     for key, item in source.items():
-        copied[key] = _json_copy(item, on_path)
+        copied[key] = _json_copy(item, on_path, depth + 1)
     del on_path[id(source)]
     return copied
 
 
-def _copy_list(source: Sequence[Any], on_path: dict[int, object]) -> list[Any]:
+def _copy_list(source: Sequence[Any], on_path: dict[int, object], depth: int) -> list[Any]:
     copied: list[Any] = []
     on_path[id(source)] = copied
     for item in source:
-        copied.append(_json_copy(item, on_path))
+        copied.append(_json_copy(item, on_path, depth + 1))
     del on_path[id(source)]
     return copied
 

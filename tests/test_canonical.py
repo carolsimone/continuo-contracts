@@ -5,7 +5,7 @@ from types import MappingProxyType
 
 import pytest
 
-from continuo_contracts.canonical import canonical_json, normalise_text
+from continuo_contracts.canonical import MAX_DEPTH, canonical_json, normalise_text
 from continuo_contracts.errors import CanonicalJsonError
 
 RFC_SAMPLE = r'''{
@@ -140,3 +140,67 @@ def test_a_lone_surrogate_key_names_the_object():
 def test_a_huge_integer_is_refused_without_printing_it():
     with pytest.raises(CanonicalJsonError, match=r"^\$: integer is outside"):
         canonical_json(10**5000)
+
+
+TOO_DEEP = "nesting is too deep, a container may be at most 100 levels down"
+LIST = (lambda inner: [inner], "[0]")
+TUPLE = (lambda inner: (inner,), "[0]")
+DICT = (lambda inner: {"k": inner}, ".k")
+NESTING_KINDS = [
+    pytest.param([LIST], id="lists"),
+    pytest.param([TUPLE], id="tuples"),
+    pytest.param([DICT], id="mappings"),
+    pytest.param([DICT, LIST, TUPLE], id="mixed"),
+]
+
+
+def _nest(levels, kinds):
+    """Return a value of `levels` nested containers whose innermost one holds the integer 1.
+
+    The container on level n is `kinds[(n - 1) % len(kinds)]`, a wrapper and the path segment
+    that leads into it from its parent.
+    """
+    value = 1
+    for level in range(levels, 0, -1):
+        value = kinds[(level - 1) % len(kinds)][0](value)
+    return value
+
+
+def _path_of_level(level, kinds):
+    segments = (kinds[(n - 1) % len(kinds)][1] for n in range(1, level))
+    return "$" + "".join(segments)
+
+
+def test_the_limit_is_one_hundred_levels():
+    assert MAX_DEPTH == 100
+
+
+@pytest.mark.parametrize("kinds", NESTING_KINDS)
+def test_a_value_nested_exactly_the_limit_is_written(kinds):
+    value = _nest(MAX_DEPTH, kinds)
+    assert canonical_json(value) == json.dumps(value, separators=(",", ":")).encode()
+
+
+@pytest.mark.parametrize("kinds", NESTING_KINDS)
+@pytest.mark.parametrize("levels", [MAX_DEPTH + 1, 500, 5000])
+def test_a_container_deeper_than_the_limit_is_refused_with_its_path(kinds, levels):
+    with pytest.raises(CanonicalJsonError) as err:
+        canonical_json(_nest(levels, kinds))
+    assert str(err.value) == f"{_path_of_level(MAX_DEPTH + 1, kinds)}: {TOO_DEEP}"
+
+
+def test_the_level_of_a_container_does_not_depend_on_where_the_nesting_starts():
+    # The nesting under `b` starts on level 4.
+    under_a_key = {"a": [0, {"b": _nest(MAX_DEPTH - 3, [LIST])}]}
+    assert canonical_json(under_a_key).startswith(b'{"a":[0,{"b":[[')
+    too_deep = {"a": [0, {"b": _nest(MAX_DEPTH - 2, [LIST])}]}
+    with pytest.raises(CanonicalJsonError) as err:
+        canonical_json(too_deep)
+    assert str(err.value) == f"$.a[1].b{'[0]' * (MAX_DEPTH - 3)}: {TOO_DEEP}"
+
+
+def test_a_container_that_contains_itself_is_still_a_circular_reference():
+    loop = []
+    loop.append(loop)
+    with pytest.raises(CanonicalJsonError, match=r"^\$\[0\]: circular reference$"):
+        canonical_json(loop)
