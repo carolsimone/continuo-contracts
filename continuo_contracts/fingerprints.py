@@ -220,10 +220,12 @@ _IN_MEANING = (
     "that the input is folded into: `source` is the node's own code or data, `shared` is code "
     "the node uses that other nodes share, `config` is the hashed configuration, `compiled` is "
     "the compiled SQL, and `identity` means the value names the node, so a change makes a new "
-    "node with fresh hashes. `contract` moves `contract_hash`. `both` moves both. `neither` "
-    "moves neither, and the last column says why. A clause after a semicolon names what the "
-    "input also moves while its condition holds. In a dbt test row, `test node:` names the part "
-    "of the test node's own `content_hash`, and `tested node` says the field also moves the "
+    "node with fresh hashes. `contract` moves `contract_hash`, the fingerprint of a node's "
+    "contract. `both` moves both. `neither` moves neither. The *Part, or why neither* column "
+    "names the part for a `content` or `both` row, and gives the reason the input moves "
+    "nothing for a `neither` row. A clause after a semicolon names what the input also moves "
+    "while its condition holds. In a dbt test row, `test node:` names the part of the test "
+    "node's own `content_hash`, and `tested node` says the field also moves the "
     "`contract_hash` of the node under test."
 )
 _NAME_MEANING = (
@@ -239,8 +241,10 @@ _NAME_MEANING = (
     "- dbt enforced contract: `contract.columns`, `constraints`.",
     "- dbt shared units: `macros`, `functions`, `unit_tests`, `on_run_start`, `on_run_end`, "
     "`project_flags`, `generate_schema_name`, `generate_alias_name`.",
-    "- Python: `projection.<key>` for each key of the code projection, `ci.source_hash`, "
-    "`ci.shared_code_hash`.",
+    "- Python: `projection.<key>` for each key of the code projection, `ci.source_hash` (the "
+    "digest of the node's script bytes, computed by the producer's CI, and for a CSV node the "
+    "digest of its URI), `ci.shared_code_hash` (the shared part for the in-repo files the "
+    "script imports or lists as assets, folded path by path by `shared_hash`).",
 )
 
 

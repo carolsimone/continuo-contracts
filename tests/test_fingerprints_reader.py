@@ -107,6 +107,10 @@ def test_render_markdown():
     assert md.index("## Every family") < md.index("## dbt model") < md.index("## python-api")
     assert "| SQL \\| text | `raw_code` | content (source) | source part | `raw_code` |" in md
     assert md.endswith("|\n")
+    assert "The *Part, or why neither* column names the part" in md
+    assert "the last column says why" not in md
+    assert "`contract_hash`, the fingerprint of a node's contract" in md
+    assert "`ci.source_hash` (the digest of the node's script bytes" in md
 
 
 def _with(mutate):
