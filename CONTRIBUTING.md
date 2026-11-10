@@ -63,7 +63,9 @@ These are the checks `.github/workflows/ci.yml` runs on Python 3.12, 3.13 and 3.
 - **No per-file license headers.** See above.
 - **Hash stability.** A change that moves any hash pinned in `continuo_contracts/vectors/`
   or in the tests moves `content_hash` for every node of every install. It ships only
-  together with a re-baseline in continuo, so say so in the pull request.
+  together with a re-baseline in continuo, so say so in the pull request. A re-baseline is a
+  continuo release of each service, run once after such a change, that recomputes every node's
+  stored hash with the new code and validates and reloads nothing.
 
 ## Releasing
 
@@ -99,9 +101,13 @@ file be replaced, so a real defect in a published release is fixed with a new ve
 | Fails at | PyPI | GitHub Release | Recover |
 |---|---|---|---|
 | `prepare` | nothing | none | fix, delete the tag (`git push --delete origin vX.Y.Z`), tag again |
-| `publish` | maybe the files | none | re-run the failed job once the cause is fixed; a file already on the index fails the upload, so check the index first |
-| `verify-index` | published | none | index lag: re-run the failed jobs; a real defect: yank the release on pypi.org and fix forward with a new version |
+| `publish` | maybe the files | none | nothing on the index: re-run the failed job once the cause is fixed, then re-run `release.yml`. Some but not all files on the index: this pipeline cannot complete that version (a file that is already on the index fails the upload); yank the version on pypi.org and release the next patch version |
+| `verify-index` | published | none | index lag: re-run the failed jobs, then re-run `release.yml`; a real defect: yank the release on pypi.org and fix forward with a new version |
 | `release.yml` | published | missing | re-run it; it updates an existing Release |
+
+`release.yml` waits up to 30 minutes for `publish-pypi.yml`, and that time includes any wait for an
+approval of the `pypi` environment. If it times out or fails early, re-run it once
+`publish-pypi.yml` has succeeded.
 
 **Trusted publishers.** The PyPI and TestPyPI projects each trust the workflow
 `publish-pypi.yml`, environment `pypi` or `testpypi`, of `carolsimone/continuo-contracts`. Only

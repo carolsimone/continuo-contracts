@@ -6,7 +6,9 @@ which input moves which fingerprint. A producer's CI, continuo's topology-contro
 runtime harness import the same functions, so they compute the same bytes and the same hashes
 for a node.
 
-The package is pure Python and has one runtime dependency, PyYAML.
+The package is pure Python and has one runtime dependency, PyYAML. The terms of continuo that
+this text uses, such as the compile extras and the code bundle, are defined in
+[docs/fingerprints.md](https://github.com/carolsimone/continuo-contracts/blob/main/docs/fingerprints.md#terms).
 
 ## Install
 
@@ -28,7 +30,9 @@ from continuo_contracts.canonical import canonical_json, normalise_text
   value it cannot represent, and the message starts with the JSON path of that value, as in
   `$.config.start: unsupported type date`.
 - `normalise_text(text: str) -> str` turns CRLF and CR into LF and strips the six ASCII
-  whitespace characters from both ends of `text`, and changes nothing else.
+  whitespace characters from both ends of `text`, and changes nothing else. It strips only those
+  six, on purpose, so that its result does not depend on the Unicode tables of the Python that
+  runs it.
 
 ```python
 canonical_json({"b": [1.0, "\u00e9"], "a": True}) == b'{"a":true,"b":[1,"\xc3\xa9"]}'
@@ -43,8 +47,11 @@ from continuo_contracts.hashing import fold3, fold4, sha256_hex, shared_fold, sh
 A node's `content_hash` is `"sha256:"` followed by the lowercase hex SHA-256 of its parts joined
 by `|`, each part encoded as UTF-8.
 
-- `fold3(source, shared, config)` hashes `source|shared|config`.
-- `fold4(source, shared, config, compiled)` hashes `source|shared|config|compiled`.
+- `fold3(source, shared, config)` hashes `source|shared|config`. It is the fold of a Python node
+  (`python-node`, `python-csv`, `python-api`).
+- `fold4(source, shared, config, compiled)` hashes `source|shared|config|compiled`. It is the
+  fold of every dbt node. A dbt seed and a dbt test have no compiled part and pass `""`; the
+  last `|` stays, so `fold4(s, h, c, "")` is not `fold3(s, h, c)`.
 - A part is bare lowercase hex, without a `sha256:` prefix, or `""` when the node has no such
   part. The folds do not check their parts: a seed in a stored artifact without compile extras
   carries dbt's `path` checksum as its source part, so a part is not always hex.
@@ -99,7 +106,19 @@ bytes. The projection is the node's `raw_code` in continuo's code bundle, and `p
   `DECIMAL(p, s)` as `NUMERIC(p,s)` and `VARCHAR(064)` as `VARCHAR(64)`. It supports `BIGINT`,
   `INT`, `INTEGER`, `DOUBLE PRECISION`, `TEXT`, `TIMESTAMP`, `DATE`, `BOOLEAN`, `NUMERIC(p,s)`,
   `DECIMAL(p,s)`, `VARCHAR(n)` and `CHAR(n)`, and refuses everything else, and a `NUMERIC`
-  precision outside 1 to 38 or a scale above the precision.
+  precision outside 1 to 38 or a scale above the precision. The outer whitespace that it removes
+  is whatever Python's `str.strip()` removes (Unicode whitespace, so a no-break space around a
+  type is stripped), and after the comma of `NUMERIC(p, s)` any run of ASCII whitespace is
+  accepted. `normalise_text` strips only the six ASCII characters, so the two rules differ.
+- Every other string of the projection is written as given: no trimming, no case change, no
+  Unicode normalisation. That holds for `schema`, `table`, `script`, the names in `reads`, the
+  CSV URI of a `python-csv` node, `secret_ref`, the entries of `primary_key` and `assets`, the
+  column names and the strings of `config`. Three things are not written as given: the SQL of
+  each read of a `python-node` (normalised as above), the column types (canonicalised) and
+  `kind` (a `python-model` kind is `python-node`).
+- The numbers of `config` are written by `canonical_json`: `1` and `1.0` hash alike, `-0.0` is
+  written `0`, and an integer outside -(2**53 - 1) to 2**53 - 1 is refused while a float of that
+  size is accepted.
 - A node that cannot be projected the same way everywhere raises `ProjectionError` (a
   `ContractsError`). The message of an error about a node starts with `<schema>.<table>: `, and
   the error of a `config` value that canonical JSON cannot write goes on with its JSON path.
@@ -155,8 +174,11 @@ into), `contract` (`contract_hash`), `both` or `neither`.
   `family`, or `None`. An entry has `id`, `field`, `source`, `fingerprint`, `parts`, `why`,
   `inputs`, `when` and `rule`, and `entry.moves(part)` says whether the input moves that part of
   `content_hash`. In a dbt family, a `config.<key>` that no entry names and whose key is not in the
-  denylist belongs to the family's `other_config` entry. It raises `ValueError` for a `family`
-  that is not one of the seven.
+  denylist belongs to the family's `other_config` entry. It does not classify a sub-key of a
+  denylisted key (`config.meta.owner` gives `None`), and a dotted name such as
+  `config.contract.enforced` is classified only where an entry declares it as its own input (the
+  dbt model has one), so in another dbt family it belongs to `other_config`. It raises
+  `ValueError` for a `family` that is not one of the seven.
 - `unclassified(family, names)` returns the distinct `names` that no entry classifies, sorted. A
   guard test passes it every input of a hash and expects `[]`.
 
@@ -165,33 +187,34 @@ classify("dbt-model", "config.persist_docs").id  # "other_config"
 classify("python-node", "ci.shared_code_hash").parts  # ("shared",)
 ```
 
-[docs/fingerprints.md](docs/fingerprints.md) shows every entry as a table and lists the input names:
-`raw_code`, `config.<key>`, `relation.schema`, `projection.<key>`, `ci.source_hash` and the others.
-The file is generated from `fingerprints.yaml`.
+[docs/fingerprints.md](https://github.com/carolsimone/continuo-contracts/blob/main/docs/fingerprints.md)
+shows every entry as a table and lists the input names: `raw_code`, `config.<key>`,
+`relation.schema`, `projection.<key>`, `ci.source_hash` and the others. The file is generated from
+`fingerprints.yaml`.
 
 A pull request that adds an input to a hash adds it to `fingerprints.yaml` in the same change. A
 projection key or a denylisted `config` key without an entry fails this repository's guard test, and
 `unclassified()` finds any other input without one.
 
-## Who pins it
+## Pinning
 
-Every consumer pins an exact version, because a hash is only comparable across processes that
-run the same code.
-
-- topology-controller and continuo-python-runtime pin an exact version.
-- A dbt producer pins the version that its continuo chart release names.
+Pin an exact version (`continuo-contracts==X.Y.Z`), because a hash is only comparable across
+processes that run the same code. A dbt producer uses the version its continuo release
+documents.
 
 ## Stability
 
 A hash that this package computes is a contract. A change that moves any hash pinned in
 `continuo_contracts/vectors/` or in the tests moves `content_hash` for every node of every
-install, so it ships only together with a re-baseline in continuo.
+install, so it ships only together with a re-baseline in continuo: a continuo release of each
+service, run once after such a change, that recomputes every node's stored hash with the new
+code and validates and reloads nothing.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Report a vulnerability as described in
-[SECURITY.md](SECURITY.md).
+See [CONTRIBUTING.md](https://github.com/carolsimone/continuo-contracts/blob/main/CONTRIBUTING.md). Report a vulnerability as described in
+[SECURITY.md](https://github.com/carolsimone/continuo-contracts/blob/main/SECURITY.md).
 
 ## License
 
-Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+Apache License 2.0. See [LICENSE](https://github.com/carolsimone/continuo-contracts/blob/main/LICENSE) and [NOTICE](https://github.com/carolsimone/continuo-contracts/blob/main/NOTICE).

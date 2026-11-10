@@ -222,8 +222,9 @@ _IN_MEANING = (
     "the compiled SQL, and `identity` means the value names the node, so a change makes a new "
     "node with fresh hashes. `contract` moves `contract_hash`, the fingerprint of a node's "
     "contract. `both` moves both. `neither` moves neither. The *Part, or why neither* column "
-    "names the part for a `content` or `both` row, and gives the reason the input moves "
-    "nothing for a `neither` row. A clause after a semicolon names what the input also moves "
+    "names the part for a `content` or `both` row, names the contract fields the input fills "
+    "for a `contract` row, and gives the reason the input moves nothing for a `neither` row. "
+    "A clause after a semicolon names what the input also moves "
     "while its condition holds. In a dbt test row, `test node:` names the part of the test "
     "node's own `content_hash`, and `tested node` says the field also moves the "
     "`contract_hash` of the node under test."
@@ -237,7 +238,8 @@ _NAME_MEANING = (
     "compile extras).",
     "- dbt relation: `relation.schema`, `relation.alias`.",
     "- dbt config: `config.<key>` for a key of the hashed config, which `config.*` covers for "
-    "every key outside the denylist, and `config.<key>` for each denylisted key.",
+    "every key outside the denylist, and `config.<key>` for each denylisted key. "
+    "`config.contract.enforced` is the `enforced` key of the dbt contract settings.",
     "- dbt enforced contract: `contract.columns`, `constraints`.",
     "- dbt shared units: `macros`, `functions`, `unit_tests`, `on_run_start`, `on_run_end`, "
     "`project_flags`, `generate_schema_name`, `generate_alias_name`.",
@@ -245,6 +247,16 @@ _NAME_MEANING = (
     "digest of the node's script bytes, computed by the producer's CI, and for a CSV node the "
     "digest of its URI), `ci.shared_code_hash` (the shared part for the in-repo files the "
     "script imports or lists as assets, folded path by path by `shared_hash`).",
+)
+_TERMS_MEANING = (
+    "## Terms",
+    "",
+    "- *re-baseline*: a continuo release of each service, run once after a change of the "
+    "hashing code, that recomputes every node's stored hash with the new code and validates "
+    "and reloads nothing.",
+    "- *compile extras*: the files continuo's compile step writes beside dbt's manifest: seed "
+    "bytes, seed headers and column types, and similar inputs a stored manifest lacks.",
+    "- *code bundle*: the per-release file in which continuo stores each node's code.",
 )
 
 
@@ -270,6 +282,8 @@ def render_markdown(fp: Fingerprints) -> str:
         _IN_MEANING,
         "",
         *_NAME_MEANING,
+        "",
+        *_TERMS_MEANING,
         "",
         "## Lists the hashing code applies",
         "",

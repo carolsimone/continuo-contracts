@@ -85,6 +85,65 @@ def test_inputs_a_family_does_not_hash_stay_unclassified():
     assert FP.classify("python-node", "config.materialized") is None
 
 
+FIXED_INPUT_NAMES = frozenset({
+    "raw_code", "compiled_code", "seed_bytes", "seed_checksum",
+    "relation.schema", "relation.alias",
+    "contract.columns", "constraints",
+    "macros", "functions", "unit_tests", "on_run_start", "on_run_end", "project_flags",
+    "generate_schema_name", "generate_alias_name",
+    "ci.source_hash", "ci.shared_code_hash",
+})
+
+
+def _is_in_the_input_vocabulary(name):
+    """A fixed name, `config.<name>` or `config.*`, or `projection.<key>` for a projection key."""
+    if name in FIXED_INPUT_NAMES or name == "config.*":
+        return True
+    if name.startswith("config."):
+        return len(name) > len("config.")
+    return name.startswith("projection.") and name.removeprefix("projection.") in FP.projection_keys
+
+
+@pytest.mark.parametrize("name", [
+    "seed_byte", "relation", "projection.nope", "projection.", "projection.config.x", "ci.other",
+    "config.", "macro",
+])
+def test_the_input_vocabulary_check_refuses_a_name_outside_it(name):
+    assert not _is_in_the_input_vocabulary(name)
+
+
+def test_every_declared_input_name_is_in_the_closed_vocabulary():
+    outside = [
+        f"{section}/{entry.id}: {name}"
+        for section in SECTIONS
+        for entry in FP.entries(section)
+        for name in entry.inputs
+        if not _is_in_the_input_vocabulary(name)
+    ]
+    assert outside == []
+
+
+ENTRY_COUNTS = {
+    "every": 3,
+    "dbt-model": 29,
+    "dbt-seed": 19,
+    "dbt-snapshot": 18,
+    "dbt-test": 18,
+    "python-node": 16,
+    "python-csv": 9,
+    "python-api": 10,
+}
+
+
+def test_the_entry_counts_cover_every_section():
+    assert set(ENTRY_COUNTS) == set(SECTIONS)
+
+
+@pytest.mark.parametrize(("section", "count"), sorted(ENTRY_COUNTS.items()))
+def test_each_section_declares_its_entries(section, count):
+    assert len(FP.entries(section)) == count
+
+
 def test_the_docs_are_the_rendered_file():
     assert DOCS.read_text(encoding="utf-8") == render_markdown(FP), (
         "docs/fingerprints.md is stale: run `uv run python scripts/render_fingerprints.py`")

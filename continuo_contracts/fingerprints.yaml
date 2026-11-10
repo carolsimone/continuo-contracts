@@ -51,7 +51,7 @@ families:
       source: "`raw_code`"
       fingerprint: "content"
       parts: ["source"]
-      why: "source part, exact; code stays out of the contract"
+      why: "source part: the SQL text with LF line endings and no outer ASCII whitespace, nothing else changed; code stays out of the contract"
       inputs: ["raw_code"]
     - id: "compiled_code"
       field: "What compiled SQL adds: `var()`, `env_var()`, `target.*`, `source()` definitions, upstream names through `ref()`, an inlined ephemeral upstream, `meta` read by SQL"
@@ -358,7 +358,7 @@ families:
       source: "the snapshot's own `raw_code`"
       fingerprint: "content"
       parts: ["source"]
-      why: "source part; another snapshot block in the same file does not move it"
+      why: "source part: the SQL text with LF line endings and no outer ASCII whitespace, nothing else changed; another snapshot block in the same file does not move it"
       inputs: ["raw_code"]
     - id: "compiled_code"
       field: "Compiled SQL"
@@ -637,7 +637,7 @@ families:
       source: "authored"
       fingerprint: "both"
       parts: ["config"]
-      why: "content: the projection's `reads`, exact text; contract: `readQueries`"
+      why: "content: the projection's `reads`, each query with LF line endings and no outer ASCII whitespace; contract: `readQueries`"
       inputs: ["projection.reads"]
     - id: "columns"
       field: "Columns: name and order"

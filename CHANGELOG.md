@@ -12,7 +12,10 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   whitespace from both ends.
 - `continuo_contracts.hashing`: `fold3()` and `fold4()` build `content_hash`; `shared_fold()` and
   `shared_hash()` fold each unit's id or path with its digest, so two files that swap contents
-  change the hash.
+  change the hash; `sha256_hex()` returns the lowercase hex SHA-256 of bytes.
+- `continuo_contracts.errors`: `CanonicalJsonError`, `HashInputError`, `ProjectionError` and
+  `FingerprintsFileError` are each a `ContractsError`, which is a `ValueError`. `classify()` and
+  `unclassified()` raise a plain `ValueError` for a family that is not one of the seven.
 - `continuo_contracts.fingerprints`: reads and checks `fingerprints.yaml`; `classify()` and
   `unclassified()` say which entry classifies an input of a node family;
   `hashed_config_denylist()` and `projection_keys()` hand the hashing code its lists.

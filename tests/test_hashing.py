@@ -21,7 +21,7 @@ def test_the_three_and_four_part_folds():
     assert fold4(S, "", C, X) == "sha256:db25a1a38c261811c17554c6c34e7b99e11527b39098dbc545bcb4d5ed73b927"
 
 
-def test_fold3_is_the_fold_topology_controller_checks_today():
+def test_fold3_is_the_sha256_of_its_parts_joined_by_a_bar():
     assert fold3("a", "b", "c") == "sha256:" + hashlib.sha256(b"a|b|c").hexdigest()
 
 

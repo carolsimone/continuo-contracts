@@ -118,6 +118,8 @@ def test_a_cycle_is_refused():  # a YAML alias can build one
     ("\u00a0select 1\u00a0", "\u00a0select 1\u00a0"),
     ("  \n\t ", ""),
     ("", ""),
+    (chr(0x0B) + chr(0x0C) + "select 1" + chr(0x0C) + chr(0x0B), "select 1"),
+    (chr(0x85) + "select 1" + chr(0x85), chr(0x85) + "select 1" + chr(0x85)),
 ])
 def test_normalise_text(raw, expected):
     assert normalise_text(raw) == expected

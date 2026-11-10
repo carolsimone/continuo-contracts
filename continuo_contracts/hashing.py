@@ -3,8 +3,11 @@
 A node's `content_hash` is `"sha256:"` followed by the lowercase hex SHA-256 of its parts joined
 by `|`, each part encoded as UTF-8:
 
-- `fold3(source, shared, config)` hashes `source|shared|config`.
-- `fold4(source, shared, config, compiled)` hashes `source|shared|config|compiled`.
+- `fold3(source, shared, config)` hashes `source|shared|config`. It is the fold of a Python node
+  (`python-node`, `python-csv`, `python-api`).
+- `fold4(source, shared, config, compiled)` hashes `source|shared|config|compiled`. It is the fold
+  of every dbt node. A dbt seed and a dbt test have no compiled part and pass `""`: the last `|`
+  stays, so `fold4(s, h, c, "")` is not `fold3(s, h, c)`.
 
 A part is a bare lowercase hex digest, without a `sha256:` prefix, or `""` when the node has no
 such part. The folds do not check their parts: a seed in a stored artifact without compile extras
@@ -33,12 +36,12 @@ def sha256_hex(data: bytes) -> str:
 
 
 def fold3(source: str, shared: str, config: str) -> str:
-    """Return the `content_hash` of a node that has no compiled part."""
+    """Return the `content_hash` of a Python node, which has three parts."""
     return _fold(source, shared, config)
 
 
 def fold4(source: str, shared: str, config: str, compiled: str) -> str:
-    """Return the `content_hash` of a node that has a compiled part."""
+    """Return the `content_hash` of a dbt node. A seed or a test passes `""` as `compiled`."""
     return _fold(source, shared, config, compiled)
 
 

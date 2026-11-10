@@ -115,12 +115,16 @@ class PythonNode:
 def canonical_sql_type(raw: str) -> str:
     """Return the canonical spelling of the SQL type `raw`.
 
-    Outer whitespace is stripped and case is ignored. The supported types are `BIGINT`, `INT`,
-    `INTEGER`, `DOUBLE PRECISION` (with one space), `TEXT`, `TIMESTAMP`, `DATE`, `BOOLEAN`,
-    `NUMERIC(p,s)`, `DECIMAL(p,s)`, `VARCHAR(n)` and `CHAR(n)`. `INT` becomes `INTEGER` and
-    `DECIMAL` becomes `NUMERIC`. Precision, scale and length are written as plain integers, with
-    no leading zeros and no space. `NUMERIC` needs a precision of 1 to 38 and a scale of 0 up to
-    the precision.
+    Outer whitespace is stripped and case is ignored. The whitespace that is stripped is whatever
+    `str.strip()` removes (Unicode whitespace), unlike `normalise_text`, which removes only the
+    six ASCII whitespace characters. After the comma of `NUMERIC(p, s)` any run of ASCII
+    whitespace is accepted.
+
+    The supported types are `BIGINT`, `INT`, `INTEGER`, `DOUBLE PRECISION` (with one space),
+    `TEXT`, `TIMESTAMP`, `DATE`, `BOOLEAN`, `NUMERIC(p,s)`, `DECIMAL(p,s)`, `VARCHAR(n)` and
+    `CHAR(n)`. `INT` becomes `INTEGER` and `DECIMAL` becomes `NUMERIC`. Precision, scale and
+    length are written as plain integers, with no leading zeros and no space. `NUMERIC` needs a
+    precision of 1 to 38 and a scale of 0 up to the precision.
 
     Anything else raises `ProjectionError`.
     """

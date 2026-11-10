@@ -2,16 +2,22 @@
 
 This file is generated from `continuo_contracts/fingerprints.yaml` by `scripts/render_fingerprints.py` and is not edited by hand.
 
-The *In* column names the fingerprint an input moves. `content` moves `content_hash`, the fingerprint of a node's code, and the parts in brackets are the pieces of `content_hash` that the input is folded into: `source` is the node's own code or data, `shared` is code the node uses that other nodes share, `config` is the hashed configuration, `compiled` is the compiled SQL, and `identity` means the value names the node, so a change makes a new node with fresh hashes. `contract` moves `contract_hash`, the fingerprint of a node's contract. `both` moves both. `neither` moves neither. The *Part, or why neither* column names the part for a `content` or `both` row, and gives the reason the input moves nothing for a `neither` row. A clause after a semicolon names what the input also moves while its condition holds. In a dbt test row, `test node:` names the part of the test node's own `content_hash`, and `tested node` says the field also moves the `contract_hash` of the node under test.
+The *In* column names the fingerprint an input moves. `content` moves `content_hash`, the fingerprint of a node's code, and the parts in brackets are the pieces of `content_hash` that the input is folded into: `source` is the node's own code or data, `shared` is code the node uses that other nodes share, `config` is the hashed configuration, `compiled` is the compiled SQL, and `identity` means the value names the node, so a change makes a new node with fresh hashes. `contract` moves `contract_hash`, the fingerprint of a node's contract. `both` moves both. `neither` moves neither. The *Part, or why neither* column names the part for a `content` or `both` row, names the contract fields the input fills for a `contract` row, and gives the reason the input moves nothing for a `neither` row. A clause after a semicolon names what the input also moves while its condition holds. In a dbt test row, `test node:` names the part of the test node's own `content_hash`, and `tested node` says the field also moves the `contract_hash` of the node under test.
 
 The names in the *Inputs* column are these:
 
 - dbt source part: `raw_code` (model, snapshot), `compiled_code` (model and snapshot: the compiled part; test: the source part), `seed_bytes` (the digest the compile extras carry for a seed), `seed_checksum` (dbt's checksum of a seed, used when a stored artifact has no compile extras).
 - dbt relation: `relation.schema`, `relation.alias`.
-- dbt config: `config.<key>` for a key of the hashed config, which `config.*` covers for every key outside the denylist, and `config.<key>` for each denylisted key.
+- dbt config: `config.<key>` for a key of the hashed config, which `config.*` covers for every key outside the denylist, and `config.<key>` for each denylisted key. `config.contract.enforced` is the `enforced` key of the dbt contract settings.
 - dbt enforced contract: `contract.columns`, `constraints`.
 - dbt shared units: `macros`, `functions`, `unit_tests`, `on_run_start`, `on_run_end`, `project_flags`, `generate_schema_name`, `generate_alias_name`.
 - Python: `projection.<key>` for each key of the code projection, `ci.source_hash` (the digest of the node's script bytes, computed by the producer's CI, and for a CSV node the digest of its URI), `ci.shared_code_hash` (the shared part for the in-repo files the script imports or lists as assets, folded path by path by `shared_hash`).
+
+## Terms
+
+- *re-baseline*: a continuo release of each service, run once after a change of the hashing code, that recomputes every node's stored hash with the new code and validates and reloads nothing.
+- *compile extras*: the files continuo's compile step writes beside dbt's manifest: seed bytes, seed headers and column types, and similar inputs a stored manifest lacks.
+- *code bundle*: the per-release file in which continuo stores each node's code.
 
 ## Lists the hashing code applies
 
@@ -33,7 +39,7 @@ The names in the *Inputs* column are these:
 | Schema | node `schema`, after `generate_schema_name` | both (config) | content: the resolved relation in `hashed_config`; contract: `id`. A new schema makes a new node | `relation.schema` |
 | Name; a version's `<name>.v<version>` | node `name` and `version` | both (identity) | content: it keys the node, so a new name makes a new node with fresh hashes; contract: `id`, `name`, `schema[0].name` | |
 | Resolved alias | node `alias`, after `generate_alias_name` | both (config) | content: the resolved relation in `hashed_config`; contract: `physicalName` | `relation.alias` |
-| SQL text | `raw_code` | content (source) | source part, exact; code stays out of the contract | `raw_code` |
+| SQL text | `raw_code` | content (source) | source part: the SQL text with LF line endings and no outer ASCII whitespace, nothing else changed; code stays out of the contract | `raw_code` |
 | What compiled SQL adds: `var()`, `env_var()`, `target.*`, `source()` definitions, upstream names through `ref()`, an inlined ephemeral upstream, `meta` read by SQL | `compiled_code` | content (compiled) | compiled part, masked; out of the contract | `compiled_code` |
 | Run-specific values in compiled SQL: invocation id, run start, the node's database name | the manifest | neither | masked to fixed placeholders, so a run with no edit moves nothing | |
 | Macros the team or its packages write in the closure, root overrides, macros called only inside `is_incremental()` | the manifest's `macros` | content (shared) | shared part, each folded with its id | `macros` |
@@ -89,7 +95,7 @@ The names in the *Inputs* column are these:
 | Field or input | Source | In | Part, or why neither | Inputs |
 |---|---|---|---|---|
 | Schema, name, resolved alias | node `schema`, `name`, `alias` | both (config, identity) | as for a model | `relation.schema`, `relation.alias` |
-| SQL text | the snapshot's own `raw_code` | content (source) | source part; another snapshot block in the same file does not move it | `raw_code` |
+| SQL text | the snapshot's own `raw_code` | content (source) | source part: the SQL text with LF line endings and no outer ASCII whitespace, nothing else changed; another snapshot block in the same file does not move it | `raw_code` |
 | Compiled SQL | `compiled_code` | content (compiled) | compiled part, masked | `compiled_code` |
 | Run-specific values in compiled SQL | the manifest | neither | masked | |
 | The snapshot materialization, `snapshot_<strategy>_strategy`, the hash macros the team writes, root overrides; package macros in the closure | the manifest's `macros` | content (shared) | shared part | `macros` |
@@ -140,7 +146,7 @@ The names in the *Inputs* column are these:
 | `script` | authored path | both (config) | content: the projection's `script`; contract: `script` | `projection.script` |
 | In-repo import closure | the files the script imports | content (shared) | shared part, each folded with its path, computed by the producer's CI | `ci.shared_code_hash` |
 | `assets` | authored list | both (config, shared) | content: the list in the projection, the files' bytes in the shared part; contract: `assets` | `projection.assets` |
-| `readQueries` | authored | both (config) | content: the projection's `reads`, exact text; contract: `readQueries` | `projection.reads` |
+| `readQueries` | authored | both (config) | content: the projection's `reads`, each query with LF line endings and no outer ASCII whitespace; contract: `readQueries` | `projection.reads` |
 | Columns: name and order | `schema[0].properties` | both (config) | content: the projection's `output_columns`; contract: `properties` in file order | `projection.output_columns` |
 | Column `physicalType` | authored | both (config) | content: the canonical type, so `INT` and `INTEGER` hash alike; contract: the type as written | |
 | Column `required` | authored | both (config) | content: `nullable` in the projection; contract: `required` | |
