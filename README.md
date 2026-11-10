@@ -88,10 +88,12 @@ bytes. The projection is the node's `raw_code` in continuo's code bundle, and `p
 - `code_projection(node)` returns the twelve keys that `fingerprints.projection_keys()` lists, in
   that order. A stored `python-model` kind is `python-node`. The SQL of each read of a
   `python-node` has LF line endings and no ASCII whitespace around it. Each column type is
-  written by `canonical_sql_type`. `config` is a deep copy. `primary_key` is the node's key on an
-  `upsert` node and `[]` on `replace` and `append`, where the key only describes the table. The
-  `assets` are sorted. A `python-csv` node has no script and no assets, reads exactly `csv`, and
-  only replaces. Only a `python-api` node has a `secret_ref`, and it reads nothing.
+  written by `canonical_sql_type`. `config` is copied with every mapping as a `dict` and every
+  list or tuple as a `list`, at every depth. `primary_key` is the node's key on an
+  `upsert` node and `[]` on `replace` and `append`, where the key only describes the table.
+  Assets are sorted by Unicode code point, which is the order of their UTF-8 bytes (not UTF-16
+  order). A `python-csv` node has no script and no assets, reads exactly `csv`, and only
+  replaces. Only a `python-api` node has a `secret_ref`, and it reads nothing.
 - `projection_hash(node)` returns the hash of that projection.
 - `canonical_sql_type(raw)` strips outer whitespace, ignores case and writes `INT` as `INTEGER`,
   `DECIMAL(p, s)` as `NUMERIC(p,s)` and `VARCHAR(064)` as `VARCHAR(64)`. It supports `BIGINT`,

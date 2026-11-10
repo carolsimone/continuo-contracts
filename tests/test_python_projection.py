@@ -1,4 +1,7 @@
+import threading
+from collections import OrderedDict
 from datetime import date
+from types import MappingProxyType
 
 import pytest
 
@@ -130,3 +133,94 @@ def test_a_very_long_number_in_a_type_does_not_reach_int():
     assert canonical_sql_type("VARCHAR(" + "0" * 5000 + "7)") == "VARCHAR(7)"
     with pytest.raises(ProjectionError, match="out of range"):
         canonical_sql_type("NUMERIC(" + "1" * 5000 + ",0)")
+
+
+def test_a_nested_mapping_proxy_hashes_like_the_same_data_in_plain_containers():
+    plain = node(config={"layout": {"a": 1}, "steps": [1, {"b": 2}]})
+    proxied = node(config={"layout": MappingProxyType({"a": 1}),
+                           "steps": (1, MappingProxyType({"b": 2}))})
+    assert projection_hash(proxied) == projection_hash(plain)
+    assert projection_hash(node(config=MappingProxyType({"a": 1}))) == projection_hash(
+        node(config={"a": 1}))
+
+
+def test_a_value_json_cannot_hold_is_refused_with_its_node_and_its_path():
+    with pytest.raises(ProjectionError) as err:
+        projection_hash(node(config={"lock": threading.Lock()}))
+    assert str(err.value).startswith("analytics.t: $.config.lock: ")
+
+
+def test_config_comes_out_as_plain_dicts_and_lists_at_every_depth():
+    config = {"o": OrderedDict(a=OrderedDict(b=(1, MappingProxyType({"c": [2]}))))}
+    copied = code_projection(node(config=config))["config"]
+    assert type(copied) is dict
+    assert type(copied["o"]) is dict
+    assert type(copied["o"]["a"]) is dict
+    assert type(copied["o"]["a"]["b"]) is list
+    assert type(copied["o"]["a"]["b"][1]) is dict
+    assert type(copied["o"]["a"]["b"][1]["c"]) is list
+    assert copied == {"o": {"a": {"b": [1, {"c": [2]}]}}}
+
+
+def test_a_container_that_appears_twice_without_a_cycle_is_copied_each_time():
+    shared = {"k": [1]}
+    copied = code_projection(node(config={"a": shared, "b": shared}))["config"]
+    assert copied == {"a": {"k": [1]}, "b": {"k": [1]}}
+    assert copied["a"] is not copied["b"]
+    assert projection_hash(node(config={"a": shared, "b": shared})) == projection_hash(
+        node(config={"a": {"k": [1]}, "b": {"k": [1]}}))
+
+
+def _mapping_in_a_mapping():
+    loop = {}
+    loop["self"] = loop
+    return {"c": loop}
+
+
+def _list_in_a_list():
+    loop = []
+    loop.append(loop)
+    return {"c": loop}
+
+
+def _mapping_in_a_list_in_a_mapping():
+    inner = {}
+    outer = [inner]
+    inner["back"] = outer
+    return {"c": outer}
+
+
+@pytest.mark.parametrize(("build", "path"), [
+    (_mapping_in_a_mapping, "$.config.c.self"),
+    (_list_in_a_list, "$.config.c[0]"),
+    (_mapping_in_a_list_in_a_mapping, "$.config.c[0].back"),
+])
+def test_a_config_that_contains_itself_is_refused_with_its_node_and_its_path(build, path):
+    with pytest.raises(ProjectionError) as err:
+        projection_hash(node(config=build()))
+    assert str(err.value) == f"analytics.t: {path}: circular reference"
+
+
+def test_the_whole_config_that_contains_itself_is_refused_with_its_path():
+    config = {}
+    config["self"] = config
+    with pytest.raises(ProjectionError) as err:
+        projection_hash(node(config=config))
+    assert str(err.value) == "analytics.t: $.config.self: circular reference"
+
+
+def test_a_key_that_is_not_a_string_is_refused_at_the_top_and_with_its_path_below():
+    with pytest.raises(ProjectionError, match="key of config must be a string") as err:
+        code_projection(node(config={1: "x"}))
+    assert str(err.value).startswith("analytics.t: ")
+    with pytest.raises(ProjectionError) as err:
+        projection_hash(node(config={"a": {1: "x"}}))
+    assert str(err.value).startswith("analytics.t: $.config.a: ")
+
+
+def test_assets_are_sorted_by_code_point_not_by_utf_16_unit():
+    # U+FF5E is in the BMP and U+1F600 is above it, which UTF-16 writes as a surrogate pair that
+    # starts with 0xD83D. By code point (and by UTF-8 bytes) the tilde comes first, by UTF-16
+    # unit the emoji does.
+    tilde, emoji = chr(0xFF5E) + ".csv", chr(0x1F600) + ".csv"
+    assert code_projection(node(assets=(emoji, tilde)))["assets"] == [tilde, emoji]

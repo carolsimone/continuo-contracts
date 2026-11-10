@@ -19,7 +19,6 @@ producers that declare the same node write the same bytes:
 A node that the projection cannot write the same way everywhere raises `ProjectionError`.
 """
 
-import copy
 import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, fields
@@ -154,10 +153,15 @@ def code_projection(node: PythonNode) -> dict[str, Any]:
     """Return the code projection of `node`: one entry for each key of
     `fingerprints.projection_keys()`, in that order.
 
-    The result shares nothing with `node`. Raises `ProjectionError`, whose message starts with
-    `<schema>.<table>: `, for a node it cannot project: a field that is not of its type or that
-    holds a value outside its set, a field that its kind does not allow, an SQL type that is not
-    supported, or a projection key that has no rule.
+    The result holds no container of `node`, so changing it does not change `node`: `config` is
+    copied with every mapping as a `dict` and every list or tuple as a `list`, at every depth, and
+    a value that is none of these is left in place. Assets are sorted by Unicode code point, which
+    is the order of their UTF-8 bytes (not UTF-16 order).
+
+    Raises `ProjectionError`, whose message starts with `<schema>.<table>: `, for a node it cannot
+    project: a field that is not of its type or that holds a value outside its set, a field that
+    its kind does not allow, an SQL type that is not supported, or a projection key that has no
+    rule.
     """
     try:
         return _project(node)
@@ -327,7 +331,44 @@ def _config(node: PythonNode, kind: str) -> dict[str, Any]:
     config = _mapping(node.config, "config")
     for key in config:
         _text(key, "a key of config", allow_empty=True)
-    return copy.deepcopy(dict(config))
+    return _copy_mapping(config, {})
+
+
+def _json_copy(value: object, on_path: dict[int, object]) -> object:
+    """Copy `value` by its JSON shape: a mapping becomes a `dict`, a list or tuple becomes a
+    `list`, and anything else is returned as it is, for `canonical_json` to accept or to refuse
+    with the path of the value.
+
+    `on_path` maps each container that is being copied, from the root down to `value`, to its
+    copy. A container that contains itself is copied as a copy that contains itself, so the copy
+    ends and `canonical_json` names the path where the cycle closes.
+    """
+    if not isinstance(value, Mapping | list | tuple):
+        return value
+    if id(value) in on_path:
+        return on_path[id(value)]
+    if isinstance(value, Mapping):
+        return _copy_mapping(value, on_path)
+    return _copy_list(value, on_path)
+
+
+def _copy_mapping(source: Mapping[Any, Any], on_path: dict[int, object]) -> dict[Any, Any]:
+    # A key is kept as it is, so a key that is not a string reaches `canonical_json`.
+    copied: dict[Any, Any] = {}
+    on_path[id(source)] = copied
+    for key, item in source.items():
+        copied[key] = _json_copy(item, on_path)
+    del on_path[id(source)]
+    return copied
+
+
+def _copy_list(source: Sequence[Any], on_path: dict[int, object]) -> list[Any]:
+    copied: list[Any] = []
+    on_path[id(source)] = copied
+    for item in source:
+        copied.append(_json_copy(item, on_path))
+    del on_path[id(source)]
+    return copied
 
 
 def _secret_ref(node: PythonNode, kind: str) -> str:
@@ -360,6 +401,7 @@ def _assets(node: PythonNode, kind: str) -> list[str]:
     assets = _strings(node.assets, "assets")
     if len(set(assets)) != len(assets):
         raise ProjectionError("assets must not list a path twice")
+    # Sorted by Unicode code point, which is the order of the UTF-8 bytes.
     return sorted(assets)
 
 
