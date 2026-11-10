@@ -18,3 +18,11 @@ class HashInputError(ContractsError):
 
     The message names the offending unit key.
     """
+
+
+class FingerprintsFileError(ContractsError):
+    """A fingerprints file in a form this package refuses.
+
+    The message names the location in the file, such as `families.dbt-model[3] (meta_other)`,
+    then `: ` and the reason.
+    """

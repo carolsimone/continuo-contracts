@@ -13,3 +13,6 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `continuo_contracts.hashing`: `fold3()` and `fold4()` build `content_hash`; `shared_fold()` and
   `shared_hash()` fold each unit's id or path with its digest, so two files that swap contents
   change the hash.
+- `continuo_contracts.fingerprints`: reads and checks `fingerprints.yaml`; `classify()` and
+  `unclassified()` say which entry classifies an input of a node family;
+  `hashed_config_denylist()` and `projection_keys()` hand the hashing code its lists.

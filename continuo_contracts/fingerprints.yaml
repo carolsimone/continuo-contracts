@@ -1,0 +1,15 @@
+# The fingerprint field declaration: which fingerprint each input of a node family moves, and the
+# two lists the hashing code applies. docs/fingerprints.md is generated from this file.
+version: 1
+lists:
+  hashed_config_denylist: [access, description, docs, freshness, grants, group, meta, tags]
+  projection_keys: [schema, table, kind, script, reads, output_columns, extra_columns, config, secret_ref, mode_type, primary_key, assets]
+families:
+  every: []
+  dbt-model: []
+  dbt-seed: []
+  dbt-snapshot: []
+  dbt-test: []
+  python-node: []
+  python-csv: []
+  python-api: []
