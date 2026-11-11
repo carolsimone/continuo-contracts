@@ -45,6 +45,12 @@ top of the report. State the scope you chose. The tree is `continuo_contracts/`
 (the library and its data files), `scripts/`, `tests/`, `docs/` and
 `.github/workflows/`.
 
+You may run read-only probes through
+`uv --directory <repo> run --locked python -B -c "..."` (`<repo>` is the
+repository root) or through throwaway scripts kept outside the repository, such
+as under `/tmp`. You must write nothing in the repository except the report; the
+caches that git ignores, which `uv` and the tools of rule 11 write, do not count.
+
 # What to check
 
 Report a finding only when you can point at a real `file:line` you have opened
@@ -56,7 +62,11 @@ can tell new drift from known debt.
 
 This repository is a functional core. It has no application layer, no ports and
 no adapters; do not flag their absence. Flag an abstraction layer added without
-a second implementation that needs it.
+a second implementation that needs it. An abstraction layer (a base class, a
+protocol, a registry, a factory or a plugin seam) needs at least two
+implementations or an extension point that `README.md` documents. Data-driven
+dispatch, such as a table of rule functions keyed by field name, is not a new
+layer; do not flag it.
 
 - **Dependency direction.** The arrow runs `scripts/` and `tests/` ->
   `continuo_contracts`, and inside the package from the specialised modules to
@@ -117,12 +127,30 @@ Package root: `continuo_contracts/`.
    those classification fields, unless `CHANGELOG.md` under `## [Unreleased]`
    says the change ships with a re-baseline. Flag new byte-affecting behaviour
    that no test or vector pins.
+   When there is nothing earlier to compare against (a first release branch,
+   where `main` holds no package), the diff has no changed value to flag, so
+   check instead that every pinned value is reproducible. Recompute a sample of
+   the cases and pinned hashes of each file in `continuo_contracts/vectors/` (at
+   least ten per vector file) with plain `hashlib` and `json` code that does not
+   import the package, compare each result with the pinned value, and report the
+   sample size.
 6. **Cross-language rules are written down.** Every rule a consumer in another
    language must reproduce (sort orders, whitespace rules, number formats,
    what is normalised and what is written as given) is stated in `README.md`
    or a docstring and matches the code. Flag a behaviour change without the
    matching README or docstring change, and a documented rule the code does not
    follow.
+   To judge whether a documented rule is precise enough to reproduce, probe
+   every list, range or count it states against the code over its whole domain:
+   every code point (`range(0x110000)`) for a whitespace or character claim,
+   the values just below, at and just above a limit, and both ends of a
+   documented range. A loose phrase such as "Unicode whitespace" is a finding if
+   the code strips more or fewer characters than the text names: the text must
+   name the exact set or count. When a rule depends on interpreter tables
+   (`str.strip`, `isspace`, `re` classes), run the probe on the oldest and the
+   newest Python that the CI matrix names and report both, for example
+   `uv --directory <repo> run --isolated --python 3.14 --locked python -B -c "..."`
+   and the same with `--python 3.12`.
 7. **Error conventions.** Every error class the package defines derives from
    `ContractsError`. A refusal names where it happened: the JSON path in
    `canonical`, `<schema>.<table>: ` in `python`, the YAML location in
@@ -131,6 +159,31 @@ Package root: `continuo_contracts/`.
    drops its location. Statements that every raised error is a
    `ContractsError` are true only if no function raises a plain `ValueError`,
    `TypeError` or similar for its own checks: check before relying on them.
+   These failures show only when code runs, so run these probes (the read-only
+   forms of Scope) and record the exception type and message of each:
+   - nesting just inside `MAX_DEPTH` (100), just beyond it (101) and 5000 deep,
+     for a list and for a dict, through `canonical_json` and through
+     `projection_hash` (as `config`, which may nest at most 99 levels);
+   - a lone surrogate (such as `"\ud800"`) in a string, in a mapping key and in a
+     part passed to `fold3`, `fold4` and `shared_fold`;
+   - an argument of the wrong type (a set to `canonical_json`, an `int` part to
+     `fold3`, a plain `dict` to `projection_hash`, `None` to
+     `canonical_sql_type`);
+   - an unknown family name (`classify`, `unclassified`) and an unknown section
+     name (`Fingerprints.entries`);
+   - text passed to `parse_fingerprints` that is invalid YAML, that repeats a
+     key, or that is not a mapping.
+
+   Some exceptions are documented as not being a `ContractsError`: the
+   `ContractsError` docstring in `errors.py` and the errors section of
+   `README.md` name them (if the two differ, say so). They are the plain
+   `ValueError` for a family outside `FAMILIES` and a section outside
+   `SECTIONS`, the `UnicodeEncodeError` of `fold3` and `fold4` for a part that
+   UTF-8 cannot encode, and a `TypeError` or `AttributeError` for an argument of
+   the wrong type. Flag only an undocumented one (a `RecursionError` on deep
+   nesting, a `UnicodeEncodeError` from any other function, a `KeyError`, or a
+   documented-as-refused input that is accepted), and any message that drops its
+   location.
 8. **Declaration chain.** `continuo_contracts/fingerprints.yaml`,
    `continuo_contracts/fingerprints.py`, `docs/fingerprints.md`, the renderer
    text and the guard tests in `tests/test_fingerprints_guard.py` stay in step:
@@ -154,13 +207,22 @@ Package root: `continuo_contracts/`.
     - `.github/workflows/publish-pypi.yml`: `id-token: write` only on the upload
       job; that job runs no repository code and uploads only the artifact the
       `prepare` job built and checked; a real upload happens only for an exact
-      `vX.Y.Z` tag with no `-test` suffix and a matching package version; no
-      `${{ }}` expression inside any `run:` body (values pass through `env:`);
-      actions are pinned as `CONTRIBUTING.md` and the workflows state; no
+      `vX.Y.Z` tag and a matching package version, a `vX.Y.Z-test<anything>` tag
+      rehearses on TestPyPI, and any other `v*` tag fails before any upload; no
       `skip-existing` on the PyPI step.
     - `.github/workflows/release.yml` creates a GitHub Release only after the
       publish run succeeded, never for a `-test` tag, with `contents: write`
       on its one job only.
+    - All four workflows (`ci.yml`, `dco.yml`, `publish-pypi.yml` and
+      `release.yml`): no `${{ }}` expression inside any `run:` body (values pass
+      through `env:`). List every expression with
+      `grep -nF '${{' .github/workflows/*.yml` and open each hit to see which
+      key holds it.
+    - Action pinning: every action in the job that holds `id-token: write` is
+      pinned by commit SHA with a version comment (`uses: owner/name@<sha> # v1`);
+      the other jobs may pin by version tag. Flag a tag-pinned action in the
+      id-token job. List the actions with
+      `grep -n "uses:" .github/workflows/*.yml`.
     - The failure table in `CONTRIBUTING.md` matches the jobs.
     - Run `actionlint .github/workflows/*.yml` and report its output.
 11. **Conventions.** Every behaviour change has a line under `## [Unreleased]` in
@@ -169,7 +231,12 @@ Package root: `continuo_contracts/`.
     `uv run --locked ruff check .`, `uv run --locked mypy continuo_contracts scripts`
     and `uv run --locked pytest -q`, and report their summary lines; a run with
     skipped tests is a finding. These commands write only caches that git
-    ignores.
+    ignores. `ruff check` runs with the rules that `pyproject.toml` selects, and
+    E501 is one of them, so flag any line over the configured `line-length`.
+    `ruff format --check` is not run unless CI runs it (read
+    `.github/workflows/ci.yml`). A commit that is already on `main` before the
+    branch (such as the initial commit) and lacks `Signed-off-by` is outside the
+    DCO range and is not a finding.
 
 # Report
 
