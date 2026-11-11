@@ -167,7 +167,7 @@ jobs:
       id-token: write # OIDC token for Trusted Publishing
       contents: read
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: dist
           path: dist
@@ -179,9 +179,10 @@ jobs:
       # existing file means something is wrong, and the upload must say so.
       - name: Publish to TestPyPI
         if: needs.prepare.outputs.mode == 'test'
-        # Pinned to a commit SHA. release/v1 is a moving branch, and this job
-        # holds id-token: write for PyPI Trusted Publishing, so a compromised
-        # revision could mint a token and publish under this project's name.
+        # Every action in this job is pinned to a commit SHA. This job holds
+        # id-token: write for PyPI Trusted Publishing, so a compromised revision
+        # of a tag or of a moving branch such as release/v1 could mint a token
+        # and publish under this project's name.
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
