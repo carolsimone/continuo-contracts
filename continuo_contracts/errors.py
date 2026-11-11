@@ -1,4 +1,4 @@
-"""The errors this package raises."""
+"""The errors this package defines."""
 
 
 class ContractsError(ValueError):

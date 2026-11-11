@@ -41,3 +41,5 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   and the code point order of assets. The README lists the files under Vectors.
 - The README ends the section of each module with its public names, one line each, and has an
   `errors` section for the error classes; a test fails for a public name that has no line.
+- The README lists what `code_projection` refuses, one rule for each line, so a producer in
+  another language can refuse the same inputs.

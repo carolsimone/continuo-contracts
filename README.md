@@ -215,8 +215,9 @@ for a list).
 An empty string is refused in `schema`, `table`, `kind`, a column `name` and an entry of
 `primary_key` or `assets`, and accepted in `script`, the names and SQL texts of `reads`, the keys
 of `config` and the `secret_ref` of a `python-api` node. `primary_key` is read only on an `upsert`
-node, so no value of it is refused on `replace` and `append`. An `upsert` node with an empty
-`primary_key`, a repeated entry of `primary_key` and a repeated column name are accepted.
+node: `code_projection` refuses no value of it on `replace` and `append`, while `from_mapping`
+refuses a value that is not a list on any node. An `upsert` node with an empty `primary_key`, a
+repeated entry of `primary_key` and a repeated column name are accepted.
 
 ```python
 node = PythonNode(

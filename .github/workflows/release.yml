@@ -14,7 +14,8 @@ on:
   push:
     tags:
       # A digit after v keeps this to release tags. publish-pypi.yml uses the looser `v*` and
-      # refuses a tag that names no version itself, so this is the stricter of the two triggers.
+      # refuses every tag that is neither `vX.Y.Z` nor `vX.Y.Z-test<anything>`, so this is the
+      # stricter of the two triggers.
       - "v[0-9]*"
 
 concurrency:
