@@ -60,13 +60,23 @@ can tell new drift from known debt.
 
 ## Layer 1: generic DDD / Clean Architecture, applied to a library
 
-This repository is a functional core. It has no application layer, no ports and
-no adapters; do not flag their absence. Flag an abstraction layer added without
-a second implementation that needs it. An abstraction layer (a base class, a
-protocol, a registry, a factory or a plugin seam) needs at least two
-implementations or an extension point that `README.md` documents. Data-driven
-dispatch, such as a table of rule functions keyed by field name, is not a new
-layer; do not flag it.
+The owner chose this flat structure on purpose (see `CONTRIBUTING.md`,
+"Structure"): five modules, no domain, service or adapters folders, and no
+application layer, ports or adapters. Do not report the absence of any of them.
+Do report:
+
+- (a) a module that mixes concerns beyond the documented ones. The
+  `fingerprints` module holds the model, the YAML loader and the Markdown
+  renderer on purpose, because other packages import those names from it.
+- (b) an abstraction layer added without a second implementation or a
+  documented extension point.
+- (c) growth that would justify proposing a split, as a NIT with the facts
+  (module size and the concerns it holds), never as a blocker.
+
+An abstraction layer (a base class, a protocol, a registry, a factory or a
+plugin seam) needs at least two implementations or an extension point that
+`README.md` documents. Data-driven dispatch, such as a table of rule functions
+keyed by field name, is not a new layer; do not flag it.
 
 - **Dependency direction.** The arrow runs `scripts/` and `tests/` ->
   `continuo_contracts`, and inside the package from the specialised modules to
