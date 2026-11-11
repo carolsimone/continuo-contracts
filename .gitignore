@@ -6,3 +6,4 @@ dist/
 .ruff_cache/
 .worktrees/
 .DS_Store
+docs/ddd-violations/
