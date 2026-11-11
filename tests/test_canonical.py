@@ -24,7 +24,8 @@ RFC_SAMPLE_BYTES = bytes.fromhex("""
 NUMBER_SAMPLES = [
     ("0000000000000000", "0"), ("8000000000000000", "0"),
     ("0000000000000001", "5e-324"), ("8000000000000001", "-5e-324"),
-    ("7fefffffffffffff", "1.7976931348623157e+308"), ("ffefffffffffffff", "-1.7976931348623157e+308"),
+    ("7fefffffffffffff", "1.7976931348623157e+308"),
+    ("ffefffffffffffff", "-1.7976931348623157e+308"),
     ("4340000000000000", "9007199254740992"), ("c340000000000000", "-9007199254740992"),
     ("4430000000000000", "295147905179352830000"),
     ("44b52d02c7e14af5", "9.999999999999997e+22"), ("44b52d02c7e14af6", "1e+23"),
@@ -49,7 +50,8 @@ def test_rfc8785_section_3_2_2_sample():
 
 
 def test_rfc8785_sorting_sample():
-    sample = {"\u20ac": "Euro Sign", "\r": "Carriage Return", "\ufb33": "Hebrew Letter Dalet With Dagesh",
+    sample = {"\u20ac": "Euro Sign", "\r": "Carriage Return",
+              "\ufb33": "Hebrew Letter Dalet With Dagesh",
               "1": "One", "\U0001f600": "Emoji: Grinning Face", "\u0080": "Control",
               "\u00f6": "Latin Small Letter O With Diaeresis"}
     assert list(json.loads(canonical_json(sample)).values()) == [
@@ -69,7 +71,9 @@ def test_nan_and_infinity_are_refused(ieee):
 
 
 def test_integers_inside_the_safe_range():
-    assert canonical_json([9007199254740991, -9007199254740991]) == b"[9007199254740991,-9007199254740991]"
+    assert canonical_json([9007199254740991, -9007199254740991]) == (
+        b"[9007199254740991,-9007199254740991]"
+    )
 
 
 def test_integer_outside_the_safe_range_is_refused():

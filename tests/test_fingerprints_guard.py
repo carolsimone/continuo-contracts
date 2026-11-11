@@ -34,7 +34,10 @@ def test_every_denylisted_key_has_its_own_entry(family, key):
 
 @pytest.mark.parametrize("family", PYTHON_FAMILIES)
 def test_every_python_hash_input_is_classified(family):
-    names = [f"projection.{k}" for k in FP.projection_keys] + ["ci.source_hash", "ci.shared_code_hash"]
+    names = [f"projection.{k}" for k in FP.projection_keys] + [
+        "ci.source_hash",
+        "ci.shared_code_hash",
+    ]
     assert FP.unclassified(family, names) == []
 
 

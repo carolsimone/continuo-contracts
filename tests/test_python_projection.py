@@ -76,7 +76,8 @@ def test_projection_hash_names_the_node_and_the_path_of_a_bad_value():
 def test_from_mapping_ignores_other_keys_and_fills_defaults():
     built = PythonNode.from_mapping({"schema": "analytics", "table": "t", "owner": "team-a",
                                      "output_columns": [{"name": "x", "type": "INT"}]})
-    assert built == PythonNode(schema="analytics", table="t", output_columns=(PythonColumn("x", "INT", True),))
+    assert built == PythonNode(
+        schema="analytics", table="t", output_columns=(PythonColumn("x", "INT", True),))
 
 
 def test_from_mapping_refuses_a_missing_table():

@@ -16,9 +16,12 @@ def test_sha256_hex():
 
 
 def test_the_three_and_four_part_folds():
-    assert fold3(S, "", C) == "sha256:23208c80730ea2c9250f031ce7b06e45547cf8251da74b50b37a58e66f9e989a"
-    assert fold4(S, "", C, "") == "sha256:31ac6d5f9ebddd3c3539ea0fa604293bbf30692abc8fc02665cb608b97431ddc"
-    assert fold4(S, "", C, X) == "sha256:db25a1a38c261811c17554c6c34e7b99e11527b39098dbc545bcb4d5ed73b927"
+    assert fold3(S, "", C) == (
+        "sha256:23208c80730ea2c9250f031ce7b06e45547cf8251da74b50b37a58e66f9e989a")
+    assert fold4(S, "", C, "") == (
+        "sha256:31ac6d5f9ebddd3c3539ea0fa604293bbf30692abc8fc02665cb608b97431ddc")
+    assert fold4(S, "", C, X) == (
+        "sha256:db25a1a38c261811c17554c6c34e7b99e11527b39098dbc545bcb4d5ed73b927")
 
 
 def test_fold3_is_the_sha256_of_its_parts_joined_by_a_bar():
@@ -28,12 +31,15 @@ def test_fold3_is_the_sha256_of_its_parts_joined_by_a_bar():
 def test_shared_fold_folds_each_path_with_its_digest():
     units = {"lib/p.py": sha256_hex(P), "lib/q.py": sha256_hex(Q)}
     swapped = {"lib/p.py": sha256_hex(Q), "lib/q.py": sha256_hex(P)}
-    assert shared_fold(units) == "80dceb20464b5e56cec8697e1fd8f2223f93b0a9ccfa14b5b61beb8e1ebe34a1"
-    assert shared_fold(swapped) == "a79499240116387cbbdc824ed1d51dd80b7628c25ef0addee7465dac7ced8cfe"
+    assert shared_fold(units) == (
+        "80dceb20464b5e56cec8697e1fd8f2223f93b0a9ccfa14b5b61beb8e1ebe34a1")
+    assert shared_fold(swapped) == (
+        "a79499240116387cbbdc824ed1d51dd80b7628c25ef0addee7465dac7ced8cfe")
 
 
 def test_shared_hash_hashes_the_bytes_first():
-    assert shared_hash({"lib/p.py": P, "lib/q.py": Q}) == "80dceb20464b5e56cec8697e1fd8f2223f93b0a9ccfa14b5b61beb8e1ebe34a1"
+    assert shared_hash({"lib/p.py": P, "lib/q.py": Q}) == (
+        "80dceb20464b5e56cec8697e1fd8f2223f93b0a9ccfa14b5b61beb8e1ebe34a1")
     assert shared_hash({}) == ""
 
 

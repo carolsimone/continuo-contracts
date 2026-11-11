@@ -127,7 +127,9 @@ def _enter(container: object, path: str, active: set[int]) -> None:
     # `active` holds the containers from the root down to the parent of `container`, so the
     # level of `container` is one more than its size.
     if len(active) >= MAX_DEPTH:
-        raise _fail(path, f"nesting is too deep, a container may be at most {MAX_DEPTH} levels down")
+        raise _fail(
+            path, f"nesting is too deep, a container may be at most {MAX_DEPTH} levels down"
+        )
     active.add(id(container))
 
 

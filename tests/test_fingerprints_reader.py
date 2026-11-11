@@ -17,6 +17,8 @@ from continuo_contracts.fingerprints import (
     render_markdown,
 )
 
+# A backslash at the end of a line joins it to the next, so a long flow mapping
+# stays one line of YAML.
 MINIMAL = """
 version: 1
 lists:
@@ -24,20 +26,32 @@ lists:
   projection_keys: ["schema", "table"]
 families:
   every:
-    - {id: "provenance", field: "Image tag", source: "the release", fingerprint: "neither", why: "provenance", inputs: ["release.image_tag"]}
+    - {id: "provenance", field: "Image tag", source: "the release", fingerprint: "neither", \
+why: "provenance", inputs: ["release.image_tag"]}
   dbt-model:
-    - {id: "raw_code", field: "SQL | text", source: "`raw_code`", fingerprint: "content", parts: ["source"], why: "source part", inputs: ["raw_code"]}
-    - {id: "other_config", field: "Every other config key", source: "`config`", fingerprint: "content", parts: ["config"], why: "hashed_config", inputs: ["config.*"], rule: "outside_denylist"}
-    - {id: "tags", field: "`tags`", source: "node `tags`", fingerprint: "contract", why: "tags", inputs: ["config.tags"]}
-    - {id: "meta_other", field: "Every other `meta` key", source: "`config.meta`", fingerprint: "neither", why: "no field holds it", inputs: ["config.meta"], when: {condition: "sql_reads", fingerprint: "content", parts: ["compiled"]}}
-    - {id: "declared_columns", field: "Declared columns", source: "`schema.yml`", fingerprint: "contract", why: "properties", inputs: ["contract.columns"], when: {condition: "enforced", fingerprint: "both", parts: ["config"]}}
-    - {id: "image_tag", field: "Image tag", source: "the release", fingerprint: "neither", why: "provenance", inputs: ["release.image_tag"]}
+    - {id: "raw_code", field: "SQL | text", source: "`raw_code`", fingerprint: "content", \
+parts: ["source"], why: "source part", inputs: ["raw_code"]}
+    - {id: "other_config", field: "Every other config key", source: "`config`", \
+fingerprint: "content", parts: ["config"], why: "hashed_config", inputs: ["config.*"], \
+rule: "outside_denylist"}
+    - {id: "tags", field: "`tags`", source: "node `tags`", fingerprint: "contract", why: "tags", \
+inputs: ["config.tags"]}
+    - {id: "meta_other", field: "Every other `meta` key", source: "`config.meta`", \
+fingerprint: "neither", why: "no field holds it", inputs: ["config.meta"], \
+when: {condition: "sql_reads", fingerprint: "content", parts: ["compiled"]}}
+    - {id: "declared_columns", field: "Declared columns", source: "`schema.yml`", \
+fingerprint: "contract", why: "properties", inputs: ["contract.columns"], \
+when: {condition: "enforced", fingerprint: "both", parts: ["config"]}}
+    - {id: "image_tag", field: "Image tag", source: "the release", fingerprint: "neither", \
+why: "provenance", inputs: ["release.image_tag"]}
   dbt-seed: []
   dbt-snapshot: []
   dbt-test:
-    - {id: "severity", field: "`severity`", source: "`config`", fingerprint: "both", parts: ["config"], why: "lower-cased", inputs: ["config.severity"]}
+    - {id: "severity", field: "`severity`", source: "`config`", fingerprint: "both", \
+parts: ["config"], why: "lower-cased", inputs: ["config.severity"]}
   python-node:
-    - {id: "assets", field: "`assets`", source: "authored", fingerprint: "both", parts: ["config", "shared"], why: "projection and shared part", inputs: ["projection.assets"]}
+    - {id: "assets", field: "`assets`", source: "authored", fingerprint: "both", \
+parts: ["config", "shared"], why: "projection and shared part", inputs: ["projection.assets"]}
   python-csv: []
   python-api: []
 """
@@ -129,8 +143,10 @@ REFUSALS = [
     ("version", lambda d: d.update(version=2)),
     ("unknown", lambda d: d.update(extra=1)),
     ("families", lambda d: d["families"].pop("dbt-test")),
-    ("duplicate id", lambda d: d["families"]["dbt-model"].append({**_model(0)(d), "inputs": ["x"]})),
-    ("duplicate input", lambda d: d["families"]["dbt-model"].append({**_model(0)(d), "id": "raw_code_2"})),
+    ("duplicate id", lambda d: d["families"]["dbt-model"].append(
+        {**_model(0)(d), "inputs": ["x"]})),
+    ("duplicate input", lambda d: d["families"]["dbt-model"].append(
+        {**_model(0)(d), "id": "raw_code_2"})),
     ("parts", lambda d: _model(0)(d).pop("parts")),
     ("parts", lambda d: _model(2)(d).update(parts=["config"])),
     ("part", lambda d: _model(0)(d).update(parts=["compile"])),
@@ -154,7 +170,8 @@ def test_the_packaged_file_holds_the_two_lists():
     assert hashed_config_denylist() == frozenset(
         {"meta", "docs", "description", "grants", "tags", "access", "group", "freshness"})
     assert projection_keys() == ("schema", "table", "kind", "script", "reads", "output_columns",
-                                 "extra_columns", "config", "secret_ref", "mode_type", "primary_key", "assets")
+                                 "extra_columns", "config", "secret_ref", "mode_type",
+                                 "primary_key", "assets")
 
 
 def _second_rule(d):
