@@ -35,7 +35,7 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   and names the key and its line, instead of keeping the last.
 - `continuo_contracts.fingerprints.FIXED_INPUT_NAMES` lists the input names written out in full;
   a guard test ties it to the input names that `docs/fingerprints.md` shows.
-- `vectors/canonical_json.json` and `vectors/hashing.json` pin `canonical_json()`, `fold3()`,
-  `fold4()`, `shared_fold()` and `shared_hash()` for a consumer in any language, and two new cases
-  of `vectors/projection.json` pin the UTF-16 order of `config` keys and the code point order of
-  assets. The README lists the files under Vectors.
+- `vectors/canonical_json.json` and `vectors/hashing.json` pin `canonical_json()` (with its
+  nesting limit), `fold3()`, `fold4()`, `shared_fold()` and `shared_hash()` for a consumer in any
+  language, and two new cases of `vectors/projection.json` pin the UTF-16 order of `config` keys
+  and the code point order of assets. The README lists the files under Vectors.

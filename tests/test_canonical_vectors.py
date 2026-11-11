@@ -4,7 +4,7 @@ from importlib import resources
 
 import pytest
 
-from continuo_contracts.canonical import canonical_json
+from continuo_contracts.canonical import MAX_DEPTH, canonical_json
 from continuo_contracts.errors import CanonicalJsonError
 
 VECTOR_FILE = resources.files("continuo_contracts") / "vectors" / "canonical_json.json"
@@ -88,3 +88,19 @@ def test_an_integer_in_a_value_is_inside_the_safe_range():
                 yield from numbers(item)
 
     assert all(abs(n) <= 2**53 - 1 for case in WRITTEN for n in numbers(case["value"]))
+
+
+def _levels(value):
+    levels = 0
+    while isinstance(value, list):
+        levels += 1
+        value = value[0] if value else None
+    return levels
+
+
+def test_the_nesting_cases_sit_on_either_side_of_the_limit():
+    accepted = BY_NAME["nesting_100_accepted"]
+    refused = BY_NAME["nesting_101_refused"]
+    assert _levels(accepted["value"]) == MAX_DEPTH
+    assert accepted["canonical"] == "[" * MAX_DEPTH + "]" * MAX_DEPTH
+    assert _levels(json.loads(refused["value_text"])) == MAX_DEPTH + 1

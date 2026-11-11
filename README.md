@@ -232,9 +232,12 @@ every case of every file.
   encoding it as UTF-8. A number with a point or an exponent is a double, and every integer in a
   `value` is within -(2**53 - 1) to 2**53 - 1. The cases cover the RFC 8785 samples, the order of
   object keys by UTF-16 code unit (`U+1F600` sorts before `U+FF5E`), the forms of a number, the
-  escapes of a string and nested empty containers. A case `{"name", "value_text", "error": true}`
+  escapes of a string, nested empty containers and the nesting limit (a list nested 100 levels is
+  written, one nested 101 levels is refused). A case `{"name", "value_text", "error": true}`
   holds JSON text instead of a value: read it with integers kept exact, and the value must be
-  refused, as `canonical_json` refuses an integer outside that range.
+  refused, as `canonical_json` refuses an integer outside that range and a container on a level
+  deeper than `MAX_DEPTH`. The refusal case for nesting needs a JSON reader that accepts 101 levels
+  of nesting.
 - `hashing.json` is a list of `{"name", "function", "inputs", "expected"}`. `function` is
   `fold3`, `fold4`, `shared_fold` or `shared_hash`, and `inputs` holds its arguments by name:
   `source`, `shared` and `config` (and `compiled` for `fold4`), `unit_digests` for `shared_fold`
