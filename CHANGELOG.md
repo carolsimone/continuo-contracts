@@ -5,6 +5,18 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-11
+
+**TL;DR**
+
+- First release. continuo-contracts holds the code continuo and its producers share to fingerprint nodes.
+- `canonical_json()` writes RFC 8785 canonical JSON (nesting deeper than 100 levels is refused); `normalise_text()` turns CRLF and CR into LF and strips the ends.
+- `fold3()` and `fold4()` build `content_hash`; `shared_fold()` and `shared_hash()` fold each file's path or unit id with its digest, so two files that swap contents change the hash.
+- `PythonNode`, `code_projection()` and `projection_hash()` give a Python node's config part; `canonical_sql_type()` spells `INT` as `INTEGER`.
+- `fingerprints.yaml` says which input moves which fingerprint; `docs/fingerprints.md` shows it.
+- Four vector files ship in the wheel, so every consumer can check that it computes the same bytes.
+- Python 3.12 and later. Apache-2.0.
+
 ### Added
 
 - `continuo_contracts.canonical`: `canonical_json()` writes RFC 8785 canonical JSON and names the
