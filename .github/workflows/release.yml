@@ -117,18 +117,20 @@ jobs:
           fi
 
       - name: Create the Release
+        env:
+          GENERATE: ${{ steps.notes.outputs.generate }}
         run: |
           set -euo pipefail
           # Idempotent: re-running this workflow for an existing tag updates
           # the Release rather than failing.
           if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-            if [ "${{ steps.notes.outputs.generate }}" = "true" ]; then
+            if [ "${GENERATE}" = "true" ]; then
               gh release edit "${TAG}" --repo "${GITHUB_REPOSITORY}" --latest
             else
               gh release edit "${TAG}" --repo "${GITHUB_REPOSITORY}" \
                 --notes-file /tmp/release-body.md --latest
             fi
-          elif [ "${{ steps.notes.outputs.generate }}" = "true" ]; then
+          elif [ "${GENERATE}" = "true" ]; then
             gh release create "${TAG}" --repo "${GITHUB_REPOSITORY}" \
               --title "${TAG}" --generate-notes --latest
           else
