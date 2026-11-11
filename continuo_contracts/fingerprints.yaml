@@ -1,0 +1,832 @@
+# The fingerprint field declaration: which fingerprint each input of a node family moves, and the
+# two lists the hashing code applies. docs/fingerprints.md is generated from this file.
+version: 1
+lists:
+  hashed_config_denylist: [access, description, docs, freshness, grants, group, meta, tags]
+  projection_keys: [schema, table, kind, script, reads, output_columns, extra_columns, config, secret_ref, mode_type, primary_key, assets]
+families:
+  every:
+    - id: "upstream_edges"
+      field: "Upstream edges, `upstream_unique_ids`"
+      source: "sqlglot over compiled SQL and Python read queries"
+      fingerprint: "neither"
+      why: "the topology artifact carries them as the graph's edges; DAG reads stay out of the contract"
+      inputs: []
+    - id: "provenance"
+      field: "Image tag, manifest metadata; library, runtime and Python versions"
+      source: "the release, the manifest, compile extras, the producer bundle"
+      fingerprint: "neither"
+      why: "provenance"
+      inputs: []
+    - id: "install_settings"
+      field: "Install settings: hosts, database names, the engine"
+      source: "the chart"
+      fingerprint: "neither"
+      why: "never stored; a node's own database name is masked in compiled SQL"
+      inputs: []
+  dbt-model:
+    - id: "schema"
+      field: "Schema"
+      source: "node `schema`, after `generate_schema_name`"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "content: the resolved relation in `hashed_config`; contract: `id`. A new schema makes a new node"
+      inputs: ["relation.schema"]
+    - id: "name"
+      field: "Name; a version's `<name>.v<version>`"
+      source: "node `name` and `version`"
+      fingerprint: "both"
+      parts: ["identity"]
+      why: "content: it keys the node, so a new name makes a new node with fresh hashes; contract: `id`, `name`, `schema[0].name`"
+      inputs: []
+    - id: "alias"
+      field: "Resolved alias"
+      source: "node `alias`, after `generate_alias_name`"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "content: the resolved relation in `hashed_config`; contract: `physicalName`"
+      inputs: ["relation.alias"]
+    - id: "raw_code"
+      field: "SQL text"
+      source: "`raw_code`"
+      fingerprint: "content"
+      parts: ["source"]
+      why: "source part: the SQL text with LF line endings and no outer ASCII whitespace, nothing else changed; code stays out of the contract"
+      inputs: ["raw_code"]
+    - id: "compiled_code"
+      field: "What compiled SQL adds: `var()`, `env_var()`, `target.*`, `source()` definitions, upstream names through `ref()`, an inlined ephemeral upstream, `meta` read by SQL"
+      source: "`compiled_code`"
+      fingerprint: "content"
+      parts: ["compiled"]
+      why: "compiled part, masked; out of the contract"
+      inputs: ["compiled_code"]
+    - id: "run_values"
+      field: "Run-specific values in compiled SQL: invocation id, run start, the node's database name"
+      source: "the manifest"
+      fingerprint: "neither"
+      why: "masked to fixed placeholders, so a run with no edit moves nothing"
+      inputs: []
+    - id: "macros"
+      field: "Macros the team or its packages write in the closure, root overrides, macros called only inside `is_incremental()`"
+      source: "the manifest's `macros`"
+      fingerprint: "content"
+      parts: ["shared"]
+      why: "shared part, each folded with its id"
+      inputs: ["macros"]
+    - id: "builtin_macros"
+      field: "Built-in macros of dbt-core, dbt-adapters, dbt-common and the adapter"
+      source: "the manifest's `macros`"
+      fingerprint: "neither"
+      why: "left out of the closure; their versions are provenance, and pinned"
+      inputs: []
+    - id: "functions"
+      field: "Bodies of the dbt functions the model calls"
+      source: "the manifest"
+      fingerprint: "content"
+      parts: ["shared"]
+      why: "shared part"
+      inputs: ["functions"]
+    - id: "unit_tests"
+      field: "Unit tests"
+      source: "the manifest's `unit_tests`"
+      fingerprint: "content"
+      parts: ["shared"]
+      why: "shared part, by dbt's own checksum, and counted in `test_count`; code, not quality rules"
+      inputs: ["unit_tests"]
+    - id: "service_units"
+      field: "Service units: `on-run-start`, `on-run-end`, the `flags:` block, `generate_schema_name`, `generate_alias_name`"
+      source: "the manifest, compile extras"
+      fingerprint: "content"
+      parts: ["shared"]
+      why: "shared part"
+      inputs: ["on_run_start", "on_run_end", "project_flags", "generate_schema_name", "generate_alias_name"]
+    - id: "materialization"
+      field: "`materialized`, `unique_key`, `incremental_strategy`, `on_schema_change`"
+      source: "`config`"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "content: `hashed_config`; contract: `materialization`, and `schema[0].physicalType` from `materialized`"
+      inputs: ["config.materialized", "config.unique_key", "config.incremental_strategy", "config.on_schema_change"]
+    - id: "contract_enforced"
+      field: "`contract.enforced`"
+      source: "`config`"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "content: `hashed_config`; contract: `contractEnforced`"
+      inputs: ["config.contract.enforced"]
+    - id: "other_config"
+      field: "Every other config key outside the denylist: `persist_docs`, `sql_header`, `full_refresh`, `pre_hook`, `post_hook`, the rest of `contract`, adapter and microbatch keys"
+      source: "`config`"
+      fingerprint: "content"
+      parts: ["config"]
+      rule: "outside_denylist"
+      why: "`hashed_config`, which keeps every key outside its denylist; not a contract fact"
+      inputs: ["config.*"]
+    - id: "null_config"
+      field: "Config keys with null values"
+      source: "`config`"
+      fingerprint: "neither"
+      why: "dropped: a dbt upgrade adds them with no meaning"
+      inputs: []
+    - id: "tags"
+      field: "`tags`"
+      source: "node `tags`"
+      fingerprint: "contract"
+      why: "`tags`, and the first as `schedule`; outside `hashed_config`. A tag set in the SQL file's `config()` line moves the source part anyway"
+      inputs: ["config.tags"]
+    - id: "meta_run_facts"
+      field: "`meta.owner`, `meta.criticality`, `meta.timeout_minutes`"
+      source: "`config.meta`"
+      fingerprint: "contract"
+      when: {condition: "sql_reads", fingerprint: "both", parts: ["compiled"]}
+      why: "contract: `team.name`, `criticality`, `timeoutMinutes`; `meta` is outside `hashed_config`. Content: the compiled part, while SQL reads the value"
+      inputs: []
+    - id: "meta_continuo"
+      field: "`meta.continuo.readers`, `.reads`, `.tests`, `.classification`"
+      source: "`config.meta`, column `meta`"
+      fingerprint: "contract"
+      when: {condition: "sql_reads", fingerprint: "both", parts: ["compiled"]}
+      why: "contract: `roles`, `reads`, table tests as quality rules, `classification`, carried whether or not the install uses an ontology. Content: the compiled part, while SQL reads the value"
+      inputs: []
+    - id: "meta_bindings"
+      field: "`meta.continuo` bindings: `entity`, `grain`, `fixed`, `filter`, a column's `property`, `local` and aggregate keys"
+      source: "`config.meta`, column `meta`"
+      fingerprint: "contract"
+      when: {condition: "sql_reads", fingerprint: "both", parts: ["compiled"]}
+      why: "contract: the ontology part, written only when the install uses an ontology. Content: the compiled part, while SQL reads the value"
+      inputs: []
+    - id: "meta_other"
+      field: "Every other `meta` key"
+      source: "`config.meta`"
+      fingerprint: "neither"
+      when: {condition: "sql_reads", fingerprint: "content", parts: ["compiled"]}
+      why: "not in `hashed_config`, since `meta` is outside it, and not a contract fact, since no field holds it and the continuo vocabulary is closed. Content: the compiled part, while SQL reads the value"
+      inputs: ["config.meta"]
+    - id: "docs"
+      field: "`docs`"
+      source: "`config.docs`"
+      fingerprint: "neither"
+      why: "whether dbt's documentation site shows the node, and in which colour (`show`, `node_color`): not code, and no contract field"
+      inputs: ["config.docs"]
+    - id: "config_description"
+      field: "`description` as a `config` key, if a project sets one"
+      source: "`config`"
+      fingerprint: "neither"
+      why: "dbt declares no such key; the denylist keeps it out of `hashed_config`, and the contract's description comes from the node's `description`"
+      inputs: ["config.description"]
+    - id: "access_group"
+      field: "`access`, `group`"
+      source: "`config`"
+      fingerprint: "contract"
+      why: "`access`, left out when it is dbt's default, `protected`, and `group`; outside `hashed_config`"
+      inputs: ["config.access", "config.group"]
+    - id: "freshness"
+      field: "`freshness.build_after`"
+      source: "`config`"
+      fingerprint: "contract"
+      why: "`freshnessBuildAfter`; outside `hashed_config`"
+      inputs: ["config.freshness"]
+    - id: "grants"
+      field: "`grants`"
+      source: "`config`"
+      fingerprint: "contract"
+      why: "`roles`; outside `hashed_config`"
+      inputs: ["config.grants"]
+    - id: "declared_columns"
+      field: "Declared columns: name and order"
+      source: "`schema.yml`"
+      fingerprint: "contract"
+      when: {condition: "enforced", fingerprint: "both", parts: ["config"]}
+      why: "contract: `properties` in declared order; content: `hashed_config`, only when enforced"
+      inputs: ["contract.columns"]
+    - id: "column_data_type"
+      field: "Column `data_type`"
+      source: "`schema.yml`"
+      fingerprint: "contract"
+      when: {condition: "enforced", fingerprint: "both", parts: ["config"]}
+      why: "contract: `physicalType`, with the `logicalType` derived from it; content: `hashed_config`, only when enforced"
+      inputs: []
+    - id: "constraints"
+      field: "Column and model constraints"
+      source: "`schema.yml`, model `constraints`"
+      fingerprint: "neither"
+      when: {condition: "enforced", fingerprint: "content", parts: ["config"]}
+      why: "`hashed_config`. A primary key also reaches the contract through the manifest's `primary_key`; no other constraint does, since `required` and `unique` come from tests"
+      inputs: ["constraints"]
+    - id: "column_quote"
+      field: "Column `quote`"
+      source: "`schema.yml`"
+      fingerprint: "neither"
+      when: {condition: "enforced", fingerprint: "content", parts: ["config"]}
+      why: "`hashed_config`; it only decides how dbt quotes the name in DDL, so it has no contract field"
+      inputs: []
+  dbt-seed:
+    - id: "identity"
+      field: "Schema, name, resolved alias"
+      source: "node `schema`, `name`, `alias`"
+      fingerprint: "both"
+      parts: ["config", "identity"]
+      why: "as for a model"
+      inputs: ["relation.schema", "relation.alias"]
+    - id: "csv_bytes"
+      field: "CSV bytes, any size, outer whitespace included"
+      source: "compile extras' `sha256`"
+      fingerprint: "content"
+      parts: ["source"]
+      why: "source part. A stored artifact with no extras keeps dbt's checksum, which is the file path for a seed over 1 MiB, until its service's re-baseline release compiles the service again"
+      inputs: ["seed_bytes", "seed_checksum"]
+    - id: "csv_header"
+      field: "CSV header"
+      source: "the CSV, and compile extras' `header`"
+      fingerprint: "content"
+      parts: ["source"]
+      why: "through the bytes; the contract holds the declared columns instead, which the producer's CI check keeps equal to the header"
+      inputs: []
+    - id: "seed_columns"
+      field: "`seed_columns_hash`, `seed_columns`"
+      source: "compile extras' `header` and `column_types`"
+      fingerprint: "neither"
+      why: "topology fields that tell a column change from a row change; their inputs are already in `content_hash`, through the bytes and `hashed_config`"
+      inputs: []
+    - id: "no_compiled"
+      field: "Compiled part"
+      source: "none"
+      fingerprint: "neither"
+      why: "a seed has no compiled SQL; the part is `\"\"`"
+      inputs: []
+    - id: "macros"
+      field: "Seed materialization and loader macros the team overrides; package macros in the closure"
+      source: "the manifest's `macros`"
+      fingerprint: "content"
+      parts: ["shared"]
+      why: "shared part: closure roots and root overrides"
+      inputs: ["macros"]
+    - id: "builtin_macros"
+      field: "Built-in macros"
+      source: "the manifest's `macros`"
+      fingerprint: "neither"
+      why: "as for a model"
+      inputs: []
+    - id: "service_units"
+      field: "Service units"
+      source: "the manifest, compile extras"
+      fingerprint: "content"
+      parts: ["shared"]
+      why: "shared part, as for a model"
+      inputs: ["on_run_start", "on_run_end", "project_flags", "generate_schema_name", "generate_alias_name"]
+    - id: "materialization"
+      field: "`materialized: seed`"
+      source: "`config`"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "content: `hashed_config`; contract: `materialization`, and `schema[0].physicalType`, always `table` for a seed"
+      inputs: ["config.materialized"]
+    - id: "column_types"
+      field: "`column_types`"
+      source: "`config`"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "content: `hashed_config`; contract: `physicalType`, where it wins over `data_type`, with the `logicalType` derived from it"
+      inputs: ["config.column_types"]
+    - id: "quote_columns"
+      field: "`quote_columns`"
+      source: "`config`"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "content: `hashed_config`; contract: `quoteColumns`"
+      inputs: ["config.quote_columns"]
+    - id: "other_config"
+      field: "`delimiter`, `full_refresh` and every other config key outside the denylist"
+      source: "`config`"
+      fingerprint: "content"
+      parts: ["config"]
+      rule: "outside_denylist"
+      why: "`hashed_config`; `full_refresh` also rides on the topology node"
+      inputs: ["config.*"]
+    - id: "null_config"
+      field: "Config keys with null values"
+      source: "`config`"
+      fingerprint: "neither"
+      why: "dropped"
+      inputs: []
+    - id: "tags"
+      field: "`tags`"
+      source: "node `tags`"
+      fingerprint: "contract"
+      why: "`tags`, and the first as `schedule`, which is `seed` when there is none"
+      inputs: ["config.tags"]
+    - id: "meta_contract"
+      field: "`meta.owner`, `meta.criticality`, `meta.timeout_minutes`; `meta.continuo` keys and bindings"
+      source: "`config.meta`, column `meta`"
+      fingerprint: "contract"
+      why: "as for a model, except that a seed has no SQL to read a `meta` value, so none of them reaches `content_hash`"
+      inputs: []
+    - id: "meta_other_docs"
+      field: "Every other `meta` key, `docs`"
+      source: "`config`"
+      fingerprint: "neither"
+      why: "as for a model; a seed has no SQL to read a `meta` value"
+      inputs: ["config.meta", "config.docs"]
+    - id: "grants"
+      field: "`grants`"
+      source: "`config`"
+      fingerprint: "contract"
+      why: "`roles`"
+      inputs: ["config.grants"]
+    - id: "group"
+      field: "`group`"
+      source: "`config`"
+      fingerprint: "contract"
+      why: "`group`, as on a model; outside `hashed_config`. dbt declares `group` on every node's config"
+      inputs: ["config.group"]
+    - id: "not_seed_config"
+      field: "`access`, `freshness`, or `description` as a `config` key, if a project sets one on a seed"
+      source: "`config`"
+      fingerprint: "neither"
+      why: "dbt declares none of them on a seed's config (`access` and `freshness` are a model's); the denylist keeps them out of `hashed_config`, and the contract generator maps `access` and `freshness` for a model only"
+      inputs: ["config.access", "config.freshness", "config.description"]
+  dbt-snapshot:
+    - id: "identity"
+      field: "Schema, name, resolved alias"
+      source: "node `schema`, `name`, `alias`"
+      fingerprint: "both"
+      parts: ["config", "identity"]
+      why: "as for a model"
+      inputs: ["relation.schema", "relation.alias"]
+    - id: "raw_code"
+      field: "SQL text"
+      source: "the snapshot's own `raw_code`"
+      fingerprint: "content"
+      parts: ["source"]
+      why: "source part: the SQL text with LF line endings and no outer ASCII whitespace, nothing else changed; another snapshot block in the same file does not move it"
+      inputs: ["raw_code"]
+    - id: "compiled_code"
+      field: "Compiled SQL"
+      source: "`compiled_code`"
+      fingerprint: "content"
+      parts: ["compiled"]
+      why: "compiled part, masked"
+      inputs: ["compiled_code"]
+    - id: "run_values"
+      field: "Run-specific values in compiled SQL"
+      source: "the manifest"
+      fingerprint: "neither"
+      why: "masked"
+      inputs: []
+    - id: "macros"
+      field: "The snapshot materialization, `snapshot_<strategy>_strategy`, the hash macros the team writes, root overrides; package macros in the closure"
+      source: "the manifest's `macros`"
+      fingerprint: "content"
+      parts: ["shared"]
+      why: "shared part"
+      inputs: ["macros"]
+    - id: "builtin_macros"
+      field: "Built-in macros"
+      source: "the manifest's `macros`"
+      fingerprint: "neither"
+      why: "as for a model"
+      inputs: []
+    - id: "functions"
+      field: "Bodies of the dbt functions the snapshot calls"
+      source: "the manifest"
+      fingerprint: "content"
+      parts: ["shared"]
+      why: "shared part"
+      inputs: ["functions"]
+    - id: "service_units"
+      field: "Service units"
+      source: "the manifest, compile extras"
+      fingerprint: "content"
+      parts: ["shared"]
+      why: "shared part"
+      inputs: ["on_run_start", "on_run_end", "project_flags", "generate_schema_name", "generate_alias_name"]
+    - id: "snapshot_config"
+      field: "`strategy`, `unique_key`, `updated_at`, `check_cols`, `hard_deletes`, `snapshot_meta_column_names`, `dbt_valid_to_current`"
+      source: "snapshot `config`"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "content: `hashed_config`; contract: `snapshot`"
+      inputs: ["config.strategy", "config.unique_key", "config.updated_at", "config.check_cols", "config.hard_deletes", "config.snapshot_meta_column_names", "config.dbt_valid_to_current"]
+    - id: "history_columns"
+      field: "The columns dbt adds to the history table: `dbt_scd_id`, `dbt_updated_at`, `dbt_valid_from` and `dbt_valid_to`, and `dbt_is_deleted` when `hard_deletes` is `new_record`, under the names `snapshot_meta_column_names` sets"
+      source: "derived from the snapshot `config`"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "contract: `properties`, added by the contract generator; content: through the snapshot config in `hashed_config`"
+      inputs: []
+    - id: "materialization"
+      field: "`materialized: snapshot`"
+      source: "`config`"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "content: `hashed_config`; contract: `materialization`, and `schema[0].physicalType`, always `table` for a snapshot"
+      inputs: ["config.materialized"]
+    - id: "other_config"
+      field: "Every other config key outside the denylist"
+      source: "`config`"
+      fingerprint: "content"
+      parts: ["config"]
+      rule: "outside_denylist"
+      why: "`hashed_config`"
+      inputs: ["config.*"]
+    - id: "null_config"
+      field: "Config keys with null values"
+      source: "`config`"
+      fingerprint: "neither"
+      why: "dropped"
+      inputs: []
+    - id: "tags_meta"
+      field: "`tags`, `meta.owner`, `meta.criticality`, `meta.timeout_minutes`, `meta.continuo` keys and bindings"
+      source: "the node, `config.meta`, column `meta`"
+      fingerprint: "contract"
+      when: {condition: "sql_reads", fingerprint: "both", parts: ["compiled"]}
+      why: "as for a model"
+      inputs: ["config.tags"]
+    - id: "meta_other_docs"
+      field: "Every other `meta` key, `docs`"
+      source: "`config`"
+      fingerprint: "neither"
+      when: {condition: "sql_reads", fingerprint: "content", parts: ["compiled"]}
+      why: "as for a model"
+      inputs: ["config.meta", "config.docs"]
+    - id: "grants"
+      field: "`grants`"
+      source: "`config`"
+      fingerprint: "contract"
+      why: "`roles`"
+      inputs: ["config.grants"]
+    - id: "group"
+      field: "`group`"
+      source: "`config`"
+      fingerprint: "contract"
+      why: "`group`, as on a model; outside `hashed_config`. dbt declares `group` on every node's config"
+      inputs: ["config.group"]
+    - id: "not_snapshot_config"
+      field: "`access`, `freshness`, or `description` as a `config` key, if a project sets one on a snapshot"
+      source: "`config`"
+      fingerprint: "neither"
+      why: "as for a seed"
+      inputs: ["config.access", "config.freshness", "config.description"]
+  dbt-test:
+    - id: "test_id"
+      field: "Test id"
+      source: "dbt's test node id"
+      fingerprint: "content"
+      parts: ["identity"]
+      why: "it keys the test node and its entry in the code bundle's `tests` map"
+      inputs: []
+    - id: "definition"
+      field: "Name, namespace, `kwargs`, `column_name`, `attached_node`"
+      source: "the test node"
+      fingerprint: "both"
+      parts: ["source"]
+      why: "content: through the compiled SQL, the test's source part; contract: the rule's `id` and arguments, and the property it sits on"
+      inputs: []
+    - id: "compiled_code"
+      field: "Compiled SQL, generic or singular"
+      source: "`compiled_code`"
+      fingerprint: "content"
+      parts: ["source"]
+      why: "source part, masked; the compiled part is `\"\"`, since the source part already is the compiled SQL. Kept in the code bundle's `tests` map"
+      inputs: ["compiled_code"]
+    - id: "macros"
+      field: "The generic test's macro the team or a package writes; `get_test_sql` and `should_store_failures` overrides"
+      source: "the manifest's `macros`"
+      fingerprint: "content"
+      parts: ["shared"]
+      why: "shared part"
+      inputs: ["macros"]
+    - id: "builtin_macros"
+      field: "Built-in generic test macros (`test_not_null` and its closure)"
+      source: "the manifest's `macros`"
+      fingerprint: "neither"
+      why: "left out of the closure, so a dbt upgrade does not move a test's hash"
+      inputs: []
+    - id: "functions"
+      field: "Bodies of the dbt functions the test calls"
+      source: "the manifest"
+      fingerprint: "content"
+      parts: ["shared"]
+      why: "shared part"
+      inputs: ["functions"]
+    - id: "severity"
+      field: "`severity`"
+      source: "`config`"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "content: `hashed_config`, lower-cased; contract: the rule's `severity`, lower-cased, `warn` as `warning`"
+      inputs: ["config.severity"]
+    - id: "where"
+      field: "`where`"
+      source: "`config`, rendered"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "masked as compiled SQL is, on both sides; contract: the rule's `where`"
+      inputs: ["config.where"]
+    - id: "thresholds"
+      field: "`warn_if`, `error_if`, `fail_calc`"
+      source: "`config`"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "content: `hashed_config`; contract: `warnIf`, `errorIf`, `failCalc` when not dbt's defaults"
+      inputs: ["config.warn_if", "config.error_if", "config.fail_calc"]
+    - id: "limit_store_failures"
+      field: "`limit`, `store_failures`"
+      source: "`config`"
+      fingerprint: "content"
+      parts: ["config"]
+      why: "`hashed_config`; code only"
+      inputs: ["config.limit", "config.store_failures"]
+    - id: "failures_relation"
+      field: "The schema and alias a test writes its failures to"
+      source: "the test node"
+      fingerprint: "content"
+      parts: ["config"]
+      why: "the resolved relation in `hashed_config`; not a contract fact"
+      inputs: ["relation.schema", "relation.alias"]
+    - id: "other_config"
+      field: "Every other config key outside the denylist"
+      source: "`config`"
+      fingerprint: "content"
+      parts: ["config"]
+      rule: "outside_denylist"
+      why: "`hashed_config`"
+      inputs: ["config.*"]
+    - id: "description_tags"
+      field: "Description, tags"
+      source: "the test's YAML"
+      fingerprint: "contract"
+      why: "the rule's `description` and `tags`; outside `hashed_config`"
+      inputs: ["config.tags"]
+    - id: "meta"
+      field: "`meta`"
+      source: "`config.meta`"
+      fingerprint: "neither"
+      when: {condition: "sql_reads", fingerprint: "content", parts: ["source"]}
+      why: "outside `hashed_config`, and no field of a quality rule holds it. A value the test's SQL reads moves its source part, which is the compiled SQL"
+      inputs: ["config.meta"]
+    - id: "group"
+      field: "`group`"
+      source: "`config`"
+      fingerprint: "neither"
+      why: "outside `hashed_config`, and no field of a quality rule holds it. dbt declares `group` on a test's config too"
+      inputs: ["config.group"]
+    - id: "null_config"
+      field: "Config keys with null values: `alias`, `database`, `group`, `static_analysis`, `store_failures`, `store_failures_as`, `sql_header`, `where` and `limit`, while a project leaves them unset"
+      source: "`config`"
+      fingerprint: "neither"
+      why: "dropped; dbt writes each as null until it is set"
+      inputs: []
+    - id: "not_test_config"
+      field: "`docs`, `grants`, `access`, `freshness`, or `description` as a `config` key, if a project sets one on a test"
+      source: "`config`"
+      fingerprint: "neither"
+      why: "dbt declares none of them on a test's config; the denylist keeps them out of `hashed_config`, and no field of a quality rule holds them"
+      inputs: ["config.docs", "config.grants", "config.access", "config.freshness", "config.description"]
+    - id: "untracked_tests"
+      field: "A test of a source, or of a node that continuo's topology-controller skips"
+      source: "the manifest"
+      fingerprint: "neither"
+      why: "continuo's topology-controller, which parses the dbt manifest, keeps only the tests of the nodes it tracks"
+      inputs: []
+  python-node:
+    - id: "schema"
+      field: "`id`"
+      source: "authored, lower case"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "content: its schema part, the projection's `schema`; contract: `id`"
+      inputs: ["projection.schema"]
+    - id: "table"
+      field: "The table, `schema[0].name`, and `name`"
+      source: "authored; `name` defaults to the table"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "content: the projection's `table`; contract: `schema[0].name`, `name`"
+      inputs: ["projection.table"]
+    - id: "script_bytes"
+      field: "Script bytes"
+      source: "the script file"
+      fingerprint: "content"
+      parts: ["source"]
+      why: "source part, computed by the producer's CI"
+      inputs: ["ci.source_hash"]
+    - id: "script"
+      field: "`script`"
+      source: "authored path"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "content: the projection's `script`; contract: `script`"
+      inputs: ["projection.script"]
+    - id: "import_closure"
+      field: "In-repo import closure"
+      source: "the files the script imports"
+      fingerprint: "content"
+      parts: ["shared"]
+      why: "shared part, each folded with its path, computed by the producer's CI"
+      inputs: ["ci.shared_code_hash"]
+    - id: "assets"
+      field: "`assets`"
+      source: "authored list"
+      fingerprint: "both"
+      parts: ["config", "shared"]
+      why: "content: the list in the projection, the files' bytes in the shared part; contract: `assets`"
+      inputs: ["projection.assets"]
+    - id: "read_queries"
+      field: "`readQueries`"
+      source: "authored"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "content: the projection's `reads`, each query with LF line endings and no outer ASCII whitespace; contract: `readQueries`"
+      inputs: ["projection.reads"]
+    - id: "columns"
+      field: "Columns: name and order"
+      source: "`schema[0].properties`"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "content: the projection's `output_columns`; contract: `properties` in file order"
+      inputs: ["projection.output_columns"]
+    - id: "column_type"
+      field: "Column `physicalType`"
+      source: "authored"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "content: the canonical type, so `INT` and `INTEGER` hash alike; contract: the type as written"
+      inputs: []
+    - id: "column_required"
+      field: "Column `required`"
+      source: "authored"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "content: `nullable` in the projection; contract: `required`"
+      inputs: []
+    - id: "primary_key"
+      field: "`primaryKey`, `primaryKeyPosition`"
+      source: "authored"
+      fingerprint: "contract"
+      when: {condition: "upsert", fingerprint: "both", parts: ["config"]}
+      why: "content: the projection's `primary_key`, `[]` unless `upsert`; contract: the key, descriptive on `replace` and `append`"
+      inputs: ["projection.primary_key"]
+    - id: "kind"
+      field: "`kind`"
+      source: "authored, default `python-node`"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "content: the projection's canonical kind; contract: `kind`"
+      inputs: ["projection.kind"]
+    - id: "mode_type"
+      field: "`modeType`"
+      source: "authored, default `replace`"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "content: the projection's `mode_type`; contract: `modeType`"
+      inputs: ["projection.mode_type"]
+    - id: "extra_columns"
+      field: "`extraColumns`"
+      source: "authored, default `raise`"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "content: the projection's `extra_columns`; contract: `extraColumns`"
+      inputs: ["projection.extra_columns"]
+    - id: "config"
+      field: "`config`"
+      source: "authored"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "content: the projection's `config`; contract: `config`"
+      inputs: ["projection.config"]
+    - id: "refused_csv_secret"
+      field: "`csvSource`, `secretRef`"
+      source: "refused on a `python-node`"
+      fingerprint: "neither"
+      why: "the projection's `reads` holds the read queries, and its `secret_ref` is `\"\"`"
+      inputs: ["projection.secret_ref"]
+  python-csv:
+    - id: "identity"
+      field: "`id`, the table and `name`"
+      source: "authored"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "as for a `python-node`"
+      inputs: ["projection.schema", "projection.table"]
+    - id: "csv_uri"
+      field: "CSV URI"
+      source: "authored `csvSource`"
+      fingerprint: "both"
+      parts: ["source", "config"]
+      why: "content: the source part, `sha256(uri)` computed by the producer's CI, and the projection's `reads.csv`; contract: `csvSource`"
+      inputs: ["projection.reads", "ci.source_hash"]
+    - id: "csv_content"
+      field: "The CSV's content at the URI"
+      source: "the object"
+      fingerprint: "neither"
+      why: "data, not a new node version"
+      inputs: []
+    - id: "refused_script_inputs"
+      field: "`script`, `readQueries`, `secretRef`, `assets`"
+      source: "refused on a csv node"
+      fingerprint: "neither"
+      why: "the projection holds `script: \"\"`, `reads: {csv: <uri>}`, `secret_ref: \"\"` and `assets: []`, and the shared part is empty"
+      inputs: ["projection.script", "projection.secret_ref", "projection.assets", "ci.shared_code_hash"]
+    - id: "columns"
+      field: "Columns, each column's `physicalType` and `required`"
+      source: "authored"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "as for a `python-node`"
+      inputs: ["projection.output_columns"]
+    - id: "primary_key"
+      field: "`primaryKey`, `primaryKeyPosition`"
+      source: "authored"
+      fingerprint: "contract"
+      why: "descriptive: a csv node is `replace` only, so the projection's `primary_key` is `[]`"
+      inputs: ["projection.primary_key"]
+    - id: "kind"
+      field: "`kind`"
+      source: "authored, `python-csv`"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "as for a `python-node`"
+      inputs: ["projection.kind"]
+    - id: "mode_type"
+      field: "`modeType`"
+      source: "`replace` only, the default"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "the projection's `mode_type` is always `replace`"
+      inputs: ["projection.mode_type"]
+    - id: "extra_columns_config"
+      field: "`extraColumns`, `config`"
+      source: "authored"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "as for a `python-node`"
+      inputs: ["projection.extra_columns", "projection.config"]
+  python-api:
+    - id: "identity"
+      field: "`id`, the table and `name`"
+      source: "authored"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "as for a `python-node`"
+      inputs: ["projection.schema", "projection.table"]
+    - id: "repo_inputs"
+      field: "Script bytes, the in-repo import closure, the asset files' bytes"
+      source: "the repository"
+      fingerprint: "content"
+      parts: ["source", "shared"]
+      why: "source and shared parts, as for a `python-node`"
+      inputs: ["ci.source_hash", "ci.shared_code_hash"]
+    - id: "script_assets"
+      field: "`script`, `assets`"
+      source: "authored"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "as for a `python-node`"
+      inputs: ["projection.script", "projection.assets"]
+    - id: "refused_reads"
+      field: "`readQueries`, `csvSource`"
+      source: "refused on an api node"
+      fingerprint: "neither"
+      why: "the projection's `reads` is `{}`"
+      inputs: ["projection.reads"]
+    - id: "secret_ref"
+      field: "`secretRef`"
+      source: "authored, optional"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "content: the projection's `secret_ref`, `\"\"` when none; contract: `secretRef`"
+      inputs: ["projection.secret_ref"]
+    - id: "secret_values"
+      field: "The Secret's values"
+      source: "the cluster"
+      fingerprint: "neither"
+      why: "install data; continuo carries only the name"
+      inputs: []
+    - id: "fetched_data"
+      field: "What the script fetches at run time"
+      source: "the API"
+      fingerprint: "neither"
+      why: "data, not code or a promise"
+      inputs: []
+    - id: "columns"
+      field: "Columns, each column's `physicalType` and `required`"
+      source: "authored"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "as for a `python-node`"
+      inputs: ["projection.output_columns"]
+    - id: "primary_key"
+      field: "`primaryKey`, `primaryKeyPosition`"
+      source: "authored"
+      fingerprint: "contract"
+      when: {condition: "upsert", fingerprint: "both", parts: ["config"]}
+      why: "as for a `python-node`"
+      inputs: ["projection.primary_key"]
+    - id: "run_settings"
+      field: "`kind` (`python-api`), `modeType`, `extraColumns`, `config`"
+      source: "authored or defaulted"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "as for a `python-node`"
+      inputs: ["projection.kind", "projection.mode_type", "projection.extra_columns", "projection.config"]

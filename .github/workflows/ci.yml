@@ -1,0 +1,58 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.13", "3.14"]
+    env:
+      # Overrides .python-version, so each leg runs its own interpreter.
+      UV_PYTHON: ${{ matrix.python }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --locked
+      - name: Interpreter is ${{ matrix.python }}
+        run: uv run --locked python -c "import sys; assert sys.version.startswith('${{ matrix.python }}.'), sys.version"
+      - run: uv run --locked ruff check .
+      - run: uv run --locked mypy continuo_contracts scripts
+      - run: uv run --locked pytest
+
+  # Builds the distributions, refuses a wheel that lacks a module or a data file, and runs the
+  # installed wheel from outside the checkout on the oldest and the newest supported Python.
+  wheel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - run: uv build -o dist
+      - run: uv run --no-project --python 3.12 scripts/check_wheel.py dist
+      - name: Install the wheel in clean environments and run the smoke test
+        run: |
+          set -euo pipefail
+          for py in 3.12 3.14; do
+            uv venv -q --python "$py" "$RUNNER_TEMP/venv-$py"
+            uv pip install -q --python "$RUNNER_TEMP/venv-$py/bin/python" dist/*.whl
+            (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/venv-$py/bin/python" -I "$GITHUB_WORKSPACE/scripts/smoke_installed.py")
+          done
+
+  # The one check a ruleset requires, with dco. always() makes a failed test or wheel job fail
+  # this job instead of skipping it, because a skipped check reads as passing.
+  ci:
+    needs: [test, wheel]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: test "${{ needs.test.result }}" = success && test "${{ needs.wheel.result }}" = success
