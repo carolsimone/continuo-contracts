@@ -116,10 +116,9 @@ Package root: `continuo_contracts/`.
    `copy.replace`, `annotationlib`, template strings, an unparenthesised
    multi-exception `except`). `requires-python` stays `>=3.12`, and the CI
    matrix keeps 3.12, 3.13 and 3.14.
-5. **Hash stability.** The byte formats are pinned by tests and by the vector
-   files `continuo_contracts/vectors/projection.json` and `sql_types.json`:
-   the RFC 8785 serialisation, the text normaliser, `fold3`/`fold4`, the shared
-   fold's line format and sort order, the projection keys and their order, the
+5. **Hash stability.** The byte formats are pinned by tests and by every file
+   in `continuo_contracts/vectors/`: the RFC 8785 serialisation, the text
+   normaliser, `fold3`/`fold4`, the shared fold's line format and sort order, the projection keys and their order, the
    SQL type canonicaliser, the denylist and the classification fields of
    `fingerprints.yaml` (`id`, `fingerprint`, `parts`, `when`, `rule`,
    `inputs`). Flag as **BLOCKER** any change in the diff to a pinned expected
@@ -200,7 +199,8 @@ Package root: `continuo_contracts/`.
    is ASCII. `print(` appears nowhere; diagnostics use `logging` to stderr,
    and only in `scripts/`.
 10. **Packaging and release.**
-    - The wheel ships `fingerprints.yaml`, both vector files and `py.typed`;
+    - The wheel ships `fingerprints.yaml`, every file in
+      `continuo_contracts/vectors/` and `py.typed`;
       `scripts/check_wheel.py` `REQUIRED_MEMBERS` matches the package files.
     - `.github/workflows/ci.yml`: jobs `test` (3.12, 3.13, 3.14), `wheel` and
       `ci`, with `ci` needing both and failing on a skipped or cancelled job.
