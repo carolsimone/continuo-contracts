@@ -28,8 +28,9 @@ An entry classifies the `inputs` it names:
 
 `parse_fingerprints` refuses a file that is not in this form with a `FingerprintsFileError` that
 names the location. A mapping that writes a key twice is refused too, naming the key and its line,
-so a second `fingerprint:` in an entry cannot silently replace the first. `render_markdown` writes
-the file as the tables of `docs/fingerprints.md`.
+so a second `fingerprint:` in an entry cannot silently replace the first. A key that a `<<` merge
+brings in twice, or that a merge brings in and the mapping writes too, is named with the line of
+the merge. `render_markdown` writes the file as the tables of `docs/fingerprints.md`.
 """
 
 import functools
@@ -167,33 +168,83 @@ class Fingerprints:
         return sorted({name for name in names if self.classify(family, name) is None})
 
 
+# The tag PyYAML gives the `<<` key of a merge.
+_MERGE_TAG = "tag:yaml.org,2002:merge"
+
+
 class _StrictLoader(yaml.SafeLoader):
     """A `SafeLoader` that refuses a mapping in which a key occurs twice.
 
     PyYAML keeps the last of two equal keys, so a repeated `fingerprint:` would change the
     classification of an entry with no error. A key that a `<<` merge brings in counts as written
-    in the mapping it lands in.
+    in the mapping it lands in. The key node that a merge brings in sits in the mapping that is
+    merged, not at the merge, so a duplicate that involves one is reported at the `<<` key that
+    brings it in.
     """
 
     def construct_mapping(self, node: yaml.MappingNode, deep: bool = False) -> dict[Hashable, Any]:
         # A scalar tagged `!!map` also arrives here, and the base class refuses it.
         if isinstance(node, yaml.MappingNode):
+            merges = [(key, merged) for key, merged in node.value if key.tag == _MERGE_TAG]
             self.flatten_mapping(node)
+            merged_by: dict[int, list[yaml.Node]] = {}
+            for merge_key, merged in merges:
+                for key_node in _merged_key_nodes(merged):
+                    merged_by.setdefault(id(key_node), []).append(merge_key)
             first: dict[Hashable, yaml.Node] = {}
             for key_node, _ in node.value:
                 key = self.construct_object(key_node, deep=True)  # type: ignore[no-untyped-call]
                 if not isinstance(key, Hashable):
                     continue
                 if key in first:
-                    raise yaml.constructor.ConstructorError(
-                        None,
-                        None,
-                        f"duplicate key {key!r}, first written at line "
-                        f"{first[key].start_mark.line + 1}",
-                        key_node.start_mark,
+                    raise _duplicate_key(
+                        key,
+                        first[key],
+                        key_node,
+                        [*merged_by.get(id(first[key]), ()), *merged_by.get(id(key_node), ())],
                     )
                 first[key] = key_node
         return super().construct_mapping(node, deep=deep)
+
+
+def _merged_key_nodes(merged: yaml.Node) -> list[yaml.Node]:
+    """Return the key nodes of the mapping, or of each mapping of the sequence, a `<<` merges.
+
+    `flatten_mapping` has already flattened every one of them, so the list holds the keys they
+    bring in as well as their own.
+    """
+    mappings = merged.value if isinstance(merged, yaml.SequenceNode) else [merged]
+    return [key for mapping in mappings for key, _ in mapping.value]
+
+
+def _duplicate_key(
+    key: Hashable, first: yaml.Node, repeat: yaml.Node, merge_keys: list[yaml.Node]
+) -> yaml.constructor.ConstructorError:
+    """Build the error for `key` written at `first` and again at `repeat`.
+
+    `merge_keys` are the `<<` keys that brought in either occurrence, empty when the mapping
+    writes both. A key that a merge brings in names the line of the merge, not the line where the
+    merged mapping wrote the key.
+    """
+    if not merge_keys:
+        return yaml.constructor.ConstructorError(
+            None,
+            None,
+            f"duplicate key {key!r}, first written at line {first.start_mark.line + 1}",
+            repeat.start_mark,
+        )
+    by_line = {merge_key.start_mark.line + 1: merge_key for merge_key in merge_keys}
+    lines = sorted(by_line)
+    if len(lines) == 1:
+        where = f"the merge at line {lines[0]}"
+    else:
+        where = "the merges at lines " + ", ".join(map(str, lines[:-1])) + f" and {lines[-1]}"
+    return yaml.constructor.ConstructorError(
+        None,
+        None,
+        f"duplicate key {key!r}, brought in through {where}",
+        by_line[lines[0]].start_mark,
+    )
 
 
 def parse_fingerprints(text: str) -> Fingerprints:

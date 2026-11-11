@@ -283,6 +283,36 @@ def test_a_key_that_a_merge_brings_in_counts_as_written():
         parse_fingerprints(text)
 
 
+# Each case is a name, a text that brings the key `k` in twice, and the lines of the `<<` keys
+# that bring it in.
+MERGED_KEYS = [
+    ("a list of aliases in flow style",
+     "a: &a {k: 1}\nb: &b {k: 2}\nz: {<<: [*a, *b]}\n", [3]),
+    ("a list of aliases in block style",
+     "a: &a {k: 1}\nb: &b {k: 2}\nz:\n  <<: [*a, *b]\n", [4]),
+    ("a merge and then the key", "base: &base {k: 1}\nentry: {<<: *base, k: 2}\n", [2]),
+    ("the key and then a merge", "base: &base {k: 1}\nentry:\n  k: 2\n  <<: *base\n", [4]),
+    ("two merges", "a: &a {k: 1}\nb: &b {k: 2}\nz:\n  <<: *a\n  <<: *b\n", [4, 5]),
+    ("a merged mapping that merges",
+     "a: &a {k: 1}\nb: &b\n  <<: *a\nz:\n  <<: *b\n  k: 3\n", [5]),
+]
+
+
+@pytest.mark.parametrize(("text", "merge_lines"), [case[1:] for case in MERGED_KEYS],
+                         ids=[case[0] for case in MERGED_KEYS])
+def test_a_duplicate_key_through_a_merge_is_reported_at_the_line_of_the_merge(text, merge_lines):
+    for line in merge_lines:
+        assert "<<" in text.splitlines()[line - 1]
+    with pytest.raises(FingerprintsFileError, match="duplicate key 'k'") as caught:
+        parse_fingerprints(text)
+    message = str(caught.value)
+    reported = message[message.index("duplicate key"):]
+    assert "first written" not in reported
+    assert [int(n) for n in re.findall(r"\d+", reported.splitlines()[0])] == merge_lines
+    assert f"line {merge_lines[0]}, column" in reported
+    assert {int(n) for n in re.findall(r"\bline (\d+)", reported)} == {merge_lines[0]}
+
+
 @pytest.mark.parametrize("text", ["? [a]\n: 1\n", "x: !!map 1\n"])
 def test_a_key_or_tag_pyyaml_refuses_is_still_a_file_error(text):
     with pytest.raises(FingerprintsFileError, match="is not valid YAML"):
