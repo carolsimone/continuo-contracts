@@ -3,8 +3,8 @@
 Install the wheel into a clean virtual environment, then run this script with that environment's
 interpreter in isolated mode, from a directory that is not the checkout:
 `<venv>/bin/python -I scripts/smoke_installed.py`. The package must come from a `site-packages`
-directory, `fingerprints.yaml` must load with entries in every section, every case of both vector
-files must pass when read through `importlib.resources`, and canonical JSON must give the
+directory, `fingerprints.yaml` must load with entries in every section, every case of the four
+vector files must pass when read through `importlib.resources`, and canonical JSON must give the
 documented bytes. Exit status 0 means all of it held, 1 means a failure was logged.
 """
 
@@ -17,8 +17,9 @@ from typing import Any
 
 import continuo_contracts
 from continuo_contracts.canonical import canonical_json
-from continuo_contracts.errors import ProjectionError
+from continuo_contracts.errors import CanonicalJsonError, HashInputError, ProjectionError
 from continuo_contracts.fingerprints import SECTIONS, load
+from continuo_contracts.hashing import fold3, fold4, shared_fold, shared_hash
 from continuo_contracts.python import (
     PythonNode,
     canonical_sql_type,
@@ -91,6 +92,58 @@ def _sql_type_failures(cases: list[dict[str, Any]]) -> list[str]:
     return failures
 
 
+def _canonical_vector_failures(cases: list[dict[str, Any]]) -> list[str]:
+    """Return the canonical JSON vector cases that are written differently or not refused."""
+    failures: list[str] = []
+    for case in cases:
+        name = case["name"]
+        refused = bool(case.get("error"))
+        value = json.loads(case["value_text"]) if refused else case["value"]
+        try:
+            written: bytes | None = canonical_json(value)
+        except CanonicalJsonError:
+            written = None
+        if refused and written is not None:
+            failures.append(f"canonical json vector {name!r}: the value is not refused")
+        elif not refused and written != case["canonical"].encode("utf-8"):
+            failures.append(f"canonical json vector {name!r}: written as {written!r}")
+    return failures
+
+
+def _hash_vector(case: dict[str, Any]) -> str:
+    """Return what the function named by the hashing vector `case` gives for its inputs."""
+    function, inputs = case["function"], case["inputs"]
+    if function == "fold3":
+        return fold3(**inputs)
+    if function == "fold4":
+        return fold4(**inputs)
+    if function == "shared_fold":
+        return shared_fold(inputs["unit_digests"])
+    if function == "shared_hash":
+        return shared_hash({key: bytes.fromhex(hex_) for key, hex_ in inputs["units_hex"].items()})
+    raise ValueError(f"unknown function {function!r}")
+
+
+def _hashing_failures(cases: list[dict[str, Any]]) -> list[str]:
+    """Return the hashing vector cases that give another hash or are not refused."""
+    failures: list[str] = []
+    for case in cases:
+        name = case["name"]
+        try:
+            got: str | None = _hash_vector(case)
+        except HashInputError:
+            got = None
+        except ValueError as error:
+            failures.append(f"hashing vector {name!r}: {error}")
+            continue
+        if case.get("error"):
+            if got is not None:
+                failures.append(f"hashing vector {name!r}: the inputs are not refused")
+        elif got != case["expected"]:
+            failures.append(f"hashing vector {name!r}: expected {case['expected']!r}, got {got!r}")
+    return failures
+
+
 def _canonical_json_failures() -> list[str]:
     """Return a problem when `canonical_json` does not give the documented bytes."""
     expected = b'{"a":true,"b":[1,"' + NON_ASCII_UTF8 + b'"]}'
@@ -104,27 +157,38 @@ def main() -> int:
     """Run every check and return the exit status."""
     projections = _vector_cases("projection.json")
     sql_types = _vector_cases("sql_types.json")
+    canonical_vectors = _vector_cases("canonical_json.json")
+    hashing = _vector_cases("hashing.json")
     failures = [
         *_installed_failures(),
         *_fingerprint_failures(),
         *_projection_failures(projections),
         *_sql_type_failures(sql_types),
+        *_canonical_vector_failures(canonical_vectors),
+        *_hashing_failures(hashing),
         *_canonical_json_failures(),
     ]
-    if not projections:
-        failures.append("projection.json holds no cases")
-    if not sql_types:
-        failures.append("sql_types.json holds no cases")
+    for name, cases in (
+        ("projection.json", projections),
+        ("sql_types.json", sql_types),
+        ("canonical_json.json", canonical_vectors),
+        ("hashing.json", hashing),
+    ):
+        if not cases:
+            failures.append(f"{name} holds no cases")
     for failure in failures:
         logger.error("%s", failure)
     if failures:
         return 1
     logger.info(
-        "continuo-contracts %s installed at %s: %d projection and %d sql type cases pass",
+        "continuo-contracts %s installed at %s: %d projection, %d sql type, %d canonical json "
+        "and %d hashing cases pass",
         continuo_contracts.__version__,
         Path(continuo_contracts.__file__).parent,
         len(projections),
         len(sql_types),
+        len(canonical_vectors),
+        len(hashing),
     )
     return 0
 

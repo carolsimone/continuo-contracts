@@ -5,6 +5,7 @@ from types import MappingProxyType
 
 import pytest
 
+from continuo_contracts.canonical import MAX_DEPTH
 from continuo_contracts.errors import ProjectionError
 from continuo_contracts.fingerprints import projection_keys
 from continuo_contracts.python import (
@@ -75,7 +76,8 @@ def test_projection_hash_names_the_node_and_the_path_of_a_bad_value():
 def test_from_mapping_ignores_other_keys_and_fills_defaults():
     built = PythonNode.from_mapping({"schema": "analytics", "table": "t", "owner": "team-a",
                                      "output_columns": [{"name": "x", "type": "INT"}]})
-    assert built == PythonNode(schema="analytics", table="t", output_columns=(PythonColumn("x", "INT", True),))
+    assert built == PythonNode(
+        schema="analytics", table="t", output_columns=(PythonColumn("x", "INT", True),))
 
 
 def test_from_mapping_refuses_a_missing_table():
@@ -127,6 +129,68 @@ def test_a_projection_key_without_a_rule_is_refused(monkeypatch):
 def test_a_type_that_is_not_text_is_refused_as_a_type():
     with pytest.raises(ProjectionError, match="unsupported or invalid SQL type: 5"):
         canonical_sql_type(5)
+
+
+def test_canonical_sql_type_strips_exactly_the_whitespace_code_points():
+    """Try every code point on both sides of `int`: the ones accepted are the 29 written out in
+    `listed`, which is the set that `canonical_sql_type` strips and no other character."""
+    listed = [
+        *range(0x09, 0x0E), *range(0x1C, 0x20), 0x20, 0x85, 0xA0, 0x1680, *range(0x2000, 0x200B),
+        0x2028, 0x2029, 0x202F, 0x205F, 0x3000,
+    ]
+    stripped = []
+    for code in range(0x110000):
+        try:
+            canonical_sql_type(chr(code) + "int" + chr(code))
+        except ProjectionError:
+            continue
+        stripped.append(code)
+    assert len(listed) == 29
+    assert stripped == listed
+
+
+LONE_SURROGATE = chr(0xD800)
+ESCAPED_SURROGATE = chr(92) + "ud800"
+# A schema with a letter outside ASCII, and a table with another one and an emoji.
+SCHEMA_NON_ASCII = "sch" + chr(0xE9) + "ma"
+TABLE_NON_ASCII = "t" + chr(0xE4) + "ble" + chr(0x1F600)
+
+# Each way a node is refused with a message that starts with its relation: a config value that
+# canonical JSON cannot write, an unknown kind and a wire entry whose `primary_key` is not a list.
+REFUSALS = {
+    "projection_hash": lambda schema, table: projection_hash(
+        node(schema=schema, table=table, config={"x": float("nan")})),
+    "code_projection": lambda schema, table: code_projection(
+        node(schema=schema, table=table, kind="python-sql")),
+    "from_mapping": lambda schema, table: PythonNode.from_mapping(
+        {"schema": schema, "table": table, "primary_key": 5}),
+}
+
+
+@pytest.mark.parametrize("refuse", REFUSALS.values(), ids=list(REFUSALS))
+@pytest.mark.parametrize(("schema", "table", "shown"), [
+    ("analytics", "t" + LONE_SURROGATE, "analytics.t" + ESCAPED_SURROGATE),
+    ("s" + LONE_SURROGATE + "x", "t", "s" + ESCAPED_SURROGATE + "x.t"),
+    (SCHEMA_NON_ASCII, TABLE_NON_ASCII + LONE_SURROGATE,
+     SCHEMA_NON_ASCII + "." + TABLE_NON_ASCII + ESCAPED_SURROGATE),
+    (SCHEMA_NON_ASCII, TABLE_NON_ASCII, SCHEMA_NON_ASCII + "." + TABLE_NON_ASCII),
+], ids=["table", "schema", "non-ASCII letters stay", "no surrogate"])
+def test_the_error_prefix_writes_a_lone_surrogate_of_the_relation_as_an_escape(
+        refuse, schema, table, shown):
+    with pytest.raises(ProjectionError) as caught:
+        refuse(schema, table)
+    message = str(caught.value)
+    message.encode("utf-8")
+    assert message.startswith(shown + ": ")
+
+
+def test_a_node_whose_table_holds_a_lone_surrogate_is_refused_with_a_message_utf_8_can_write():
+    # Canonical JSON refuses the string itself, so the node is refused when it is hashed.
+    with pytest.raises(ProjectionError, match="lone surrogate") as caught:
+        projection_hash(node(table="t" + LONE_SURROGATE))
+    message = str(caught.value)
+    assert message.encode("utf-8").decode("utf-8") == message
+    assert message.startswith("analytics.t" + ESCAPED_SURROGATE + ": $.table: ")
 
 
 def test_a_very_long_number_in_a_type_does_not_reach_int():
@@ -224,3 +288,60 @@ def test_assets_are_sorted_by_code_point_not_by_utf_16_unit():
     # unit the emoji does.
     tilde, emoji = chr(0xFF5E) + ".csv", chr(0x1F600) + ".csv"
     assert code_projection(node(assets=(emoji, tilde)))["assets"] == [tilde, emoji]
+
+
+TOO_DEEP = "nesting is too deep, a container may be at most 100 levels down"
+NESTED_CONFIG_KINDS = [
+    pytest.param(lambda inner: {"k": inner}, ".k", id="mappings"),
+    pytest.param(lambda inner: [inner], "[0]", id="lists"),
+    pytest.param(lambda inner: (inner,), "[0]", id="tuples"),
+]
+
+
+def _nested_config(levels, wrap):
+    """Return a config of `levels` nested containers (the config itself is level 1), a mapping
+    whose entry `k` holds the next container, and the innermost one holds the integer 1."""
+    value = 1
+    for _ in range(levels - 1):
+        value = wrap(value)
+    return {"k": value}
+
+
+def _config_path(level, segment):
+    """Return the path in the projection of the container on `level` (2 or more) of a nested
+    config: the config is `$.config` and its entry `k` is level 2."""
+    return "$.config.k" + segment * (level - 2)
+
+
+@pytest.mark.parametrize(("wrap", "segment"), NESTED_CONFIG_KINDS)
+def test_a_config_nested_so_the_projection_reaches_the_limit_hashes(wrap, segment):
+    # The projection is a mapping on level 1 and `config` is its value on level 2.
+    config = _nested_config(MAX_DEPTH - 1, wrap)
+    assert len(projection_hash(node(config=config))) == 64
+
+
+@pytest.mark.parametrize(("wrap", "segment"), NESTED_CONFIG_KINDS)
+@pytest.mark.parametrize("levels", [MAX_DEPTH, 500, 5000])
+def test_a_config_nested_deeper_than_the_limit_is_refused_with_its_node_and_its_path(
+    wrap, segment, levels
+):
+    config = _nested_config(levels, wrap)
+    assert isinstance(code_projection(node(config=config)), dict)
+    with pytest.raises(ProjectionError) as err:
+        projection_hash(node(config=config))
+    assert str(err.value) == f"analytics.t: {_config_path(MAX_DEPTH, segment)}: {TOO_DEEP}"
+
+
+def test_the_copy_of_a_config_stops_at_the_limit_and_leaves_the_deeper_container_in_place():
+    config = _nested_config(5000, lambda inner: (inner,))
+    original = config["k"]
+    for _ in range(MAX_DEPTH - 2):
+        original = original[0]
+    copied = code_projection(node(config=config))["config"]
+    assert type(copied) is dict
+    last_copy = copied["k"]
+    for _ in range(MAX_DEPTH - 2):
+        last_copy = last_copy[0]
+    assert type(last_copy) is list
+    assert type(last_copy[0]) is tuple
+    assert last_copy[0] is original[0]

@@ -25,7 +25,9 @@ jobs:
       - uses: astral-sh/setup-uv@v7
       - run: uv sync --locked
       - name: Interpreter is ${{ matrix.python }}
-        run: uv run --locked python -c "import sys; assert sys.version.startswith('${{ matrix.python }}.'), sys.version"
+        env:
+          EXPECTED_PYTHON: ${{ matrix.python }}
+        run: uv run --locked python -c "import sys; assert sys.version.startswith(sys.argv[1] + '.'), sys.version" "$EXPECTED_PYTHON"
       - run: uv run --locked ruff check .
       - run: uv run --locked mypy continuo_contracts scripts
       - run: uv run --locked pytest
@@ -55,4 +57,7 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - run: test "${{ needs.test.result }}" = success && test "${{ needs.wheel.result }}" = success
+      - env:
+          TEST_RESULT: ${{ needs.test.result }}
+          WHEEL_RESULT: ${{ needs.wheel.result }}
+        run: test "$TEST_RESULT" = success && test "$WHEEL_RESULT" = success

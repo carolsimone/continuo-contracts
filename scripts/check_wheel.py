@@ -38,6 +38,8 @@ REQUIRED_MEMBERS: tuple[str, ...] = tuple(
         "hashing.py",
         "python.py",
         "py.typed",
+        "vectors/canonical_json.json",
+        "vectors/hashing.json",
         "vectors/projection.json",
         "vectors/sql_types.json",
     )

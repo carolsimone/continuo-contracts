@@ -85,6 +85,11 @@ A release is one commit and one tag, and the tag publishes, so only the owner re
    byte. Then `release.yml` makes the GitHub Release, with the version's `CHANGELOG.md` section as
    its notes.
 
+A tag has one of two shapes. `vX.Y.Z`, with digits only, is a release. `vX.Y.Z-test<anything>`,
+with `-test` in any case (`v1.2.3-test1`, `v1.2.3-TEST-again`), is a rehearsal. Any other `v*` tag,
+such as `v1.2.3rc1`, `v1.2.3-rc1` or `v1.2`, fails in `prepare` before anything is built, so
+nothing reaches an index and no GitHub Release is made.
+
 A dry run builds and checks the package from a branch and publishes nothing; a manual run can
 never publish:
 

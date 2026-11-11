@@ -14,6 +14,12 @@ from continuo_contracts.errors import CanonicalJsonError
 # The integers every JSON implementation reads back exactly: -(2**53 - 1) to 2**53 - 1.
 _MAX_SAFE_INTEGER: Final = 2**53 - 1
 
+# The deepest nesting `canonical_json` writes: the outermost list, tuple or mapping is level 1, a
+# container inside it is level 2, and so on. A container on a deeper level is refused, so the
+# result does not depend on how deep the running interpreter can recurse. A scalar has no level
+# of its own: a scalar inside a container on level `MAX_DEPTH` is written.
+MAX_DEPTH: Final = 100
+
 # ECMA-262 Number::toString writes plain digits while the decimal exponent n of a value
 # 0.d * 10**n lies in -6 < n <= 21, and the exponent form outside that range.
 _MIN_PLAIN_EXPONENT: Final = -6
@@ -41,8 +47,9 @@ def canonical_json(value: object) -> bytes:
 
     `None`, `bool`, `int` (within -(2**53 - 1) to 2**53 - 1), finite `float`, `str`, `list`,
     `tuple` and `Mapping` with `str` keys are supported. Any other value, a number outside
-    the range above, NaN, an infinity, a lone surrogate and a container that contains itself
-    raise `CanonicalJsonError`, whose message starts with the JSON path of the bad value.
+    the range above, NaN, an infinity, a lone surrogate, a container that contains itself and a
+    container nested deeper than `MAX_DEPTH` levels raise `CanonicalJsonError`, whose message
+    starts with the JSON path of the bad value (of the container, for the nesting).
     """
     out: list[str] = []
     _write(value, "$", out, set())
@@ -117,6 +124,12 @@ def _write_object(
 def _enter(container: object, path: str, active: set[int]) -> None:
     if id(container) in active:
         raise _fail(path, "circular reference")
+    # `active` holds the containers from the root down to the parent of `container`, so the
+    # level of `container` is one more than its size.
+    if len(active) >= MAX_DEPTH:
+        raise _fail(
+            path, f"nesting is too deep, a container may be at most {MAX_DEPTH} levels down"
+        )
     active.add(id(container))
 
 

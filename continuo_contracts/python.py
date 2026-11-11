@@ -24,14 +24,14 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, fields
 from typing import Any, Final, Self
 
-from continuo_contracts.canonical import canonical_json, normalise_text
+from continuo_contracts.canonical import MAX_DEPTH, canonical_json, normalise_text
 from continuo_contracts.errors import CanonicalJsonError, ProjectionError
 from continuo_contracts.fingerprints import projection_keys
 from continuo_contracts.hashing import sha256_hex
 
 PYTHON_KINDS: Final = ("python-node", "python-csv", "python-api")
 
-# Kinds that artifacts stored by older runtimes carry, and the kind each one stands for.
+# Spellings of a kind that a stored artifact carries, each with the kind it stands for.
 KIND_ALIASES: Final = {"python-model": "python-node"}
 
 MODE_TYPES: Final = ("replace", "append", "upsert")
@@ -108,16 +108,19 @@ class PythonNode:
         try:
             _convert_containers(values)
         except ProjectionError as error:
-            raise ProjectionError(f"{entry['schema']}.{entry['table']}: {error}") from None
+            raise _refusal(f"{entry['schema']}.{entry['table']}", error) from None
         return cls(**values)
 
 
 def canonical_sql_type(raw: str) -> str:
     """Return the canonical spelling of the SQL type `raw`.
 
-    Outer whitespace is stripped and case is ignored. The whitespace that is stripped is whatever
-    `str.strip()` removes (Unicode whitespace), unlike `normalise_text`, which removes only the
-    six ASCII whitespace characters. After the comma of `NUMERIC(p, s)` any run of ASCII
+    Outer whitespace is stripped and case is ignored. The whitespace that is stripped is exactly
+    these 29 code points and no other character: U+0009 to U+000D, U+001C to U+001F, U+0020,
+    U+0085, U+00A0, U+1680, U+2000 to U+200A, U+2028, U+2029, U+202F, U+205F and U+3000. They
+    are the code points that `str.strip()` removes, the same on Python 3.12, 3.13 and 3.14, so
+    a zero width space (U+200B) around a type is refused. `normalise_text`, by contrast, removes
+    only the six ASCII whitespace characters. After the comma of `NUMERIC(p, s)` any run of ASCII
     whitespace is accepted.
 
     The supported types are `BIGINT`, `INT`, `INTEGER`, `DOUBLE PRECISION` (with one space),
@@ -157,20 +160,22 @@ def code_projection(node: PythonNode) -> dict[str, Any]:
     """Return the code projection of `node`: one entry for each key of
     `fingerprints.projection_keys()`, in that order.
 
-    The result holds no container of `node`, so changing it does not change `node`: `config` is
-    copied with every mapping as a `dict` and every list or tuple as a `list`, at every depth, and
-    a value that is none of these is left in place. Assets are sorted by Unicode code point, which
-    is the order of their UTF-8 bytes (not UTF-16 order).
+    `config` is copied with every mapping as a `dict` and every list or tuple as a `list`, down to
+    level `canonical.MAX_DEPTH` (the config itself is level 1), so changing the result does not
+    change `node` down to that level. A value that is none of these is left in place, and so is a
+    container on a deeper level, which `projection_hash` refuses. Assets are sorted by Unicode
+    code point, which is the order of their UTF-8 bytes (not UTF-16 order).
 
     Raises `ProjectionError`, whose message starts with `<schema>.<table>: `, for a node it cannot
     project: a field that is not of its type or that holds a value outside its set, a field that
     its kind does not allow, an SQL type that is not supported, or a projection key that has no
-    rule.
+    rule. A lone surrogate in the schema or the table shows in the message as its backslash
+    escape.
     """
     try:
         return _project(node)
     except ProjectionError as error:
-        raise ProjectionError(f"{node.relation}: {error}") from None
+        raise _refusal(node.relation, error) from None
 
 
 def projection_hash(node: PythonNode) -> str:
@@ -179,13 +184,27 @@ def projection_hash(node: PythonNode) -> str:
     This is the Python config part of the node's `content_hash`. Raises `ProjectionError`, whose
     message starts with `<schema>.<table>: `, for a node that `code_projection` refuses and for a
     value of its `config` that canonical JSON cannot write, in which case the reason starts with
-    the JSON path of that value.
+    the JSON path of that value. A lone surrogate in the schema or the table shows in the message
+    as its backslash escape. The projection is a mapping on level 1 of the canonical JSON and
+    `config` is its value on level 2, so a `config` is refused when it nests containers deeper
+    than `canonical.MAX_DEPTH - 1` levels, counting the config itself as level 1.
     """
     projection = code_projection(node)
     try:
         return sha256_hex(canonical_json(projection))
     except CanonicalJsonError as error:
-        raise ProjectionError(f"{node.relation}: {error}") from error
+        raise _refusal(node.relation, error) from error
+
+
+def _refusal(relation: str, error: Exception) -> ProjectionError:
+    """Return the `ProjectionError` whose message is `<relation>: <error>`.
+
+    A lone surrogate in `relation` is written as a backslash, a `u` and its four hex digits, and
+    every other character stays as it is, so the message can be encoded as UTF-8, which a log
+    handler on a UTF-8 stream does.
+    """
+    shown = relation.encode("utf-8", "backslashreplace").decode("utf-8")
+    return ProjectionError(f"{shown}: {error}")
 
 
 def _convert_containers(values: dict[str, Any]) -> None:
@@ -335,42 +354,48 @@ def _config(node: PythonNode, kind: str) -> dict[str, Any]:
     config = _mapping(node.config, "config")
     for key in config:
         _text(key, "a key of config", allow_empty=True)
-    return _copy_mapping(config, {})
+    return _copy_mapping(config, {}, 1)
 
 
-def _json_copy(value: object, on_path: dict[int, object]) -> object:
-    """Copy `value` by its JSON shape: a mapping becomes a `dict`, a list or tuple becomes a
-    `list`, and anything else is returned as it is, for `canonical_json` to accept or to refuse
-    with the path of the value.
+def _json_copy(value: object, on_path: dict[int, object], depth: int) -> object:
+    """Copy `value`, a container on level `depth` of `config`, by its JSON shape: a mapping
+    becomes a `dict`, a list or tuple becomes a `list`, and anything else is returned as it is,
+    for `canonical_json` to accept or to refuse with the path of the value.
 
     `on_path` maps each container that is being copied, from the root down to `value`, to its
     copy. A container that contains itself is copied as a copy that contains itself, so the copy
-    ends and `canonical_json` names the path where the cycle closes.
+    ends and `canonical_json` names the path where the cycle closes. A container on a level deeper
+    than `MAX_DEPTH` is returned as it is and not copied, so the copy never recurses deeper than
+    the limit and `canonical_json` refuses the nesting with the path of the container.
     """
     if not isinstance(value, Mapping | list | tuple):
         return value
     if id(value) in on_path:
         return on_path[id(value)]
+    if depth > MAX_DEPTH:
+        return value
     if isinstance(value, Mapping):
-        return _copy_mapping(value, on_path)
-    return _copy_list(value, on_path)
+        return _copy_mapping(value, on_path, depth)
+    return _copy_list(value, on_path, depth)
 
 
-def _copy_mapping(source: Mapping[Any, Any], on_path: dict[int, object]) -> dict[Any, Any]:
+def _copy_mapping(
+    source: Mapping[Any, Any], on_path: dict[int, object], depth: int
+) -> dict[Any, Any]:
     # A key is kept as it is, so a key that is not a string reaches `canonical_json`.
     copied: dict[Any, Any] = {}
     on_path[id(source)] = copied
     for key, item in source.items():
-        copied[key] = _json_copy(item, on_path)
+        copied[key] = _json_copy(item, on_path, depth + 1)
     del on_path[id(source)]
     return copied
 
 
-def _copy_list(source: Sequence[Any], on_path: dict[int, object]) -> list[Any]:
+def _copy_list(source: Sequence[Any], on_path: dict[int, object], depth: int) -> list[Any]:
     copied: list[Any] = []
     on_path[id(source)] = copied
     for item in source:
-        copied.append(_json_copy(item, on_path))
+        copied.append(_json_copy(item, on_path, depth + 1))
     del on_path[id(source)]
     return copied
 

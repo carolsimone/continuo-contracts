@@ -11,7 +11,8 @@ by `|`, each part encoded as UTF-8:
 
 A part is a bare lowercase hex digest, without a `sha256:` prefix, or `""` when the node has no
 such part. The folds do not check their parts: a seed in a stored artifact without compile extras
-carries dbt's `path` checksum as its source part, so a part is not always hex.
+carries dbt's checksum as its source part, and that checksum is the file path when the seed is
+over 1 MiB, so a part is not always hex.
 
 The shared part folds the units a node imports, each unit named by an id or a repo-relative POSIX
 path and carrying the digest of its bytes. `shared_fold` writes one line per unit, the key, a
@@ -36,12 +37,22 @@ def sha256_hex(data: bytes) -> str:
 
 
 def fold3(source: str, shared: str, config: str) -> str:
-    """Return the `content_hash` of a Python node, which has three parts."""
+    """Return the `content_hash` of a Python node, which has three parts.
+
+    Each part is a `str` that UTF-8 can encode, which the caller makes sure of: a part that is not
+    a string raises `TypeError`, and a part with a lone surrogate raises `UnicodeEncodeError`.
+    Neither is a `ContractsError`.
+    """
     return _fold(source, shared, config)
 
 
 def fold4(source: str, shared: str, config: str, compiled: str) -> str:
-    """Return the `content_hash` of a dbt node. A seed or a test passes `""` as `compiled`."""
+    """Return the `content_hash` of a dbt node. A seed or a test passes `""` as `compiled`.
+
+    Each part is a `str` that UTF-8 can encode, which the caller makes sure of: a part that is not
+    a string raises `TypeError`, and a part with a lone surrogate raises `UnicodeEncodeError`.
+    Neither is a `ContractsError`.
+    """
     return _fold(source, shared, config, compiled)
 
 
@@ -52,7 +63,9 @@ def shared_fold(unit_digests: Mapping[str, str]) -> str:
     of the SHA-256 of that unit's bytes. The order of the mapping does not matter.
 
     Raises `HashInputError`, naming the key, for a key that is empty, holds NUL or LF, or cannot
-    be encoded as UTF-8, and for a digest that is not 64 lowercase hex characters.
+    be encoded as UTF-8, and for a digest that is not 64 lowercase hex characters. A key or a
+    digest that is not a string is the caller's mistake: it can raise Python's own error, such as
+    `TypeError`.
     """
     if not unit_digests:
         return ""
@@ -69,6 +82,10 @@ def shared_hash(units: Mapping[str, bytes]) -> str:
 
     `units` maps a unit id or repo-relative POSIX path to the bytes of that unit, one entry per
     file: a file that is both imported and listed as an asset appears once.
+
+    A key that `shared_fold` refuses raises its `HashInputError`. A key that is not a string, or a
+    unit that is not bytes-like, is the caller's mistake: it can raise Python's own error, such as
+    `TypeError`.
     """
     return shared_fold({key: sha256_hex(data) for key, data in units.items()})
 

@@ -1,9 +1,11 @@
+import re
 from pathlib import Path
 
 import pytest
 
 from continuo_contracts.fingerprints import (
     DBT_FAMILIES,
+    FIXED_INPUT_NAMES,
     PYTHON_FAMILIES,
     SECTIONS,
     load,
@@ -32,7 +34,10 @@ def test_every_denylisted_key_has_its_own_entry(family, key):
 
 @pytest.mark.parametrize("family", PYTHON_FAMILIES)
 def test_every_python_hash_input_is_classified(family):
-    names = [f"projection.{k}" for k in FP.projection_keys] + ["ci.source_hash", "ci.shared_code_hash"]
+    names = [f"projection.{k}" for k in FP.projection_keys] + [
+        "ci.source_hash",
+        "ci.shared_code_hash",
+    ]
     assert FP.unclassified(family, names) == []
 
 
@@ -85,16 +90,6 @@ def test_inputs_a_family_does_not_hash_stay_unclassified():
     assert FP.classify("python-node", "config.materialized") is None
 
 
-FIXED_INPUT_NAMES = frozenset({
-    "raw_code", "compiled_code", "seed_bytes", "seed_checksum",
-    "relation.schema", "relation.alias",
-    "contract.columns", "constraints",
-    "macros", "functions", "unit_tests", "on_run_start", "on_run_end", "project_flags",
-    "generate_schema_name", "generate_alias_name",
-    "ci.source_hash", "ci.shared_code_hash",
-})
-
-
 def _is_in_the_input_vocabulary(name):
     """A fixed name, `config.<name>` or `config.*`, or `projection.<key>` for a projection key."""
     if name in FIXED_INPUT_NAMES or name == "config.*":
@@ -121,6 +116,37 @@ def test_every_declared_input_name_is_in_the_closed_vocabulary():
         if not _is_in_the_input_vocabulary(name)
     ]
     assert outside == []
+
+
+def test_the_fixed_input_names_are_distinct():
+    assert len(set(FIXED_INPUT_NAMES)) == len(FIXED_INPUT_NAMES)
+
+
+# Terms the input-names section explains in prose: the `enforced` key of the dbt contract settings
+# and the function `shared_hash`. They are written in backticks and are not input names.
+_PROSE_TERMS = {"enforced", "shared_hash"}
+_PATTERN_PREFIXES = ("config.", "projection.")
+
+
+def _backticked_in_the_input_names_section():
+    lines = render_markdown(FP).split("\n")
+    start = lines.index("The names in the *Inputs* column are these:")
+    end = next(i for i in range(start + 1, len(lines)) if lines[i].startswith("## "))
+    return re.findall(r"`([^`]+)`", "\n".join(lines[start:end]))
+
+
+def test_every_fixed_input_name_is_written_in_the_rendered_input_names():
+    written = set(_backticked_in_the_input_names_section())
+    assert [name for name in FIXED_INPUT_NAMES if name not in written] == []
+
+
+def test_every_fixed_name_in_the_rendered_input_names_is_a_fixed_input_name():
+    fixed = [
+        token
+        for token in _backticked_in_the_input_names_section()
+        if not token.startswith(_PATTERN_PREFIXES) and token not in _PROSE_TERMS
+    ]
+    assert [token for token in fixed if token not in FIXED_INPUT_NAMES] == []
 
 
 ENTRY_COUNTS = {
