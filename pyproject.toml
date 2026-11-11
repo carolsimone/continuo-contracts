@@ -1,6 +1,6 @@
 [project]
 name = "continuo-contracts"
-version = "0.0.0"
+version = "0.1.0"
 description = "Canonical JSON, the Python code projection, the content_hash folds and the fingerprint field declaration that continuo and its producers share."
 readme = "README.md"
 requires-python = ">=3.12"
