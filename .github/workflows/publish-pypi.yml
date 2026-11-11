@@ -102,8 +102,8 @@ jobs:
           fi
           echo "mode=$mode" >> "$GITHUB_OUTPUT"
           echo "mode: $mode" >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
       - name: Refuse a tag that names another version
         if: github.event_name == 'push'
         env:
@@ -147,7 +147,7 @@ jobs:
             (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/venv-$py/bin/python" -I "$GITHUB_WORKSPACE/scripts/smoke_installed.py")
           done
       # Everything below, including the upload, uses THIS artifact: never rebuild.
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dist
           path: dist/
@@ -179,11 +179,13 @@ jobs:
       # existing file means something is wrong, and the upload must say so.
       - name: Publish to TestPyPI
         if: needs.prepare.outputs.mode == 'test'
-        # Every action in this job is pinned to a commit SHA. This job holds
+        # Every action in the jobs prepare and publish is pinned to a commit SHA:
+        # prepare builds the files this job uploads, and this job holds
         # id-token: write for PyPI Trusted Publishing, so a compromised revision
-        # of a tag or of a moving branch such as release/v1 could mint a token
-        # and publish under this project's name.
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        # of a tag or of a moving branch such as release/v1 could swap the files,
+        # or mint a token and publish under this project's name. verify-index
+        # holds no token.
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
         with:
           repository-url: https://test.pypi.org/legacy/
           packages-dir: dist
@@ -193,7 +195,7 @@ jobs:
       # Skipping would report success for bytes this run never uploaded.
       - name: Publish to PyPI
         if: needs.prepare.outputs.mode == 'real'
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
         with:
           packages-dir: dist
 
