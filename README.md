@@ -154,6 +154,69 @@ bytes. The projection is the node's `raw_code` in continuo's code bundle, and `p
   The projection is a mapping on level 1 and `config` is its value on level 2, so `config` may
   nest containers at most `MAX_DEPTH - 1` (99) levels deep, counting the config itself as level 1.
 
+What `code_projection` refuses. A refused node has no projection and no hash, and a producer in
+another language must refuse the same inputs: one that accepts a node Python refuses, or repairs
+it (drops a repeated asset, say), writes a hash that Python never writes. Each line is one rule,
+`field: what is refused`. A line marked `from_mapping` is refused when `PythonNode.from_mapping`
+reads a wire entry (the messages of the first two have no `<schema>.<table>: ` prefix, since
+there is no relation to name), a line marked `projection_hash` when the hash is written, and
+every other line by `code_projection`. "Not a string", "not a list", "not a mapping" and "not a
+bool" mean a value that is not a JSON string, array, object or boolean (Python also takes a tuple
+for a list).
+
+- `entry` (`from_mapping`): not a mapping.
+- `schema`, `table` (`from_mapping`): absent.
+- `reads`, `config` (`from_mapping`): not a mapping.
+- `output_columns`, `primary_key`, `assets` (`from_mapping`): not a list.
+- `output_columns[i]` (`from_mapping`): not a mapping.
+- `output_columns[i]` (`from_mapping`): no `name`, or no `type`.
+- `schema`, `table`: not a string, or empty.
+- `kind`: not a string, or empty.
+- `kind`: not `python-node`, `python-csv` or `python-api` (the stored `python-model` is read as
+  `python-node`).
+- `script`: not a string.
+- `script`: not empty on a `python-csv` node.
+- `reads`: not a mapping.
+- `reads`: a name or a SQL text that is not a string.
+- `reads`: on a `python-csv` node, not exactly the one key `csv`.
+- `reads`: on a `python-api` node, not empty.
+- `output_columns`: not a list.
+- `output_columns`: an item that is not a `PythonColumn`.
+- `output_columns[i].name`: not a string, or empty.
+- `output_columns[i].nullable`: not a bool.
+- `output_columns[i].type`: not a string.
+- `output_columns[i].type`: not one of the types `canonical_sql_type` supports, such as `FLOAT`,
+  `VARCHAR` with no length, `NUMERIC(10)`, `DOUBLE  PRECISION` with two spaces or a type with a
+  non-ASCII letter or a zero width space in it.
+- `output_columns[i].type`: `NUMERIC` or `DECIMAL` with a precision outside 1 to 38.
+- `output_columns[i].type`: `NUMERIC` or `DECIMAL` with a scale above the precision.
+- `extra_columns`: not `raise` or `warn`.
+- `config`: not a mapping.
+- `config`: a key of the top level that is not a string.
+- `secret_ref`: on a `python-api` node, not a string.
+- `secret_ref`: on a `python-node` or `python-csv` node, not empty.
+- `mode_type`: not `replace`, `append` or `upsert`.
+- `mode_type`: on a `python-csv` node, not `replace`.
+- `primary_key`: on an `upsert` node, not a list.
+- `primary_key`: on an `upsert` node, an entry that is not a string, or empty.
+- `assets`: not a list.
+- `assets`: an entry that is not a string, or empty.
+- `assets`: a path listed twice.
+- `assets`: on a `python-csv` node, not empty.
+- `config` (`projection_hash`): a container on a level deeper than 99, the config being level 1.
+- `config` (`projection_hash`): a value that canonical JSON cannot write: one that is not null, a
+  bool, a number, a string, a list or a mapping (a `date`, say), NaN, an infinity, an integer
+  outside -(2**53 - 1) to 2**53 - 1, a key below the top level that is not a string, and a
+  container that contains itself.
+- any string of the projection (`projection_hash`): a lone surrogate (U+D800 to U+DFFF), in the
+  keys of `reads` and `config` too.
+
+An empty string is refused in `schema`, `table`, `kind`, a column `name` and an entry of
+`primary_key` or `assets`, and accepted in `script`, the names and SQL texts of `reads`, the keys
+of `config` and the `secret_ref` of a `python-api` node. `primary_key` is read only on an `upsert`
+node, so no value of it is refused on `replace` and `append`. An `upsert` node with an empty
+`primary_key`, a repeated entry of `primary_key` and a repeated column name are accepted.
+
 ```python
 node = PythonNode(
     schema="analytics",
