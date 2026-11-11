@@ -149,6 +149,50 @@ def test_canonical_sql_type_strips_exactly_the_whitespace_code_points():
     assert stripped == listed
 
 
+LONE_SURROGATE = chr(0xD800)
+ESCAPED_SURROGATE = chr(92) + "ud800"
+# A schema with a letter outside ASCII, and a table with another one and an emoji.
+SCHEMA_NON_ASCII = "sch" + chr(0xE9) + "ma"
+TABLE_NON_ASCII = "t" + chr(0xE4) + "ble" + chr(0x1F600)
+
+# Each way a node is refused with a message that starts with its relation: a config value that
+# canonical JSON cannot write, an unknown kind and a wire entry whose `primary_key` is not a list.
+REFUSALS = {
+    "projection_hash": lambda schema, table: projection_hash(
+        node(schema=schema, table=table, config={"x": float("nan")})),
+    "code_projection": lambda schema, table: code_projection(
+        node(schema=schema, table=table, kind="python-sql")),
+    "from_mapping": lambda schema, table: PythonNode.from_mapping(
+        {"schema": schema, "table": table, "primary_key": 5}),
+}
+
+
+@pytest.mark.parametrize("refuse", REFUSALS.values(), ids=list(REFUSALS))
+@pytest.mark.parametrize(("schema", "table", "shown"), [
+    ("analytics", "t" + LONE_SURROGATE, "analytics.t" + ESCAPED_SURROGATE),
+    ("s" + LONE_SURROGATE + "x", "t", "s" + ESCAPED_SURROGATE + "x.t"),
+    (SCHEMA_NON_ASCII, TABLE_NON_ASCII + LONE_SURROGATE,
+     SCHEMA_NON_ASCII + "." + TABLE_NON_ASCII + ESCAPED_SURROGATE),
+    (SCHEMA_NON_ASCII, TABLE_NON_ASCII, SCHEMA_NON_ASCII + "." + TABLE_NON_ASCII),
+], ids=["table", "schema", "non-ASCII letters stay", "no surrogate"])
+def test_the_error_prefix_writes_a_lone_surrogate_of_the_relation_as_an_escape(
+        refuse, schema, table, shown):
+    with pytest.raises(ProjectionError) as caught:
+        refuse(schema, table)
+    message = str(caught.value)
+    message.encode("utf-8")
+    assert message.startswith(shown + ": ")
+
+
+def test_a_node_whose_table_holds_a_lone_surrogate_is_refused_with_a_message_utf_8_can_write():
+    # Canonical JSON refuses the string itself, so the node is refused when it is hashed.
+    with pytest.raises(ProjectionError, match="lone surrogate") as caught:
+        projection_hash(node(table="t" + LONE_SURROGATE))
+    message = str(caught.value)
+    assert message.encode("utf-8").decode("utf-8") == message
+    assert message.startswith("analytics.t" + ESCAPED_SURROGATE + ": $.table: ")
+
+
 def test_a_very_long_number_in_a_type_does_not_reach_int():
     assert canonical_sql_type("VARCHAR(" + "0" * 5000 + "7)") == "VARCHAR(7)"
     with pytest.raises(ProjectionError, match="out of range"):

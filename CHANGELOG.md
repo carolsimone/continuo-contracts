@@ -43,3 +43,6 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `errors` section for the error classes; a test fails for a public name that has no line.
 - The README lists what `code_projection` refuses, one rule for each line, so a producer in
   another language can refuse the same inputs.
+- A lone surrogate in the schema or the table of a node shows as its backslash escape in the
+  `<schema>.<table>: ` prefix of a `ProjectionError`, so the message can be written to a UTF-8
+  stream; every other character of the prefix stays as it is.

@@ -108,7 +108,7 @@ class PythonNode:
         try:
             _convert_containers(values)
         except ProjectionError as error:
-            raise ProjectionError(f"{entry['schema']}.{entry['table']}: {error}") from None
+            raise _refusal(f"{entry['schema']}.{entry['table']}", error) from None
         return cls(**values)
 
 
@@ -169,12 +169,13 @@ def code_projection(node: PythonNode) -> dict[str, Any]:
     Raises `ProjectionError`, whose message starts with `<schema>.<table>: `, for a node it cannot
     project: a field that is not of its type or that holds a value outside its set, a field that
     its kind does not allow, an SQL type that is not supported, or a projection key that has no
-    rule.
+    rule. A lone surrogate in the schema or the table shows in the message as its backslash
+    escape.
     """
     try:
         return _project(node)
     except ProjectionError as error:
-        raise ProjectionError(f"{node.relation}: {error}") from None
+        raise _refusal(node.relation, error) from None
 
 
 def projection_hash(node: PythonNode) -> str:
@@ -183,7 +184,8 @@ def projection_hash(node: PythonNode) -> str:
     This is the Python config part of the node's `content_hash`. Raises `ProjectionError`, whose
     message starts with `<schema>.<table>: `, for a node that `code_projection` refuses and for a
     value of its `config` that canonical JSON cannot write, in which case the reason starts with
-    the JSON path of that value. The projection is a mapping on level 1 of the canonical JSON and
+    the JSON path of that value. A lone surrogate in the schema or the table shows in the message
+    as its backslash escape. The projection is a mapping on level 1 of the canonical JSON and
     `config` is its value on level 2, so a `config` is refused when it nests containers deeper
     than `canonical.MAX_DEPTH - 1` levels, counting the config itself as level 1.
     """
@@ -191,7 +193,18 @@ def projection_hash(node: PythonNode) -> str:
     try:
         return sha256_hex(canonical_json(projection))
     except CanonicalJsonError as error:
-        raise ProjectionError(f"{node.relation}: {error}") from error
+        raise _refusal(node.relation, error) from error
+
+
+def _refusal(relation: str, error: Exception) -> ProjectionError:
+    """Return the `ProjectionError` whose message is `<relation>: <error>`.
+
+    A lone surrogate in `relation` is written as a backslash, a `u` and its four hex digits, and
+    every other character stays as it is, so the message can be encoded as UTF-8, which a log
+    handler on a UTF-8 stream does.
+    """
+    shown = relation.encode("utf-8", "backslashreplace").decode("utf-8")
+    return ProjectionError(f"{shown}: {error}")
 
 
 def _convert_containers(values: dict[str, Any]) -> None:
