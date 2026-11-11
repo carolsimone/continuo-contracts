@@ -67,6 +67,22 @@ These are the checks `.github/workflows/ci.yml` runs on Python 3.12, 3.13 and 3.
   continuo release of each service, run once after such a change, that recomputes every node's
   stored hash with the new code and validates and reloads nothing.
 
+## Structure
+
+The package is flat on purpose: it is a small library of pure functions that produce exact bytes,
+not a service, and layers would add indirection without a second implementation.
+
+- `errors`: `ContractsError` and the errors the other modules raise.
+- `canonical`: RFC 8785 canonical JSON and the text normaliser.
+- `hashing`: `sha256_hex`, the `content_hash` folds and the shared fold.
+- `python`: the Python node, its code projection and the SQL type canonicaliser.
+- `fingerprints`: the field declaration, its YAML loader and its Markdown renderer.
+
+`errors` imports nothing from the package. `canonical`, `hashing` and `fingerprints` import only
+`errors` (`fingerprints` also PyYAML), `python` imports the other four, and nothing imports `scripts`
+or `tests`. The only file the package reads is the packaged `fingerprints.yaml`, in `fingerprints.load()`.
+A split into layers is proposed only when a module gets a second reason to change.
+
 ## Releasing
 
 A release is one commit and one tag, and the tag publishes, so only the owner releases.
