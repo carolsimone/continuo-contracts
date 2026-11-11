@@ -46,12 +46,26 @@ def test_a_wheel_without_its_data_files_is_refused(tmp_path):
     assert all(any(member in p for p in problems) for member in data)
 
 
+def _is_package_content(relative):
+    """Say whether the file at `relative`, a path inside the package, is part of the package.
+
+    Bytecode and anything hidden (a name that starts with a dot, such as the `.DS_Store` a file
+    manager writes) is the machine's own output and is not part of the package.
+    """
+    return (
+        "__pycache__" not in relative.parts
+        and relative.suffix != ".pyc"
+        and not any(part.startswith(".") for part in relative.parts)
+    )
+
+
 def _package_files(package_dir):
-    """Return the check's member name of every file under `package_dir`, bytecode excluded."""
+    """Return the check's member name of every file under `package_dir`, bytecode and hidden
+    files excluded."""
     return {
         f"{check_wheel.PACKAGE}/{path.relative_to(package_dir).as_posix()}"
         for path in package_dir.rglob("*")
-        if path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc"
+        if path.is_file() and _is_package_content(path.relative_to(package_dir))
     }
 
 

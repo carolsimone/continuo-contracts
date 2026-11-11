@@ -131,7 +131,9 @@ def test_a_type_that_is_not_text_is_refused_as_a_type():
         canonical_sql_type(5)
 
 
-def test_canonical_sql_type_strips_exactly_the_code_points_the_readme_lists():
+def test_canonical_sql_type_strips_exactly_the_whitespace_code_points():
+    """Try every code point on both sides of `int`: the ones accepted are the 29 written out in
+    `listed`, which is the set that `canonical_sql_type` strips and no other character."""
     listed = [
         *range(0x09, 0x0E), *range(0x1C, 0x20), 0x20, 0x85, 0xA0, 0x1680, *range(0x2000, 0x200B),
         0x2028, 0x2029, 0x202F, 0x205F, 0x3000,
