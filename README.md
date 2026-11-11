@@ -216,6 +216,35 @@ A pull request that adds an input to a hash adds it to `fingerprints.yaml` in th
 projection key or a denylisted `config` key without an entry fails this repository's guard test, and
 `unclassified()` finds any other input without one.
 
+## Vectors
+
+The wheel ships four data files in `continuo_contracts/vectors/`. Each is a JSON list of cases
+that give the inputs and the expected output of one part of the package, so a producer in any
+language can check its own implementation against the same values. Read a file with
+`importlib.resources.files("continuo_contracts") / "vectors" / "<file>"`. Every consumer runs
+every case of every file.
+
+- `projection.json` and `sql_types.json` pin the Python projection and `canonical_sql_type`, and
+  [python](#python) lists their fields. They include a `config` whose keys sort differently by
+  UTF-16 code unit and by code point, and assets that sort by code point.
+- `canonical_json.json` is a list of `{"name", "value", "canonical"}`. `value` is any JSON value
+  and `canonical` is the text that `canonical_json` writes for it, which a consumer compares after
+  encoding it as UTF-8. A number with a point or an exponent is a double, and every integer in a
+  `value` is within -(2**53 - 1) to 2**53 - 1. The cases cover the RFC 8785 samples, the order of
+  object keys by UTF-16 code unit (`U+1F600` sorts before `U+FF5E`), the forms of a number, the
+  escapes of a string and nested empty containers. A case `{"name", "value_text", "error": true}`
+  holds JSON text instead of a value: read it with integers kept exact, and the value must be
+  refused, as `canonical_json` refuses an integer outside that range.
+- `hashing.json` is a list of `{"name", "function", "inputs", "expected"}`. `function` is
+  `fold3`, `fold4`, `shared_fold` or `shared_hash`, and `inputs` holds its arguments by name:
+  `source`, `shared` and `config` (and `compiled` for `fold4`), `unit_digests` for `shared_fold`
+  (a unit key and its digest) and `units_hex` for `shared_hash` (a unit key and the bytes of that
+  unit as lowercase hex). `expected` is the text the function returns, `""` for no units. A case
+  `{"name", "function", "inputs", "error": true}` must be refused, as `shared_fold` refuses a key
+  that is empty or holds NUL or LF and a digest that is not 64 lowercase hex characters. The keys
+  `U+FF5E` and `U+1F600` are in the cases that pin the code point order of `shared_fold`, so a
+  consumer that sorts them by UTF-16 code unit fails them.
+
 ## Pinning
 
 Pin an exact version (`continuo-contracts==X.Y.Z`), because a hash is only comparable across

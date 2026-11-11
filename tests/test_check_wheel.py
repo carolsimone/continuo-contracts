@@ -28,7 +28,8 @@ def test_a_complete_wheel_has_no_problems(tmp_path):
 
 
 def test_a_wheel_without_its_data_files_is_refused(tmp_path):
-    data = ("continuo_contracts/fingerprints.yaml", "continuo_contracts/vectors/projection.json",
+    data = ("continuo_contracts/fingerprints.yaml", "continuo_contracts/vectors/canonical_json.json",
+            "continuo_contracts/vectors/hashing.json", "continuo_contracts/vectors/projection.json",
             "continuo_contracts/vectors/sql_types.json")
     problems = check_wheel.wheel_problems(_wheel(tmp_path, skip=data))
     assert all(any(member in p for p in problems) for member in data)

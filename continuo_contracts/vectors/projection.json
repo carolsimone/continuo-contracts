@@ -96,5 +96,19 @@
                  "output_columns": [{"name": "gr\u00f6\u00dfe", "nullable": true, "type": "TEXT"}],
                  "primary_key": [], "reads": {"caf\u00e9": "select '\u00e9' as gr\u00f6\u00dfe"},
                  "schema": "analytics", "script": "scripts/na.py", "secret_ref": "", "table": "non_ascii"},
-  "projection_hash": "8c4ecbc69f09e35e35a74f0364bdba65feac5df146805c898e72ad2ae781dac8"}
+  "projection_hash": "8c4ecbc69f09e35e35a74f0364bdba65feac5df146805c898e72ad2ae781dac8"},
+ {"name": "config_utf16_key_order",
+  "node": {"schema": "analytics", "table": "config_keys", "kind": "python-node", "script": "scripts/ck.py",
+           "config": {"\ud83d\ude00": {"scales": [1e21, 1e-7, 0.5], "\uff5e": false, "\ud83d\ude00": true}, "\uff5e": {"enabled": true, "limit": null}},
+           "reads": {"src": "select id from analytics.src"},
+           "output_columns": [{"name": "id", "type": "BIGINT", "nullable": false}]},
+  "projection": {"assets": [], "config": {"\ud83d\ude00": {"scales": [1e21, 1e-7, 0.5], "\uff5e": false, "\ud83d\ude00": true}, "\uff5e": {"enabled": true, "limit": null}}, "extra_columns": "raise", "kind": "python-node", "mode_type": "replace", "output_columns": [{"name": "id", "nullable": false, "type": "BIGINT"}], "primary_key": [], "reads": {"src": "select id from analytics.src"}, "schema": "analytics", "script": "scripts/ck.py", "secret_ref": "", "table": "config_keys"},
+  "projection_hash": "e5cb4359a8020fe44a4f6f3a6d6208e615055e5da32fbe0aa9088e127122ceae"},
+ {"name": "assets_code_point_order",
+  "node": {"schema": "analytics", "table": "with_astral_assets", "kind": "python-node", "script": "scripts/aa.py",
+           "assets": ["lib/\ud83d\ude00.csv", "lib/\uff5e.csv"],
+           "reads": {"src": "select id from analytics.src"},
+           "output_columns": [{"name": "id", "type": "BIGINT", "nullable": false}]},
+  "projection": {"assets": ["lib/\uff5e.csv", "lib/\ud83d\ude00.csv"], "config": {}, "extra_columns": "raise", "kind": "python-node", "mode_type": "replace", "output_columns": [{"name": "id", "nullable": false, "type": "BIGINT"}], "primary_key": [], "reads": {"src": "select id from analytics.src"}, "schema": "analytics", "script": "scripts/aa.py", "secret_ref": "", "table": "with_astral_assets"},
+  "projection_hash": "2f56b1664664002358eb989fc35e60a4c3bf3251e22226211f95c72cd7fcffa5"}
 ]
