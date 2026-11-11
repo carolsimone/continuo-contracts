@@ -31,7 +31,7 @@ from continuo_contracts.hashing import sha256_hex
 
 PYTHON_KINDS: Final = ("python-node", "python-csv", "python-api")
 
-# Kinds that artifacts stored by older runtimes carry, and the kind each one stands for.
+# Spellings of a kind that a stored artifact carries, each with the kind it stands for.
 KIND_ALIASES: Final = {"python-model": "python-node"}
 
 MODE_TYPES: Final = ("replace", "append", "upsert")

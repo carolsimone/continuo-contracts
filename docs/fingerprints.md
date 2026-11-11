@@ -71,7 +71,7 @@ The names in the *Inputs* column are these:
 | Field or input | Source | In | Part, or why neither | Inputs |
 |---|---|---|---|---|
 | Schema, name, resolved alias | node `schema`, `name`, `alias` | both (config, identity) | as for a model | `relation.schema`, `relation.alias` |
-| CSV bytes, any size, outer whitespace included | compile extras' `sha256` | content (source) | source part. A stored artifact with no extras keeps dbt's checksum, which is the file path for a seed over 1 MiB, until its service's re-baseline release compiles the service again | `seed_bytes`, `seed_checksum` |
+| CSV bytes, any size, outer whitespace included | compile extras' `sha256` | content (source) | source part. A stored artifact with no compile extras keeps dbt's checksum as the source part (the file path for a seed over 1 MiB) | `seed_bytes`, `seed_checksum` |
 | CSV header | the CSV, and compile extras' `header` | content (source) | through the bytes; the contract holds the declared columns instead, which the producer's CI check keeps equal to the header | |
 | `seed_columns_hash`, `seed_columns` | compile extras' `header` and `column_types` | neither | topology fields that tell a column change from a row change; their inputs are already in `content_hash`, through the bytes and `hashed_config` | |
 | Compiled part | none | neither | a seed has no compiled SQL; the part is `""` | |

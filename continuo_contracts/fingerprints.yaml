@@ -233,7 +233,7 @@ families:
       source: "compile extras' `sha256`"
       fingerprint: "content"
       parts: ["source"]
-      why: "source part. A stored artifact with no extras keeps dbt's checksum, which is the file path for a seed over 1 MiB, until its service's re-baseline release compiles the service again"
+      why: "source part. A stored artifact with no compile extras keeps dbt's checksum as the source part (the file path for a seed over 1 MiB)"
       inputs: ["seed_bytes", "seed_checksum"]
     - id: "csv_header"
       field: "CSV header"
