@@ -44,6 +44,13 @@ from continuo_contracts.canonical import MAX_DEPTH, canonical_json, normalise_te
 canonical_json({"b": [1.0, "\u00e9"], "a": True}) == b'{"a":true,"b":[1,"\xc3\xa9"]}'
 ```
 
+### Public names
+
+- `MAX_DEPTH`: the deepest level of nesting that `canonical_json` writes, 100.
+- `canonical_json`: writes a value as RFC 8785 canonical JSON, UTF-8 encoded.
+- `normalise_text`: turns CRLF and CR into LF and strips the six ASCII whitespace characters from
+  both ends of a text.
+
 ## hashing
 
 ```python
@@ -78,6 +85,15 @@ by `|`, each part encoded as UTF-8.
 shared_hash({"lib/p.py": b"P = 7\n", "lib/q.py": b"Q = -7\n"})
 fold3("1" * 64, shared_hash({}), "2" * 64)  # "sha256:23208c80..."
 ```
+
+### Public names
+
+- `sha256_hex`: the lowercase hex SHA-256 of bytes.
+- `fold3`: the `content_hash` of a Python node, from its source, shared and config parts.
+- `fold4`: the `content_hash` of a dbt node, from its source, shared, config and compiled parts.
+- `shared_fold`: folds a mapping from unit key to digest into the shared part, `""` for no units.
+- `shared_hash`: the shared part of a mapping from unit key to bytes, which is `shared_fold` of the
+  SHA-256 of each unit.
 
 ## python
 
@@ -165,6 +181,24 @@ Read them with `importlib.resources.files("continuo_contracts") / "vectors" / "<
 consumer, in any language, runs every case: it builds each node, computes the projection and its
 hash, and compares them with the pinned values.
 
+### Public names
+
+- `PYTHON_KINDS`: the three kinds of Python node, `python-node`, `python-csv` and `python-api`.
+- `KIND_ALIASES`: the kinds that stand for another kind, which is `python-model` for
+  `python-node`.
+- `MODE_TYPES`: the values of `mode_type`, `replace`, `append` and `upsert`.
+- `EXTRA_COLUMNS_POLICIES`: the values of `extra_columns`, `raise` and `warn`.
+- `PythonColumn`: an output column of a node, with the fields `name`, `type` (the SQL type as
+  declared) and `nullable` (`True` unless given).
+- `PythonNode`: the declaration of a Python node, with the fields `schema`, `table`, `kind`,
+  `script`, `reads`, `output_columns`, `extra_columns`, `config`, `secret_ref`, `mode_type`,
+  `primary_key` and `assets`, the property `relation` and the class method `from_mapping`.
+- `canonical_sql_type`: the canonical spelling of an SQL type, or a `ProjectionError` for a type it
+  does not support.
+- `code_projection`: the code projection of a node, one entry for each key of `projection_keys()`.
+- `projection_hash`: the lowercase hex SHA-256 of the canonical JSON of the code projection, which
+  is the config part of a Python node's `content_hash`.
+
 ## fingerprints
 
 ```python
@@ -188,13 +222,13 @@ mapping of the file with a `FingerprintsFileError` that names the key and its li
   `frozenset`.
 - `projection_keys()` returns the twelve keys of the code projection, in projection order.
 - `classify(family, name)` returns the entry that classifies the input `name` of a node of
-  `family`, or `None`. An entry has `id`, `field`, `source`, `fingerprint`, `parts`, `why`,
-  `inputs`, `when` and `rule`, and `entry.moves(part)` says whether the input moves that part of
-  `content_hash`. In a dbt family, a `config.<key>` that no entry names and whose key is not in the
-  denylist belongs to the family's `other_config` entry. It does not classify a sub-key of a
-  denylisted key (`config.meta.owner` gives `None`), and a dotted name such as
-  `config.contract.enforced` is classified only where an entry declares it as its own input (the
-  dbt model has one), so in another dbt family it belongs to `other_config`. It raises
+  `family`, or `None`. An entry has `family` (the section it is in), `id`, `field`, `source`,
+  `fingerprint`, `parts`, `why`, `inputs`, `when` and `rule`, and `entry.moves(part)` says whether
+  the input moves that part of `content_hash`. In a dbt family, a `config.<key>` that no entry
+  names and whose key is not in the denylist belongs to the family's `other_config` entry. It does
+  not classify a sub-key of a denylisted key (`config.meta.owner` gives `None`), and a dotted name
+  such as `config.contract.enforced` is classified only where an entry declares it as its own
+  input (the dbt model has one), so in another dbt family it belongs to `other_config`. It raises
   `ValueError` for a `family` that is not one of the seven.
 - `unclassified(family, names)` returns the distinct `names` that no entry classifies, sorted. A
   guard test passes it every input of a hash and expects `[]`.
@@ -215,6 +249,65 @@ vocabulary and that `docs/fingerprints.md` writes each name of the tuple and no 
 A pull request that adds an input to a hash adds it to `fingerprints.yaml` in the same change. A
 projection key or a denylisted `config` key without an entry fails this repository's guard test, and
 `unclassified()` finds any other input without one.
+
+### Public names
+
+- `FAMILIES`: the seven node families, `dbt-model`, `dbt-seed`, `dbt-snapshot`, `dbt-test`,
+  `python-node`, `python-csv` and `python-api`.
+- `DBT_FAMILIES`: the first four of `FAMILIES`, which are the dbt ones.
+- `PYTHON_FAMILIES`: the last three of `FAMILIES`, which are the Python ones.
+- `EVERY`: the name of the section for what every family shares, `every`.
+- `SECTIONS`: the eight sections of the file, `EVERY` and then the seven of `FAMILIES`.
+- `FIXED_INPUT_NAMES`: the input names written out in full, such as `raw_code` and
+  `ci.source_hash`. Every other input name is `config.<key>`, `config.*` or `projection.<key>`.
+- `When`: what an input moves besides its entry's fingerprint while a condition holds, with the
+  fields `condition` (`enforced`, `upsert` or `sql_reads`), `fingerprint` and `parts`.
+- `Entry`: one row of a section, with the fields `family` (the section it is in, `every` or one of
+  `FAMILIES`), `id`, `field`, `source`, `fingerprint`, `parts`, `why`, `inputs`, `when` (a `When`
+  or `None`) and `rule` (`outside_denylist` or `None`), and the method `moves(part)`.
+- `Fingerprints`: a checked fingerprints file, with the fields `version`, `hashed_config_denylist`,
+  `projection_keys` and `sections` (a read-only mapping from each section to its entries) and the
+  methods `entries(section)`, `classify(family, name)` and `unclassified(family, names)`.
+- `parse_fingerprints`: reads and checks the YAML text of a fingerprints file and returns a
+  `Fingerprints`, or raises `FingerprintsFileError` for a file that is not in the form above.
+- `load`: the packaged `fingerprints.yaml` as a `Fingerprints`, read and checked once.
+- `hashed_config_denylist`: the dbt `config` keys that stay out of the hashed config, as a
+  `frozenset`.
+- `projection_keys`: the twelve keys of the code projection, in projection order.
+- `classify`: the packaged entry that classifies an input of a family, or `None`.
+- `unclassified`: the distinct input names that no packaged entry classifies for a family, sorted.
+- `render_in`: the "In" cell of an entry in `docs/fingerprints.md`, with the fingerprint the entry
+  moves, its parts and its `when`.
+- `render_markdown`: the Markdown of `docs/fingerprints.md` for a `Fingerprints`, which
+  `scripts/render_fingerprints.py` writes from the packaged file.
+
+## errors
+
+```python
+from continuo_contracts.errors import (
+    CanonicalJsonError, ContractsError, FingerprintsFileError, HashInputError, ProjectionError,
+)
+```
+
+Every error that the package defines is a `ContractsError`, which is a `ValueError`, so one
+`except ContractsError` catches all of them. A few refusals are Python's own errors: `classify` and
+`unclassified` (the functions and the methods of `Fingerprints`) raise a plain `ValueError` for a
+family outside `FAMILIES`, `Fingerprints.entries` raises one for a section outside `SECTIONS`,
+`fold3` and `fold4` raise `UnicodeEncodeError` for a part that UTF-8 cannot encode, such as a lone
+surrogate, and an argument of the wrong type can raise `TypeError` or `AttributeError`.
+
+### Public names
+
+- `ContractsError`: the base of the errors this package defines.
+- `CanonicalJsonError`: `canonical_json` refuses a value that canonical JSON cannot represent, and
+  the message starts with the JSON path of that value.
+- `HashInputError`: `shared_fold` and `shared_hash` refuse a unit key or a digest that is in a
+  form they do not accept, and the message names the key.
+- `ProjectionError`: `canonical_sql_type`, `PythonNode.from_mapping`, `code_projection` and
+  `projection_hash` refuse an SQL type or a Python node.
+- `FingerprintsFileError`: `parse_fingerprints` and `load` refuse a fingerprints file that is not
+  in the form described under [fingerprints](#fingerprints), and the message names the location in
+  the file.
 
 ## Vectors
 
@@ -252,7 +345,7 @@ every case of every file.
 
 Pin an exact version (`continuo-contracts==X.Y.Z`), because a hash is only comparable across
 processes that run the same code. A dbt producer uses the version its continuo release
-documents.
+documents. `continuo_contracts.__version__` is the version of the installed distribution.
 
 ## Stability
 

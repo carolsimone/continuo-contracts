@@ -39,3 +39,5 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   nesting limit), `fold3()`, `fold4()`, `shared_fold()` and `shared_hash()` for a consumer in any
   language, and two new cases of `vectors/projection.json` pin the UTF-16 order of `config` keys
   and the code point order of assets. The README lists the files under Vectors.
+- The README ends the section of each module with its public names, one line each, and has an
+  `errors` section for the error classes; a test fails for a public name that has no line.
