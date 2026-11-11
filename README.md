@@ -67,7 +67,8 @@ by `|`, each part encoded as UTF-8.
   last `|` stays, so `fold4(s, h, c, "")` is not `fold3(s, h, c)`.
 - A part is bare lowercase hex, without a `sha256:` prefix, or `""` when the node has no such
   part. The folds do not check their parts: a seed in a stored artifact without compile extras
-  carries dbt's `path` checksum as its source part, so a part is not always hex.
+  carries dbt's checksum as its source part, and that checksum is the file path when the seed is
+  over 1 MiB, so a part is not always hex.
 - `sha256_hex(data: bytes) -> str` returns the lowercase hex SHA-256 of `data`.
 - `shared_fold(unit_digests)` takes a mapping from a unit id or a repo-relative POSIX path to the
   64 lowercase hex characters of the SHA-256 of that unit's bytes. It writes one line per unit,

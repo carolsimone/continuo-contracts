@@ -11,7 +11,8 @@ by `|`, each part encoded as UTF-8:
 
 A part is a bare lowercase hex digest, without a `sha256:` prefix, or `""` when the node has no
 such part. The folds do not check their parts: a seed in a stored artifact without compile extras
-carries dbt's `path` checksum as its source part, so a part is not always hex.
+carries dbt's checksum as its source part, and that checksum is the file path when the seed is
+over 1 MiB, so a part is not always hex.
 
 The shared part folds the units a node imports, each unit named by an id or a repo-relative POSIX
 path and carrying the digest of its bytes. `shared_fold` writes one line per unit, the key, a
