@@ -35,6 +35,24 @@ def test_a_wheel_without_its_data_files_is_refused(tmp_path):
     assert all(any(member in p for p in problems) for member in data)
 
 
+def _package_files(package_dir):
+    """Return the check's member name of every file under `package_dir`, bytecode excluded."""
+    return {
+        f"{check_wheel.PACKAGE}/{path.relative_to(package_dir).as_posix()}"
+        for path in package_dir.rglob("*")
+        if path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc"
+    }
+
+
+def test_the_required_members_are_the_files_of_the_package_tree():
+    package_dir = SCRIPT.parents[1] / check_wheel.PACKAGE
+    listed = list(check_wheel.REQUIRED_MEMBERS)
+    on_disk = _package_files(package_dir)
+    assert sorted(on_disk - set(listed)) == [], "files of the package that REQUIRED_MEMBERS omits"
+    assert sorted(set(listed) - on_disk) == [], "REQUIRED_MEMBERS entries with no file"
+    assert len(listed) == len(set(listed)), "REQUIRED_MEMBERS lists a member twice"
+
+
 def test_a_platform_wheel_is_refused(tmp_path):
     problems = check_wheel.wheel_problems(_wheel(tmp_path, name="continuo_contracts-0.1.0-cp312-cp312-linux_x86_64.whl"))
     assert any("py3-none-any" in p for p in problems)
