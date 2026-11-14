@@ -43,6 +43,7 @@ def test_a_wheel_without_its_data_files_is_refused(tmp_path):
         "continuo_contracts/vectors/hashing.json",
         "continuo_contracts/vectors/projection.json",
         "continuo_contracts/vectors/sql_types.json",
+        "continuo_contracts/vectors/strict_yaml.json",
     )
     problems = check_wheel.wheel_problems(_wheel(tmp_path, skip=data))
     assert all(any(member in p for p in problems) for member in data)

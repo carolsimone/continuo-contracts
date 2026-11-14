@@ -10,6 +10,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `continuo_contracts.schema`: the ODCS v3.2.0 JSON schema ships in the wheel, and `load()` returns
   it after it checks that the file has the pinned SHA-256 (`SchemaFileError` otherwise).
 - `jsonschema>=4.26` is a runtime dependency, next to PyYAML.
+- `continuo_contracts.yaml_strict`: `load()` reads a contract file as YAML 1.2 core, so `on`,
+  `yes`, `NO`, `2026-11-14`, `1:20` and `1_000` are strings. It refuses aliases, merge keys,
+  repeated keys, keys that are not strings, tags other than the core ones, more than one
+  document, nesting deeper than `canonical.MAX_DEPTH` and values that `canonical_json` cannot
+  write, with a `StrictYamlError` that names the line and the column. The new vector file
+  `vectors/strict_yaml.json` pins it.
 
 ## [0.1.0] - 2026-11-11
 

@@ -3,7 +3,7 @@
 Install the wheel into a clean virtual environment, then run this script with that environment's
 interpreter in isolated mode, from a directory that is not the checkout:
 `<venv>/bin/python -I scripts/smoke_installed.py`. The package must come from a `site-packages`
-directory, `fingerprints.yaml` must load with entries in every section, every case of the four
+directory, `fingerprints.yaml` must load with entries in every section, every case of the five
 vector files must pass when read through `importlib.resources`, and canonical JSON must give the
 documented bytes. Exit status 0 means all of it held, 1 means a failure was logged.
 """
@@ -16,8 +16,14 @@ from pathlib import Path
 from typing import Any
 
 import continuo_contracts
+from continuo_contracts import yaml_strict
 from continuo_contracts.canonical import canonical_json
-from continuo_contracts.errors import CanonicalJsonError, HashInputError, ProjectionError
+from continuo_contracts.errors import (
+    CanonicalJsonError,
+    HashInputError,
+    ProjectionError,
+    StrictYamlError,
+)
 from continuo_contracts.fingerprints import SECTIONS, load
 from continuo_contracts.hashing import fold3, fold4, shared_fold, shared_hash
 from continuo_contracts.python import (
@@ -144,6 +150,25 @@ def _hashing_failures(cases: list[dict[str, Any]]) -> list[str]:
     return failures
 
 
+def _strict_yaml_failures(cases: list[dict[str, Any]]) -> list[str]:
+    """Return the strict YAML vector cases that read as another value or are not refused."""
+    failures: list[str] = []
+    for case in cases:
+        name = case["name"]
+        try:
+            value = yaml_strict.load(case["text"])
+        except StrictYamlError:
+            if not case.get("error"):
+                failures.append(f"strict yaml vector {name!r}: the text is refused")
+            continue
+        if case.get("error"):
+            failures.append(f"strict yaml vector {name!r}: the text is not refused")
+        # `json.dumps` tells `1`, `1.0` and `true` apart, which `==` does not.
+        elif json.dumps(value, sort_keys=True) != json.dumps(case["value"], sort_keys=True):
+            failures.append(f"strict yaml vector {name!r}: read as {value!r}")
+    return failures
+
+
 def _canonical_json_failures() -> list[str]:
     """Return a problem when `canonical_json` does not give the documented bytes."""
     expected = b'{"a":true,"b":[1,"' + NON_ASCII_UTF8 + b'"]}'
@@ -159,6 +184,7 @@ def main() -> int:
     sql_types = _vector_cases("sql_types.json")
     canonical_vectors = _vector_cases("canonical_json.json")
     hashing = _vector_cases("hashing.json")
+    strict_yaml = _vector_cases("strict_yaml.json")
     failures = [
         *_installed_failures(),
         *_fingerprint_failures(),
@@ -166,6 +192,7 @@ def main() -> int:
         *_sql_type_failures(sql_types),
         *_canonical_vector_failures(canonical_vectors),
         *_hashing_failures(hashing),
+        *_strict_yaml_failures(strict_yaml),
         *_canonical_json_failures(),
     ]
     for name, cases in (
@@ -173,6 +200,7 @@ def main() -> int:
         ("sql_types.json", sql_types),
         ("canonical_json.json", canonical_vectors),
         ("hashing.json", hashing),
+        ("strict_yaml.json", strict_yaml),
     ):
         if not cases:
             failures.append(f"{name} holds no cases")
@@ -181,14 +209,15 @@ def main() -> int:
     if failures:
         return 1
     logger.info(
-        "continuo-contracts %s installed at %s: %d projection, %d sql type, %d canonical json "
-        "and %d hashing cases pass",
+        "continuo-contracts %s installed at %s: %d projection, %d sql type, %d canonical json, "
+        "%d hashing and %d strict yaml cases pass",
         continuo_contracts.__version__,
         Path(continuo_contracts.__file__).parent,
         len(projections),
         len(sql_types),
         len(canonical_vectors),
         len(hashing),
+        len(strict_yaml),
     )
     return 0
 

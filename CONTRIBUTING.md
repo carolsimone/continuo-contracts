@@ -78,12 +78,15 @@ not a service, and layers would add indirection without a second implementation.
 - `python`: the Python node, its code projection and the SQL type canonicaliser.
 - `fingerprints`: the field declaration, its YAML loader and its Markdown renderer.
 - `schema`: the packaged ODCS v3.2.0 JSON schema and the check of its bytes.
+- `yaml_strict`: the reader of a contract file, YAML 1.2 core with no aliases, merge keys or
+  repeated keys.
 
 `errors` imports nothing from the package. `canonical`, `hashing`, `fingerprints` and `schema` import
-only `errors` (`fingerprints` also PyYAML), `python` imports `canonical`, `errors`, `hashing` and
-`fingerprints`, and nothing imports `scripts` or `tests`. The only files the package reads are the
-packaged `fingerprints.yaml`, in `fingerprints.load()`, and the packaged ODCS schema, in `schema.load()`.
-A split into layers is proposed only when a module gets a second reason to change.
+only `errors` (`fingerprints` also PyYAML), `yaml_strict` imports `canonical`, `errors` and PyYAML,
+`python` imports `canonical`, `errors`, `hashing` and `fingerprints`, and nothing imports `scripts`
+or `tests`. The only files the package reads are the packaged `fingerprints.yaml`, in
+`fingerprints.load()`, and the packaged ODCS schema, in `schema.load()`. A split into layers is
+proposed only when a module gets a second reason to change.
 
 ## Releasing
 

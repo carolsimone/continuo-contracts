@@ -375,12 +375,57 @@ load()["$schema"]  # "https://json-schema.org/draft/2019-09/schema"
 - `load`: returns the ODCS v3.2.0 JSON schema after it checks the file's SHA-256, and raises
   `SchemaFileError` when the file has other bytes.
 
+## yaml_strict
+
+```python
+from continuo_contracts.yaml_strict import load
+```
+
+`load` reads a contract file, such as an ODCS contract, into plain Python values. It is PyYAML with
+the scalar rules of the YAML 1.2 core schema in place of its YAML 1.1 ones, and with refusals for
+what lets one small file mean more than it says or mean different things to different readers.
+
+- `load(text: str) -> object` returns the value of the one document in `text`: a `dict` with `str`
+  keys in the order of the file, a `list`, a `str`, an `int`, a `float`, a `bool` or `None`. A text
+  with no document, such as an empty text or a comment only, reads as `None`. A leading byte order
+  mark is dropped and CRLF reads like LF, so the same file saved by another editor reads the
+  same. It raises `StrictYamlError` (a `ContractsError`) for every refusal below.
+- Only these plain scalars are not strings: `true`, `True`, `TRUE`, `false`, `False` and `FALSE`
+  (`bool`), `~`, `null`, `Null`, `NULL` and an empty value (`None`), a decimal integer with an
+  optional sign, `0o17` and `0x1F` (`int`; a leading zero is decimal, so `0777` is 777), and a
+  number with a point or an exponent such as `1e3`, `.5` and `1.` (`float`). So `on`, `yes`, `NO`,
+  `y`, `2026-11-14`, `1:20`, `1_000` and `0b101` are strings. A quoted scalar is always a string.
+- The reader refuses an alias (`*name`, which lets a few lines expand into a tree of any size), a
+  plain `<<` key (a merge key), a repeated key at any level, a key that is not a string, a tag
+  other than the seven core ones (`!!str`, `!!int`, `!!float`, `!!bool`, `!!null`, `!!seq` and
+  `!!map`, and then the value must fit the tag, so `!!int abc` is refused), a second document, and
+  a container nested more than `canonical.MAX_DEPTH` levels deep. An anchor (`&name`) that no alias
+  uses is read and ignored.
+- The reader refuses a value that `canonical_json` cannot write, so everything it returns can be
+  hashed: a float that is not finite (`.inf`, `.nan`, `1e999`), an integer outside
+  -(2**53 - 1) to 2**53 - 1, and a string with a lone surrogate (a `"\ud800"` escape).
+- The message of the error is `line <line>, column <column>: <reason>`, with both counted from 1
+  and `line` and `column` on the error as numbers. A value that `canonical_json` cannot write has
+  no position in the text, so both are 0 and the reason starts with the JSON path of the value, as
+  in `line 0, column 0: $.config.rate: NaN and the infinities are not JSON numbers`.
+
+```python
+load("a: on\nb: 1e3\nc: 2026-11-14\n")  # {"a": "on", "b": 1000.0, "c": "2026-11-14"}
+load("a: &x 1\nb: *x\n")  # StrictYamlError: line 2, column 4: YAML aliases are not allowed
+```
+
+### Public names
+
+- `load`: reads one YAML document as the YAML 1.2 core schema and raises `StrictYamlError` for
+  aliases, merge keys, repeated keys, keys that are not strings, other tags, more than one
+  document, nesting that is too deep and values that canonical JSON cannot write.
+
 ## errors
 
 ```python
 from continuo_contracts.errors import (
     CanonicalJsonError, ContractsError, FingerprintsFileError, HashInputError, ProjectionError,
-    SchemaFileError,
+    SchemaFileError, StrictYamlError,
 )
 ```
 
@@ -405,10 +450,13 @@ surrogate, and an argument of the wrong type can raise `TypeError` or `Attribute
   the file.
 - `SchemaFileError`: `schema.load` refuses a packaged schema file whose SHA-256 is not the pinned
   one, and the message names the file and both hashes.
+- `StrictYamlError`: `yaml_strict.load` refuses a text, and the message is
+  `line <line>, column <column>: <reason>`. It has the numbers `line` and `column` (counted from
+  1, and 0 when the reason has no position in the text) and the `reason` text.
 
 ## Vectors
 
-The wheel ships four data files in `continuo_contracts/vectors/`. Each is a JSON list of cases
+The wheel ships five data files in `continuo_contracts/vectors/`. Each is a JSON list of cases
 that give the inputs and the expected output of one part of the package, so a producer in any
 language can check its own implementation against the same values. Read a file with
 `importlib.resources.files("continuo_contracts") / "vectors" / "<file>"`. Every consumer runs
@@ -437,6 +485,16 @@ every case of every file.
   that is empty or holds NUL or LF and a digest that is not 64 lowercase hex characters. The keys
   `U+FF5E` and `U+1F600` are in the cases that pin the code point order of `shared_fold`, so a
   consumer that sorts them by UTF-16 code unit fails them.
+- `strict_yaml.json` is a list of `{"name", "text", "value"}`. `text` is a whole YAML document and
+  `value` is the JSON that `yaml_strict.load` reads it as, which a consumer compares with its types
+  (`1000.0` is a float, `1` an integer and `true` a boolean). A case `{"name", "text", "error":
+  true}` must be refused. The cases cover the scalars that YAML 1.1 reads as booleans, numbers and
+  dates and the core schema reads as strings (`on`, `yes`, `NO`, `1:20`, `2026-11-14`, `1_000`),
+  the core integers, floats, booleans and nulls, the safe integer range, a byte order mark with
+  CRLF, and the refusals: infinities and NaN, integers outside the range, repeated keys, keys that
+  are not strings, tags other than the core ones, aliases, merge keys, two documents, a control
+  character and a lone surrogate. The file is ASCII, so the byte order mark and the line endings
+  are written as JSON escapes.
 
 ## Pinning
 
