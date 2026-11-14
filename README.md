@@ -6,8 +6,8 @@ which input moves which fingerprint. A producer's CI, continuo's topology-contro
 runtime harness import the same functions, so they compute the same bytes and the same hashes
 for a node.
 
-The package is pure Python and has one runtime dependency, PyYAML. The terms of continuo that
-this text uses, such as the compile extras and the code bundle, are defined in
+The package is pure Python and has two runtime dependencies, PyYAML and jsonschema. The terms of
+continuo that this text uses, such as the compile extras and the code bundle, are defined in
 [docs/fingerprints.md](https://github.com/carolsimone/continuo-contracts/blob/main/docs/fingerprints.md#terms).
 
 ## Install
@@ -346,11 +346,41 @@ projection key or a denylisted `config` key without an entry fails this reposito
 - `render_markdown`: the Markdown of `docs/fingerprints.md` for a `Fingerprints`, which
   `scripts/render_fingerprints.py` writes from the packaged file.
 
+## schema
+
+```python
+from continuo_contracts.schema import SCHEMA_FILE, SCHEMA_SHA256, load
+```
+
+The wheel ships the JSON schema of the Open Data Contract Standard (ODCS) v3.2.0, byte for byte as
+the `bitol-io/open-data-contract-standard` repository publishes it at the tag `v3.2.0`, in the file
+`continuo_contracts/odcs-json-schema-v3.2.0.json`. It is a JSON Schema of draft 2019-09.
+
+- `load() -> Mapping[str, Any]` returns the schema, the same object on every call. The first call
+  hashes the file and compares the SHA-256 with `SCHEMA_SHA256`, and it raises `SchemaFileError`
+  (a `ContractsError`) when they differ, so a schema that was edited or damaged never checks a
+  contract. The message names the file, the hash it found and the pinned hash. A call that raises
+  caches nothing. Treat the returned mapping as read-only.
+- `SCHEMA_FILE` is the name of the file inside the package, `odcs-json-schema-v3.2.0.json`, and
+  `SCHEMA_SHA256` is the lowercase hex SHA-256 of its bytes.
+
+```python
+load()["$schema"]  # "https://json-schema.org/draft/2019-09/schema"
+```
+
+### Public names
+
+- `SCHEMA_FILE`: the name of the packaged schema file, `odcs-json-schema-v3.2.0.json`.
+- `SCHEMA_SHA256`: the lowercase hex SHA-256 that the bytes of the packaged schema must have.
+- `load`: returns the ODCS v3.2.0 JSON schema after it checks the file's SHA-256, and raises
+  `SchemaFileError` when the file has other bytes.
+
 ## errors
 
 ```python
 from continuo_contracts.errors import (
     CanonicalJsonError, ContractsError, FingerprintsFileError, HashInputError, ProjectionError,
+    SchemaFileError,
 )
 ```
 
@@ -373,6 +403,8 @@ surrogate, and an argument of the wrong type can raise `TypeError` or `Attribute
 - `FingerprintsFileError`: `parse_fingerprints` and `load` refuse a fingerprints file that is not
   in the form described under [fingerprints](#fingerprints), and the message names the location in
   the file.
+- `SchemaFileError`: `schema.load` refuses a packaged schema file whose SHA-256 is not the pinned
+  one, and the message names the file and both hashes.
 
 ## Vectors
 

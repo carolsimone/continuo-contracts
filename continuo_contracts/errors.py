@@ -42,3 +42,10 @@ class FingerprintsFileError(ContractsError):
     The message names the location in the file, such as `families.dbt-model[3] (meta_other)`,
     then `: ` and the reason.
     """
+
+
+class SchemaFileError(ContractsError):
+    """The packaged ODCS JSON schema does not have the bytes this package pins.
+
+    The message names the file, then `: ` and the SHA-256 it found next to the pinned one.
+    """

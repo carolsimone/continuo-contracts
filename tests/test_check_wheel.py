@@ -13,6 +13,7 @@ METADATA = (
     "Version: 0.1.0\n"
     "Requires-Python: >=3.12\n"
     "License-Expression: Apache-2.0\n"
+    "Requires-Dist: jsonschema>=4.26\n"
     "Requires-Dist: PyYAML>=6.0\n"
 )
 INFO = "continuo_contracts-0.1.0.dist-info"
@@ -37,6 +38,7 @@ def test_a_complete_wheel_has_no_problems(tmp_path):
 def test_a_wheel_without_its_data_files_is_refused(tmp_path):
     data = (
         "continuo_contracts/fingerprints.yaml",
+        "continuo_contracts/odcs-json-schema-v3.2.0.json",
         "continuo_contracts/vectors/canonical_json.json",
         "continuo_contracts/vectors/hashing.json",
         "continuo_contracts/vectors/projection.json",

@@ -24,7 +24,7 @@ SDIST_SUFFIX = ".tar.gz"
 DIST_INFO_SUFFIX = ".dist-info"
 REQUIRES_PYTHON = ">=3.12"
 LICENSE_EXPRESSION = "Apache-2.0"
-REQUIRES_DIST = ["pyyaml>=6.0"]
+REQUIRES_DIST = ["jsonschema>=4.26", "pyyaml>=6.0"]
 LICENSE_FILES = ("LICENSE", "NOTICE")
 
 REQUIRED_MEMBERS: tuple[str, ...] = tuple(
@@ -36,8 +36,10 @@ REQUIRED_MEMBERS: tuple[str, ...] = tuple(
         "fingerprints.py",
         "fingerprints.yaml",
         "hashing.py",
+        "odcs-json-schema-v3.2.0.json",
         "python.py",
         "py.typed",
+        "schema.py",
         "vectors/canonical_json.json",
         "vectors/hashing.json",
         "vectors/projection.json",

@@ -5,6 +5,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `continuo_contracts.schema`: the ODCS v3.2.0 JSON schema ships in the wheel, and `load()` returns
+  it after it checks that the file has the pinned SHA-256 (`SchemaFileError` otherwise).
+- `jsonschema>=4.26` is a runtime dependency, next to PyYAML.
+
 ## [0.1.0] - 2026-11-11
 
 **TL;DR**

@@ -77,10 +77,12 @@ not a service, and layers would add indirection without a second implementation.
 - `hashing`: `sha256_hex`, the `content_hash` folds and the shared fold.
 - `python`: the Python node, its code projection and the SQL type canonicaliser.
 - `fingerprints`: the field declaration, its YAML loader and its Markdown renderer.
+- `schema`: the packaged ODCS v3.2.0 JSON schema and the check of its bytes.
 
-`errors` imports nothing from the package. `canonical`, `hashing` and `fingerprints` import only
-`errors` (`fingerprints` also PyYAML), `python` imports the other four, and nothing imports `scripts`
-or `tests`. The only file the package reads is the packaged `fingerprints.yaml`, in `fingerprints.load()`.
+`errors` imports nothing from the package. `canonical`, `hashing`, `fingerprints` and `schema` import
+only `errors` (`fingerprints` also PyYAML), `python` imports `canonical`, `errors`, `hashing` and
+`fingerprints`, and nothing imports `scripts` or `tests`. The only files the package reads are the
+packaged `fingerprints.yaml`, in `fingerprints.load()`, and the packaged ODCS schema, in `schema.load()`.
 A split into layers is proposed only when a module gets a second reason to change.
 
 ## Releasing
