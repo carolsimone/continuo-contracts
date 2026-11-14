@@ -2,6 +2,7 @@
 its upsert key."""
 
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -100,7 +101,10 @@ def test_the_full_fixtures_are_valid_when_the_service_is_not_known(fixture):
 
 
 def test_the_full_fixtures_are_one_of_each_kind():
-    kinds = {_full(name)["customProperties"][1]["value"] for name in FULL}
+    kinds = set()
+    for name in FULL:
+        doc = _full(name)
+        kinds.add(doc["customProperties"][_index(doc, "kind")]["value"])
     assert kinds == set(PYTHON_KINDS)
 
 
@@ -181,6 +185,7 @@ def test_a_timeout_that_is_not_a_whole_number_of_minutes_up_to_a_week_is_refused
     issue = _only(_check(doc))
     assert (issue.path, issue.reason) == (_at(doc, "timeoutMinutes"), "value")
     assert "10080" in issue.message
+    assert "an integer" in issue.message
 
 
 @pytest.mark.parametrize("value", [1, 60, 10080])
@@ -427,11 +432,29 @@ def test_python_node_is_the_kind_of_a_contract_that_names_none():
     assert "python-node" in issue.message
 
 
+# The demo contract is a python-node. Declaring another kind on it leaves `script` and
+# `readQueries` (`customProperties[2]` and `[3]`) where they are, which the other kinds refuse or
+# do not need, and leaves out what the other kinds need.
+KIND_ON_THE_DEMO = {
+    "python-node": [],
+    "python-csv": [
+        ("customProperties", "kind_rule"),
+        ("customProperties[2]", "kind_rule"),
+        ("customProperties[3]", "kind_rule"),
+    ],
+    "python-api": [("customProperties[3]", "kind_rule")],
+}
+
+
+def test_every_python_kind_is_tried_on_the_demo():
+    assert set(KIND_ON_THE_DEMO) == set(PYTHON_KINDS)
+
+
 @pytest.mark.parametrize("kind", PYTHON_KINDS)
 def test_every_python_kind_has_its_rules(kind):
     doc = _kpis()
     doc["customProperties"].append(_continuo("kind", kind))
-    assert {issue.reason for issue in _check(doc)} <= {"kind_rule"}
+    assert _found(_check(doc)) == KIND_ON_THE_DEMO[kind]
 
 
 def test_a_python_node_without_a_script_is_refused():
@@ -506,6 +529,15 @@ def test_a_python_csv_that_appends_is_refused():
 def test_a_python_csv_that_upserts_is_refused():
     doc = _full("python_csv")
     _set(doc, "modeType", "upsert")
+    assert _found(_check(doc, path=_path_of("python_csv"))) == [(_at(doc, "modeType"), "kind_rule")]
+
+
+def test_a_python_csv_that_upserts_with_no_key_is_refused_once():
+    doc = _full("python_csv")
+    _set(doc, "modeType", "upsert")
+    for column in _columns(doc):
+        column.pop("primaryKey", None)
+        column.pop("primaryKeyPosition", None)
     assert _found(_check(doc, path=_path_of("python_csv"))) == [(_at(doc, "modeType"), "kind_rule")]
 
 
@@ -667,6 +699,19 @@ def test_assets_inside_the_project_are_accepted(assets):
     doc = _full("python_api")
     _set(doc, "assets", assets)
     assert _check(doc, path=_path_of("python_api")) == []
+
+
+def test_a_long_list_of_assets_is_checked_in_linear_time():
+    doc = _full("python_api")
+    _set(doc, "assets", [f"assets/file-{number}.csv" for number in range(50_000)])
+    started = time.perf_counter()
+    assert _check(doc, path=_path_of("python_api")) == []
+    assert time.perf_counter() - started < 1.0
+    _set(doc, "assets", [f"assets/file-{number}.csv" for number in range(50_000)] * 2)
+    started = time.perf_counter()
+    issues = _check(doc, path=_path_of("python_api"))
+    assert time.perf_counter() - started < 2.0
+    assert len(issues) == 50_000
 
 
 # the columns
@@ -901,15 +946,86 @@ def test_two_key_columns_in_the_same_position_are_refused_at_the_second():
     assert "order_id" in issue.message
 
 
-def test_two_key_columns_with_no_position_are_in_the_same_position():
+def test_two_key_columns_with_no_position_are_each_refused():
     doc = _upsert()
     for column in _columns(doc)[:2]:
         del column["primaryKeyPosition"]
+    assert _found(_upsert_check(doc)) == [
+        ("schema[0].properties[0].primaryKeyPosition", "primary_key"),
+        ("schema[0].properties[1].primaryKeyPosition", "primary_key"),
+    ]
+
+
+def test_a_key_column_with_no_position_next_to_a_numbered_one_is_refused():
+    doc = _upsert()
+    del _columns(doc)[1]["primaryKeyPosition"]
     issue = _only(_upsert_check(doc))
     assert (issue.path, issue.reason) == (
         "schema[0].properties[1].primaryKeyPosition",
         "primary_key",
     )
+    assert "line_no" in issue.message
+    assert "no primaryKeyPosition" in issue.message
+
+
+@pytest.mark.parametrize("position", [0, -1, -3])
+def test_a_key_position_below_one_is_refused_in_a_key_of_several_columns(position):
+    doc = _upsert()
+    _columns(doc)[1]["primaryKeyPosition"] = position
+    issue = _only(_upsert_check(doc))
+    assert (issue.path, issue.reason) == (
+        "schema[0].properties[1].primaryKeyPosition",
+        "primary_key",
+    )
+    assert str(position) in issue.message
+
+
+def test_a_whole_number_float_position_is_the_same_position_as_the_integer():
+    doc = _upsert()
+    _columns(doc)[1]["primaryKeyPosition"] = 1.0
+    issue = _only(_upsert_check(doc))
+    assert (issue.path, issue.reason) == (
+        "schema[0].properties[1].primaryKeyPosition",
+        "primary_key",
+    )
+    assert "order_id" in issue.message
+
+
+def test_a_float_position_that_differs_from_the_others_is_accepted():
+    doc = _upsert()
+    _columns(doc)[0]["primaryKeyPosition"] = 2.0
+    _columns(doc)[1]["primaryKeyPosition"] = 1.0
+    assert _upsert_check(doc) == []
+
+
+@pytest.mark.parametrize("position", [1.5, 0.0, -1.0, True, "1", None, [1], float("inf")])
+def test_a_position_that_is_not_a_whole_number_from_one_is_refused_by_the_rule(position):
+    doc = _upsert()
+    _columns(doc)[1]["primaryKeyPosition"] = position
+    issues = rule_issues(doc, path=_path_of("python_node"), service=SERVICE)
+    assert _found(issues) == [("schema[0].properties[1].primaryKeyPosition", "primary_key")]
+
+
+def test_a_bool_is_not_a_position_even_when_no_other_key_column_has_a_one():
+    doc = _upsert()
+    _columns(doc)[0]["primaryKeyPosition"] = 2
+    _columns(doc)[1]["primaryKeyPosition"] = True
+    issues = rule_issues(doc, path=_path_of("python_node"), service=SERVICE)
+    assert _found(issues) == [("schema[0].properties[1].primaryKeyPosition", "primary_key")]
+    assert "True" in issues[0].message
+
+
+def test_a_position_that_is_one_of_three_keys_is_counted_with_the_others():
+    doc = _upsert()
+    _columns(doc)[2]["primaryKey"] = True
+    _columns(doc)[2]["required"] = True
+    _columns(doc)[2]["primaryKeyPosition"] = 2
+    issue = _only(_upsert_check(doc))
+    assert (issue.path, issue.reason) == (
+        "schema[0].properties[2].primaryKeyPosition",
+        "primary_key",
+    )
+    assert "line_no" in issue.message
 
 
 def test_one_key_column_needs_no_position():
@@ -918,6 +1034,15 @@ def test_one_key_column_needs_no_position():
     del _columns(doc)[1]["primaryKeyPosition"]
     del _columns(doc)[0]["primaryKeyPosition"]
     assert _upsert_check(doc) == []
+
+
+def test_one_key_column_may_have_any_position():
+    doc = _upsert()
+    del _columns(doc)[1]["primaryKey"]
+    del _columns(doc)[1]["primaryKeyPosition"]
+    for position in (-1, 0, 1, 3):
+        _columns(doc)[0]["primaryKeyPosition"] = position
+        assert _upsert_check(doc) == []
 
 
 def test_key_columns_in_any_order_of_the_file_are_accepted():

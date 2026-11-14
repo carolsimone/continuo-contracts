@@ -16,6 +16,7 @@ document always gives the same list.
 import ast
 import functools
 import re
+from collections import Counter
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from functools import cached_property
@@ -590,7 +591,7 @@ def _check_timeout(value: object) -> Iterator[str]:
         or not 1 <= value <= _TIMEOUT_MAX_MINUTES
     ):
         yield (
-            f"`timeoutMinutes` is {_shown(value)}, it must be a whole number of minutes from 1 "
+            f"`timeoutMinutes` is {_shown(value)}, it must be an integer number of minutes from 1 "
             f"to {_TIMEOUT_MAX_MINUTES}"
         )
 
@@ -686,8 +687,8 @@ def _check_assets(value: object) -> Iterator[str]:
         fault = _asset_fault(asset)
         if fault is not None:
             yield f"`assets` lists a path that is not inside the project: {fault}"
-    texts = [asset for asset in value if isinstance(asset, str)]
-    for asset in sorted({asset for asset in texts if texts.count(asset) > 1}):
+    counts = Counter(asset for asset in value if isinstance(asset, str))
+    for asset in sorted(asset for asset, count in counts.items() if count > 1):
         yield f"`assets` lists {_shown(asset)} twice, a path is listed once"
 
 
@@ -854,8 +855,23 @@ def _columns(contract: _Contract) -> Iterator[Issue]:
             )
 
 
+def _key_position(value: object) -> int | None:
+    """Return `value` as a position in a key, a whole number from 1 (`1.0` is 1), or `None` when
+    it is not one."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        number = value
+    elif isinstance(value, float) and value.is_integer():
+        number = int(value)
+    else:
+        return None
+    return number if number >= 1 else None
+
+
 def _upsert_key(contract: _Contract) -> Iterator[Issue]:
-    if contract.mode_type != "upsert" or not contract.columns:
+    # A python-csv node that upserts already gets the kind's issue, and no second one for its key.
+    if contract.mode_type != "upsert" or contract.kind == "python-csv" or not contract.columns:
         return
     keys = [
         (index, column)
@@ -887,17 +903,30 @@ def _upsert_key(contract: _Contract) -> Iterator[Issue]:
                 f"key column {name} must not be DOUBLE PRECISION, a key is compared for equality "
                 "and a floating point number is not exact",
             )
-        position = column.get("primaryKeyPosition", -1)
-        if len(keys) > 1 and isinstance(position, int):
-            if position in taken:
-                yield _issue(
-                    f"{where}.primaryKeyPosition",
-                    "primary_key",
-                    f"primaryKeyPosition {position} is already the position of key column "
-                    f"{taken[position]}, each key column has its own position from 1",
-                )
-            else:
-                taken[position] = name
+        if len(keys) == 1:
+            continue
+        number = _key_position(column.get("primaryKeyPosition", -1))
+        if number is None:
+            has = (
+                f"primaryKeyPosition {_shown(column['primaryKeyPosition'])}"
+                if "primaryKeyPosition" in column
+                else "no primaryKeyPosition"
+            )
+            yield _issue(
+                f"{where}.primaryKeyPosition",
+                "primary_key",
+                f"key column {name} has {has}, a key of several columns gives each column a "
+                "whole number from 1",
+            )
+        elif number in taken:
+            yield _issue(
+                f"{where}.primaryKeyPosition",
+                "primary_key",
+                f"primaryKeyPosition {number} is already the position of key column "
+                f"{taken[number]}, each key column has its own position",
+            )
+        else:
+            taken[number] = name
 
 
 _RULES: Final[tuple[_Rule, ...]] = (
@@ -940,7 +969,8 @@ def rule_issues(doc: Mapping[str, Any], *, path: str, service: str | None) -> li
     used once and a `physicalType` that `canonical_sql_type` accepts, and no column has a
     `physicalName` other than its name or is partitioned. The key of an `upsert` node is the
     columns with `primaryKey: true`: there is one, each is `required: true` and not
-    `DOUBLE PRECISION`, and no two have the same `primaryKeyPosition`.
+    `DOUBLE PRECISION`, and each column of a key of several has its own whole-number
+    `primaryKeyPosition` from 1. A python-csv node is not checked for its key.
     """
     contract = _Contract(doc=doc, file_name=_base_name(path), service=service)
     return _ordered(issue for rule in _RULES for issue in rule(contract))

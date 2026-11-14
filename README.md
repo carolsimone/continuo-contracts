@@ -508,7 +508,7 @@ rules read a document of the shape the schema describes. The module logs nothing
   | `refused_property` | a `continuo` property is one that continuo fills or no Python contract carries, or it sits on the wrong object |
   | `kind_rule` | a node misses a property its kind needs, writes one its kind refuses, or a python-csv node does not replace its table |
   | `column_type` | the `physicalType` of a column is not a type continuo accepts (`canonical_sql_type` refuses it) |
-  | `primary_key` | an `upsert` node has no key, a key column is not `required: true` or is `DOUBLE PRECISION`, or two key columns share a `primaryKeyPosition` |
+  | `primary_key` | an `upsert` node has no key, a key column is not `required: true` or is `DOUBLE PRECISION`, or the columns of a key of several do not each have their own whole-number `primaryKeyPosition` from 1 |
   | `value` | a `continuo` property is written twice in one list, or has a value outside what it allows, the `kind` is not a Python kind, or two columns have one name |
 
   `strict_yaml` is for a caller that reports a `yaml_strict.StrictYamlError` as an issue, and this
@@ -574,10 +574,13 @@ rules read a document of the shape the schema describes. The module logs nothing
     does not write a `physicalName` other than its name, `partitioned: true` or a
     `partitionKeyPosition` other than -1. `unique` is not checked.
   - On an `upsert` node the key is the columns with `primaryKey: true`. There is at least one
-    (`primary_key` at `schema[0].properties`), each is `required: true` and not `DOUBLE PRECISION`,
-    and when there are several no two have the same `primaryKeyPosition`, a position left out
-    being -1. On a `replace` or
-    `append` node `primaryKey` describes the table and is not checked.
+    (`primary_key` at `schema[0].properties`), and each is `required: true` and not
+    `DOUBLE PRECISION`. When there are several, each has its own whole-number `primaryKeyPosition`
+    of 1 or more (`1.0` is 1, so `1` and `1.0` collide), which orders the key. A column of such a
+    key that has none, or has 0 or a negative number, is one issue, and so is a column that
+    repeats the position of an earlier one. A key of one column may leave its position out. A
+    python-csv node gets no key rule, because its `modeType` is already refused. On a `replace`
+    or `append` node `primaryKey` describes the table and is not checked.
 
   The issues come in path order, with the root first and array indexes in numeric order
   (`customProperties[4]` before `customProperties[10]`), then in message order.

@@ -37,9 +37,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   refuses (`kind_rule`). It also checks the columns (a name used once, a `physicalType` that
   `canonical_sql_type` accepts as `column_type`, no `physicalName`, partition or partition key
   position) and the key of an `upsert` node (`primary_key`: one exists, each key column is
-  `required` and not `DOUBLE PRECISION`, positions differ). The name of the table may not be
-  blank, have outer whitespace or hold a dot, and the schema part of the id may not hold a dot.
-  A refusal now says why.
+  `required` and not `DOUBLE PRECISION`, and each column of a key of several has its own
+  whole-number `primaryKeyPosition` from 1). The name of the table may not be blank, have outer
+  whitespace or hold a dot, and the schema part of the id may not hold a dot.
 
 ## [0.1.0] - 2026-11-11
 
