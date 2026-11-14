@@ -45,6 +45,7 @@ REQUIRED_MEMBERS: tuple[str, ...] = tuple(
         "vectors/projection.json",
         "vectors/sql_types.json",
         "vectors/strict_yaml.json",
+        "vocabulary.py",
         "yaml_strict.py",
     )
 )

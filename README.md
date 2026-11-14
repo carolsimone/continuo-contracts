@@ -424,6 +424,56 @@ load("a: &x 1\nb: *x\n")  # StrictYamlError: line 2, column 4: YAML aliases are 
   aliases, merge keys, repeated keys, keys that are not strings, other tags, more than one
   document, nesting that is too deep and values that canonical JSON cannot write.
 
+## vocabulary
+
+```python
+from continuo_contracts.vocabulary import PROPERTIES, VENDOR, ContinuoProperty, continuo_values
+```
+
+An ODCS contract carries custom properties as `{vendor, property, value}` items in a
+`customProperties` list, on the contract, on its schema object and on a quality check. The items
+with `vendor: continuo` are continuo's own, and their names are camel case. This module lists the
+ones the package knows and where each may sit. It reads no file and checks no contract.
+
+- `PROPERTIES` maps each property name to a `ContinuoProperty` row. The mapping is read-only.
+  `sits_on` says which `customProperties` list carries the property, and `python` says who may
+  write it in a Python contract.
+
+  | `sits_on` | `python` | Names |
+  |---|---|---|
+  | `root` | `authored` | `service`, `kind`, `schedule`, `criticality`, `timeoutMinutes`, `script`, `readQueries`, `csvSource`, `extraColumns`, `config`, `secretRef`, `modeType`, `assets` |
+  | `root` | `refused` | `filePath`, `materialization`, `contractEnforced`, `access`, `group`, `deprecationDate`, `freshnessBuildAfter`, `snapshot`, `quoteColumns`, `provenance` |
+  | `schema` | `filled` | `reads` |
+  | `quality` | `authored` | `where`, `warnIf`, `errorIf`, `failCalc` |
+
+  `authored` means the author writes the property. `filled` means continuo writes it and the
+  author may not. `refused` means no Python contract carries it. A property that is not in the
+  mapping is unknown to this release.
+- `continuo_values(custom_properties: object) -> dict[str, Any]` returns the value of each
+  `continuo` item of a `customProperties` list, by property name, in the order of the list. It
+  takes any object, so it can run on a contract that nothing has checked: an argument that is not
+  a list gives `{}`, and an item that is not a mapping, has another vendor, or lacks a string
+  `vendor`, a string `property` or a `value` is skipped. A value is returned as written, whether
+  or not `PROPERTIES` names its property. A property written twice keeps its last value, so a
+  caller that refuses a repeat looks at the list itself.
+
+```python
+continuo_values([
+    {"vendor": "lotse", "property": "schedule", "value": "x"},
+    {"vendor": "continuo", "property": "schedule", "value": "daily"},
+])  # {"schedule": "daily"}
+PROPERTIES["reads"]  # ContinuoProperty(name="reads", sits_on="schema", python="filled")
+```
+
+### Public names
+
+- `VENDOR`: the vendor name of continuo's custom properties, `continuo`.
+- `ContinuoProperty`: one custom property, a frozen dataclass with the fields `name`, `sits_on`
+  (`root`, `schema` or `quality`) and `python` (`authored`, `filled` or `refused`).
+- `PROPERTIES`: the read-only mapping from each property name to its `ContinuoProperty`.
+- `continuo_values`: returns the value of each `continuo` item of a `customProperties` list, by
+  property name, and skips every item it cannot use.
+
 ## errors
 
 ```python

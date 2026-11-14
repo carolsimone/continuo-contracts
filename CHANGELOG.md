@@ -16,6 +16,11 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   document, nesting deeper than `canonical.MAX_DEPTH` and values that `canonical_json` cannot
   write, with a `StrictYamlError` that names the line and the column. The new vector file
   `vectors/strict_yaml.json` pins it.
+- `continuo_contracts.vocabulary`: `PROPERTIES` lists the custom properties of the `continuo`
+  vendor with the object of a contract each sits on (`root`, `schema` or `quality`) and who may
+  write it in a Python contract (`authored`, `filled` or `refused`). `continuo_values()` returns
+  the values of the `continuo` items of a `customProperties` list, `VENDOR` is `continuo`, and
+  `ContinuoProperty` is the row type.
 
 ## [0.1.0] - 2026-11-11
 
