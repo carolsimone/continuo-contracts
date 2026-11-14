@@ -32,6 +32,7 @@ from continuo_contracts.python import (
     KIND_ALIASES,
     MODE_TYPES,
     PYTHON_KINDS,
+    _key_position,
     canonical_sql_type,
 )
 from continuo_contracts.vocabulary import PROPERTIES, VENDOR
@@ -853,20 +854,6 @@ def _columns(contract: _Contract) -> Iterator[Issue]:
                 f"the partitionKeyPosition of column {shown} must be -1 or left out, the table "
                 "of a Python node is not partitioned",
             )
-
-
-def _key_position(value: object) -> int | None:
-    """Return `value` as a position in a key, a whole number from 1 (`1.0` is 1), or `None` when
-    it is not one."""
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int):
-        number = value
-    elif isinstance(value, float) and value.is_integer():
-        number = int(value)
-    else:
-        return None
-    return number if number >= 1 else None
 
 
 def _upsert_key(contract: _Contract) -> Iterator[Issue]:

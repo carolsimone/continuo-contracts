@@ -17,6 +17,10 @@ producers that declare the same node write the same bytes:
 - the primary key is kept only on an `upsert` node.
 
 A node that the projection cannot write the same way everywhere raises `ProjectionError`.
+
+`node_from_odcs` reads the same node from the ODCS contract that declares it, so a node written
+as a contract and a node written as a wire entry that mean the same thing project to the same
+bytes.
 """
 
 import re
@@ -28,6 +32,7 @@ from continuo_contracts.canonical import MAX_DEPTH, canonical_json, normalise_te
 from continuo_contracts.errors import CanonicalJsonError, ProjectionError
 from continuo_contracts.fingerprints import projection_keys
 from continuo_contracts.hashing import sha256_hex
+from continuo_contracts.vocabulary import continuo_values
 
 PYTHON_KINDS: Final = ("python-node", "python-csv", "python-api")
 
@@ -196,6 +201,66 @@ def projection_hash(node: PythonNode) -> str:
         raise _refusal(node.relation, error) from error
 
 
+def node_from_odcs(doc: Mapping[str, Any]) -> PythonNode:
+    """Return the `PythonNode` that the ODCS contract `doc` declares.
+
+    `doc` is a contract that `validate.validate_python_contract` accepted. It is read as it is
+    written: a column type is not canonicalised here (`code_projection` does that), and a value
+    that is outside its set or of the wrong scalar kind, such as a `modeType` that is not one of
+    `MODE_TYPES`, is refused later by `code_projection`.
+
+    - `schema` is the id without `.<table>`, and `table` is the name of the schema object.
+    - `kind` is the `kind` property, read through `KIND_ALIASES` and `python-node` when the
+      contract writes none.
+    - `script`, `extraColumns`, `config`, `secretRef`, `modeType` and `assets` are the properties
+      of those names, each with the default of `PythonNode` when the contract writes none.
+    - `reads` is `readQueries`, or `{"csv": csvSource}` on a `python-csv` node, or empty.
+    - `output_columns` are the properties of the schema object in file order: each has the name
+      and the `physicalType` of the column and is nullable unless it is `required`.
+    - `primary_key` is the names of the columns with `primaryKey: true`, in the order of their
+      `primaryKeyPosition` and then in file order. It is kept whatever the `modeType`, and
+      `code_projection` leaves it out of a node that does not upsert.
+
+    Raises `ProjectionError` for a document that is not a mapping, that has no single schema
+    object with a name, whose id is not `<schema>.<table>`, or whose columns, `readQueries`,
+    `config` or `assets` are not the containers they must be.
+    """
+    if not isinstance(doc, Mapping):
+        raise ProjectionError(f"an ODCS contract must be a mapping, not {type(doc).__name__}")
+    table_object = _table_object(doc)
+    table = _table_name(table_object)
+    properties = _properties(table_object)
+    values = continuo_values(doc.get("customProperties"))
+    declared = values.get("kind", "python-node")
+    kind = KIND_ALIASES.get(declared, declared) if isinstance(declared, str) else declared
+    reads = values.get("readQueries", {})
+    if kind == "python-csv":
+        reads = {"csv": values["csvSource"]} if "csvSource" in values else {}
+    return PythonNode.from_mapping(
+        {
+            "schema": _schema_name(doc.get("id"), table),
+            "table": table,
+            "kind": kind,
+            "script": values.get("script", ""),
+            "reads": reads,
+            "output_columns": [
+                {
+                    "name": column["name"],
+                    "type": column["physicalType"],
+                    "nullable": not column.get("required", False),
+                }
+                for column in properties
+            ],
+            "extra_columns": values.get("extraColumns", "raise"),
+            "config": values.get("config", {}),
+            "secret_ref": values.get("secretRef", ""),
+            "mode_type": values.get("modeType", "replace"),
+            "primary_key": _key_names(properties),
+            "assets": values.get("assets", ()),
+        }
+    )
+
+
 def _refusal(relation: str, error: Exception) -> ProjectionError:
     """Return the `ProjectionError` whose message is `<relation>: <error>`.
 
@@ -205,6 +270,70 @@ def _refusal(relation: str, error: Exception) -> ProjectionError:
     """
     shown = relation.encode("utf-8", "backslashreplace").decode("utf-8")
     return ProjectionError(f"{shown}: {error}")
+
+
+def _table_object(doc: Mapping[str, Any]) -> Mapping[str, Any]:
+    objects = doc.get("schema")
+    if not isinstance(objects, list) or len(objects) != 1 or not isinstance(objects[0], Mapping):
+        raise ProjectionError("the contract must have exactly one schema object")
+    return objects[0]
+
+
+def _table_name(table_object: Mapping[str, Any]) -> str:
+    name = table_object.get("name")
+    if not isinstance(name, str) or not name:
+        raise ProjectionError("the schema object has no name")
+    return name
+
+
+def _schema_name(identifier: object, table: str) -> str:
+    """Return the id `identifier` without the `.<table>` that ends it, the table in lower case."""
+    tail = "." + table.lower()
+    if not isinstance(identifier, str) or not identifier.endswith(tail) or identifier == tail:
+        raise ProjectionError(f"the id {identifier!r} is not <schema>{tail}")
+    return identifier[: -len(tail)]
+
+
+def _properties(table_object: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    """Return the columns of the schema object, each checked to be a mapping with a name and a
+    `physicalType`."""
+    properties = table_object.get("properties", [])
+    if not isinstance(properties, list):
+        raise ProjectionError(f"properties must be a list, not {type(properties).__name__}")
+    for index, column in enumerate(properties):
+        where = f"properties[{index}]"
+        if not isinstance(column, Mapping):
+            raise ProjectionError(f"{where} must be a mapping, not {type(column).__name__}")
+        for required in ("name", "physicalType"):
+            if required not in column:
+                raise ProjectionError(f"{where} has no {required!r} field")
+    return properties
+
+
+def _key_position(value: object) -> int | None:
+    """Return `value` as a position in a key, a whole number from 1 (`1.0` is 1), or `None` when
+    it is not one. The validator reads the positions of an upsert key through this function, so
+    that it and `node_from_odcs` order a key the same way."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        number = value
+    elif isinstance(value, float) and value.is_integer():
+        number = int(value)
+    else:
+        return None
+    return number if number >= 1 else None
+
+
+def _key_names(properties: Sequence[Mapping[str, Any]]) -> list[Any]:
+    """Return the names of the columns with `primaryKey: true`: those with a position first, by
+    position, then the others, and a tie by file order."""
+    keyed = []
+    for index, column in enumerate(properties):
+        if column.get("primaryKey") is True:
+            position = _key_position(column.get("primaryKeyPosition", -1))
+            keyed.append((position is None, position or 0, index, column["name"]))
+    return [name for _, _, _, name in sorted(keyed, key=lambda item: item[:3])]
 
 
 def _convert_containers(values: dict[str, Any]) -> None:

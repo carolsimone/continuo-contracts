@@ -100,7 +100,8 @@ fold3("1" * 64, shared_hash({}), "2" * 64)  # "sha256:23208c80..."
 
 ```python
 from continuo_contracts.python import (
-    PythonColumn, PythonNode, canonical_sql_type, code_projection, projection_hash,
+    PythonColumn, PythonNode, canonical_sql_type, code_projection, node_from_odcs,
+    projection_hash,
 )
 ```
 
@@ -127,6 +128,22 @@ bytes. The projection is the node's `raw_code` in continuo's code bundle, and `p
   order). A `python-csv` node has no script and no assets, reads exactly `csv`, and only
   replaces. Only a `python-api` node has a `secret_ref`, and it reads nothing.
 - `projection_hash(node)` returns the hash of that projection.
+- `node_from_odcs(doc)` returns the `PythonNode` that a Python node's ODCS contract declares, for a
+  document that `validate.validate_python_contract` accepted. `schema` is the id without
+  `.<table>`, `table` is the name of the schema object, `kind` is the `kind` property (a
+  `python-model` is `python-node`, and a contract that writes none is a `python-node`) and
+  `script`, `extraColumns`, `config`, `secretRef`, `modeType` and `assets` are the properties of
+  those names, each with the default of `PythonNode`. `reads` is `readQueries`, or
+  `{"csv": csvSource}` on a `python-csv` node, or empty. The columns are the properties of the
+  schema object in file order, each with its `physicalType` as written and nullable unless it is
+  `required`. `primary_key` is the names of the columns with `primaryKey: true` in the order of
+  their `primaryKeyPosition` (a whole number from 1, and `1.0` is 1), then in file order, whatever
+  the `modeType`: `code_projection` leaves the key out of a node that does not upsert. A document
+  that is not a mapping, that has no single named schema object, whose id is not
+  `<schema>.<table>`, or whose columns, `readQueries`, `config` or `assets` are not the
+  containers they must be raises `ProjectionError`. The projection of a node read this way is the
+  projection of the same node written as a wire entry, so `projection_hash` does not move when a
+  node moves from one form to the other.
 - `canonical_sql_type(raw)` strips outer whitespace, ignores case and writes `INT` as `INTEGER`,
   `DECIMAL(p, s)` as `NUMERIC(p,s)` and `VARCHAR(064)` as `VARCHAR(64)`. It supports `BIGINT`,
   `INT`, `INTEGER`, `DOUBLE PRECISION`, `TEXT`, `TIMESTAMP`, `DATE`, `BOOLEAN`, `NUMERIC(p,s)`,
@@ -263,6 +280,7 @@ hash, and compares them with the pinned values.
 - `code_projection`: the code projection of a node, one entry for each key of `projection_keys()`.
 - `projection_hash`: the lowercase hex SHA-256 of the canonical JSON of the code projection, which
   is the config part of a Python node's `content_hash`.
+- `node_from_odcs`: the `PythonNode` that a Python node's ODCS contract declares.
 
 ## fingerprints
 
@@ -550,8 +568,8 @@ rules read a document of the shape the schema describes. The module logs nothing
     gives one issue.
   - The contract writes `schedule` and `criticality`, as customProperties of the contract: a
     missing one is a `missing_field` at `customProperties`. `schedule` and `script` are strings
-    with text in them. `criticality` is `REGULATORY`, `CORE` or `SECONDARY`. `timeoutMinutes` is a
-    whole number from 1 to 10080 (a bool or a float is not). `extraColumns` is `raise` or `warn`.
+    with text in them. `criticality` is `REGULATORY`, `CORE` or `SECONDARY`. `timeoutMinutes` is an
+    integer from 1 to 10080 (a bool or a float is not). `extraColumns` is `raise` or `warn`.
     `modeType` is `replace`, `append` or `upsert`. `config` is a mapping. `secretRef` is the name
     of a Kubernetes Secret, `continuo-api-` and then lowercase letters, digits and `-`, ending
     with a letter or a digit, at most 253 characters. `csvSource` is `s3://<bucket>/<key>` or

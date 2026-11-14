@@ -40,6 +40,10 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `required` and not `DOUBLE PRECISION`, and each column of a key of several has its own
   whole-number `primaryKeyPosition` from 1). The name of the table may not be blank, have outer
   whitespace or hold a dot, and the schema part of the id may not hold a dot.
+- `continuo_contracts.python.node_from_odcs()` returns the `PythonNode` that a Python node's ODCS
+  contract declares, so its `code_projection()` and `projection_hash()` are those of the same node
+  written as a wire entry. The three demo nodes of service-py are checked in as ODCS contracts
+  next to the old entries they replace, and a test holds their projections to the old ones.
 
 ## [0.1.0] - 2026-11-11
 
