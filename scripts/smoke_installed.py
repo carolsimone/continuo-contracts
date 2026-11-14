@@ -3,23 +3,27 @@
 Install the wheel into a clean virtual environment, then run this script with that environment's
 interpreter in isolated mode, from a directory that is not the checkout:
 `<venv>/bin/python -I scripts/smoke_installed.py`. The package must come from a `site-packages`
-directory, `fingerprints.yaml` must load with entries in every section, every case of the five
-vector files must pass when read through `importlib.resources`, and canonical JSON must give the
-documented bytes. Exit status 0 means all of it held, 1 means a failure was logged.
+directory, `fingerprints.yaml` must load with entries in every section, the packaged ODCS schema
+must load with its pinned bytes, every case of the six vector files must pass when read through
+`importlib.resources`, and canonical JSON must give the documented bytes. Exit status 0 means all
+of it held, 1 means a failure was logged.
 """
 
 import json
 import logging
 import sys
+from collections.abc import Mapping
 from importlib import resources
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import continuo_contracts
-from continuo_contracts import yaml_strict
+from continuo_contracts import schema, yaml_strict
 from continuo_contracts.canonical import canonical_json
+from continuo_contracts.contract import contract_hash, normalise_python
 from continuo_contracts.errors import (
     CanonicalJsonError,
+    ContractsError,
     HashInputError,
     ProjectionError,
     StrictYamlError,
@@ -32,6 +36,7 @@ from continuo_contracts.python import (
     code_projection,
     projection_hash,
 )
+from continuo_contracts.validate import validate_python_contract
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +68,17 @@ def _fingerprint_failures() -> list[str]:
         for section in SECTIONS
         if not fingerprints.entries(section)
     ]
+
+
+def _schema_failures() -> list[str]:
+    """Return a problem when the packaged ODCS schema does not load."""
+    try:
+        loaded = schema.load()
+    except ContractsError as error:
+        return [f"the packaged ODCS schema does not load: {error}"]
+    if "$defs" not in loaded:
+        return ["the packaged ODCS schema has no $defs"]
+    return []
 
 
 def _projection_failures(cases: list[dict[str, Any]]) -> list[str]:
@@ -169,6 +185,47 @@ def _strict_yaml_failures(cases: list[dict[str, Any]]) -> list[str]:
     return failures
 
 
+def _contract_result(case: dict[str, Any]) -> dict[str, Any]:
+    """Return the stored form and the hash of the contract vector `case`, or its issues as
+    `{path, reason}`, a strict YAML refusal being the issue `{"path": "$", "reason":
+    "strict_yaml"}`."""
+    try:
+        doc = yaml_strict.load(case["text"])
+    except StrictYamlError:
+        return {"issues": [{"path": "$", "reason": "strict_yaml"}]}
+    issues = validate_python_contract(doc, path=case["path"], service=case["service"])
+    if issues:
+        return {"issues": [{"path": issue.path, "reason": issue.reason} for issue in issues]}
+    # The contract check accepts only a mapping, so `doc` is one here.
+    stored = normalise_python(
+        cast(Mapping[str, Any], doc), service=case["service"], reads=case["reads"]
+    )
+    return {"stored": stored, "contract_hash": contract_hash(stored)}
+
+
+def _contract_failures(cases: list[dict[str, Any]]) -> list[str]:
+    """Return the contract vector cases whose stored form, hash or issues differ."""
+    failures: list[str] = []
+    for case in cases:
+        name = case["name"]
+        try:
+            result = _contract_result(case)
+        except ContractsError as error:
+            failures.append(f"contract vector {name!r}: refused: {error}")
+            continue
+        if "issues" in case:
+            if result != {"issues": case["issues"]}:
+                failures.append(f"contract vector {name!r}: gave {result!r}")
+        elif "issues" in result:
+            failures.append(f"contract vector {name!r}: issues {result['issues']!r}")
+        else:
+            if result["stored"] != case["stored"]:
+                failures.append(f"contract vector {name!r}: the stored form differs")
+            if result["contract_hash"] != case["contract_hash"]:
+                failures.append(f"contract vector {name!r}: the hash is {result['contract_hash']}")
+    return failures
+
+
 def _canonical_json_failures() -> list[str]:
     """Return a problem when `canonical_json` does not give the documented bytes."""
     expected = b'{"a":true,"b":[1,"' + NON_ASCII_UTF8 + b'"]}'
@@ -185,14 +242,17 @@ def main() -> int:
     canonical_vectors = _vector_cases("canonical_json.json")
     hashing = _vector_cases("hashing.json")
     strict_yaml = _vector_cases("strict_yaml.json")
+    contracts = _vector_cases("contracts.json")
     failures = [
         *_installed_failures(),
         *_fingerprint_failures(),
+        *_schema_failures(),
         *_projection_failures(projections),
         *_sql_type_failures(sql_types),
         *_canonical_vector_failures(canonical_vectors),
         *_hashing_failures(hashing),
         *_strict_yaml_failures(strict_yaml),
+        *_contract_failures(contracts),
         *_canonical_json_failures(),
     ]
     for name, cases in (
@@ -201,6 +261,7 @@ def main() -> int:
         ("canonical_json.json", canonical_vectors),
         ("hashing.json", hashing),
         ("strict_yaml.json", strict_yaml),
+        ("contracts.json", contracts),
     ):
         if not cases:
             failures.append(f"{name} holds no cases")
@@ -210,7 +271,7 @@ def main() -> int:
         return 1
     logger.info(
         "continuo-contracts %s installed at %s: %d projection, %d sql type, %d canonical json, "
-        "%d hashing and %d strict yaml cases pass",
+        "%d hashing, %d strict yaml and %d contract cases pass",
         continuo_contracts.__version__,
         Path(continuo_contracts.__file__).parent,
         len(projections),
@@ -218,6 +279,7 @@ def main() -> int:
         len(canonical_vectors),
         len(hashing),
         len(strict_yaml),
+        len(contracts),
     )
     return 0
 

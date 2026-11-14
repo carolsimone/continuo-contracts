@@ -44,6 +44,15 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   contract declares, so its `code_projection()` and `projection_hash()` are those of the same node
   written as a wire entry. The three demo nodes of service-py are checked in as ODCS contracts
   next to the old entries they replace, and a test holds their projections to the old ones.
+- `continuo_contracts.contract`: `normalise_python()` builds the stored form of a Python contract
+  (`version: "0"`, `status: active`, the table's names, the `kind` and `service` properties, the
+  `reads` tables in lower case, sorted and listed once, and a `logicalType` per column from
+  `logical_type()`), written in the canonical form: description text stripped, quality severity
+  lower-cased, empty values, ODCS defaults and continuo's default `modeType` and `extraColumns`
+  dropped, whole-number floats stored as integers and the set-like lists sorted, with free-form
+  values kept as written. `contract_hash()` hashes the stored form without `apiVersion`, `kind`,
+  `status` and `version`. The new vector file `vectors/contracts.json` pins the stored form and
+  the `contract_hash` of six contracts and the issues of four refused ones.
 
 ## [0.1.0] - 2026-11-11
 

@@ -623,6 +623,89 @@ validate_python_contract(doc, path="contracts/kpis.odcs.yaml", service="service-
 - `validate_python_contract`: every issue of a Python contract, the schema issues first and the
   rules once the schema accepts the document.
 
+## contract
+
+```python
+from continuo_contracts.contract import contract_hash, logical_type, normalise_python
+```
+
+continuo stores a Python contract in one canonical shape, its stored form, and fingerprints it
+with `contract_hash`. Two files that mean the same thing store the same document and get the same
+hash, whatever their line endings, byte order mark, key order or quoting. The module logs nothing.
+
+- `normalise_python(doc: Mapping[str, Any], *, service: str, reads: Sequence[str]) -> dict[str,
+  Any]` returns the stored form of a contract that `validate.validate_python_contract` accepted,
+  as a new dict, and leaves `doc` unchanged. `service` is the service of the release, and `reads`
+  lists the tables that the node's read queries name, each `<schema>.<table>`; the library never
+  reads SQL, so the caller lists them. The stored form is `doc` with these values filled:
+  - `version: "0"` and `status: active`, in place of the written ones;
+  - the root `name` and the `physicalName` of the schema object, set to the table when absent;
+  - the `continuo` properties `kind` (the kind of the node, `python-model` stored as
+    `python-node`, and `python-node` when none is written) and `service`, always written;
+  - on each column, the `logicalType` and `logicalTypeOptions` that `logical_type` gives for its
+    `physicalType`, in place of any written ones, and neither when it gives none;
+  - when `reads` is not empty, `{vendor: continuo, property: reads, value: [...]}` on the schema
+    object, with the tables in lower case, sorted by code point and listed once.
+
+  It then writes the document in the canonical form, which walks the ODCS structure and, on each
+  object:
+  - strips description text: a `description` string, and each string of the contract's
+    `description` object, gets LF line endings and loses its outer ASCII whitespace
+    (`canonical.normalise_text`); a description is never removed for its content;
+  - lower-cases the `severity` of a quality rule;
+  - drops a value that is null, an empty string, an empty list or an empty object, and a value
+    equal to the ODCS default of its object type: `deprecated: false` on a schema object or a
+    column; `required: false`, `unique: false`, `primaryKeyPosition: -1`, `partitioned: false`,
+    `partitionKeyPosition: -1`, `criticalDataElement: false` and `semanticType: column` on a
+    column; `type: library` on a quality rule; `type: foreignKey` on a relationship;
+  - drops a custom property whose value is null or empty, and the `continuo` properties that
+    say continuo's default, `modeType: replace` and `extraColumns: raise`;
+  - sorts `customProperties`, `tags`, `roles`, `quality`, `relationships` and
+    `authoritativeDefinitions` by the canonical JSON of each item, and keeps every other list,
+    the columns in `properties` among them, in file order.
+
+  A free-form value keeps its content as written: the `value` of a custom property, the
+  `examples` of a column, the `implementation`, `arguments`, `mustBe` and `mustNotBe` of a
+  quality rule, the `value` and `valueExt` of a service level and the `value` of an enum entry.
+  Nothing inside one is stripped, dropped or sorted, so a `tags` list inside a `config` keeps
+  its order. A free-form `examples`, `implementation` or `arguments` that is empty as a whole is
+  dropped; the others stay even when null or empty, because there the author compares with that
+  value. Everywhere, free-form values included, a float that is a whole number within
+  -(2**53 - 1) to 2**53 - 1 becomes an integer, so `batch_size: 10.0` is stored as `10`.
+  `physicalType` is stored as written.
+
+  Raises `HashInputError` when `reads` is one string, or lists a table that is not a string with
+  a dot, and `CanonicalJsonError` when an item of a set-like list holds a value that canonical
+  JSON cannot write, which a document that `yaml_strict.load` read never holds.
+- `contract_hash(stored: Mapping[str, Any]) -> str` returns `"sha256:"` and the lowercase hex
+  SHA-256 of the RFC 8785 canonical JSON of the stored form without its root keys `apiVersion`,
+  `kind`, `status` and `version`, 71 characters in all. Every stored form holds those four with
+  the same values, so leaving them out changes nothing but keeps the hash free of the version
+  continuo numbers from history. `stored` is hashed as it is, so pass the result of
+  `normalise_python`. Raises `CanonicalJsonError` for a value that canonical JSON cannot write.
+- `logical_type(physical_type: str) -> dict[str, Any] | None` returns the ODCS logical type of an
+  SQL type, read as `python.canonical_sql_type` writes it: `INTEGER` and `BIGINT` are
+  `{"logicalType": "integer"}`, `NUMERIC(p,s)` and `DOUBLE PRECISION` are `number`, `TEXT` is
+  `string`, `VARCHAR(n)` and `CHAR(n)` are
+  `{"logicalType": "string", "logicalTypeOptions": {"maxLength": n}}`, and `DATE`, `TIMESTAMP`
+  and `BOOLEAN` are `date`, `timestamp` and `boolean`. A type that `canonical_sql_type` refuses
+  gives `None`. Each call returns a new dict.
+
+```python
+stored = normalise_python(doc, service="service-py", reads=["Analytics.Daily_Transactions"])
+stored["schema"][0]["customProperties"]
+# [{"vendor": "continuo", "property": "reads", "value": ["analytics.daily_transactions"]}]
+contract_hash(stored)  # "sha256:15268bb30f205e0e5cfb4791715391f3cf7ba527a671f319a6b77e1b087dda59"
+logical_type("varchar(64)")  # {"logicalType": "string", "logicalTypeOptions": {"maxLength": 64}}
+```
+
+### Public names
+
+- `normalise_python`: returns the stored form of a Python contract that the contract check
+  accepted, written in the canonical form.
+- `contract_hash`: returns the `contract_hash` of a stored form, `"sha256:"` and 64 hex digits.
+- `logical_type`: returns the ODCS logical type of an SQL type, or `None`.
+
 ## errors
 
 ```python
@@ -645,7 +728,8 @@ surrogate, and an argument of the wrong type can raise `TypeError` or `Attribute
 - `CanonicalJsonError`: `canonical_json` refuses a value that canonical JSON cannot represent, and
   the message starts with the JSON path of that value.
 - `HashInputError`: `shared_fold` and `shared_hash` refuse a unit key or a digest that is in a
-  form they do not accept, and the message names the key.
+  form they do not accept, and the message names the key. `contract.normalise_python` refuses a
+  `reads` entry that is not `<schema>.<table>`, and the message names the entry.
 - `ProjectionError`: `canonical_sql_type`, `PythonNode.from_mapping`, `code_projection` and
   `projection_hash` refuse an SQL type or a Python node.
 - `FingerprintsFileError`: `parse_fingerprints` and `load` refuse a fingerprints file that is not
@@ -659,7 +743,7 @@ surrogate, and an argument of the wrong type can raise `TypeError` or `Attribute
 
 ## Vectors
 
-The wheel ships five data files in `continuo_contracts/vectors/`. Each is a JSON list of cases
+The wheel ships six data files in `continuo_contracts/vectors/`. Each is a JSON list of cases
 that give the inputs and the expected output of one part of the package, so a producer in any
 language can check its own implementation against the same values. Read a file with
 `importlib.resources.files("continuo_contracts") / "vectors" / "<file>"`. Every consumer runs
@@ -699,6 +783,18 @@ every case of every file.
   ones, aliases, merge keys, two documents, two byte order marks, a control character and a lone
   surrogate. The file is ASCII, so the byte order mark and the line endings are written as JSON
   escapes.
+- `contracts.json` is a list of `{"name", "path", "service", "reads", "text", "stored",
+  "contract_hash"}`. `text` is a whole Python contract file, `path` its repository path, `service`
+  the service of the release and `reads` the tables its read queries name. Read `text` with
+  `yaml_strict.load`, check it with `validate.validate_python_contract(doc, path=path,
+  service=service)`, and pass it to `contract.normalise_python(doc, service=service,
+  reads=reads)`: the result is `stored`, and `contract.contract_hash(stored)` is `contract_hash`.
+  A case `{"name", "path", "service", "reads", "text", "issues"}` is refused, and `issues` lists
+  the `{"path", "reason"}` of each issue in order; a text that `yaml_strict.load` refuses gives
+  the one issue `{"path": "$", "reason": "strict_yaml"}`. The valid cases are the three demo
+  contracts of service-py and three contracts that write every field a Python contract may carry,
+  one per kind. The refused ones are a `NUMERIC(12)` column, a contract that names its
+  `servers`, a file name that does not match the table and a repeated key. The file is ASCII.
 
 ## Pinning
 
@@ -713,6 +809,9 @@ A hash that this package computes is a contract. A change that moves any hash pi
 install, so it ships only together with a re-baseline in continuo: a continuo release of each
 service, run once after such a change, that recomputes every node's stored hash with the new
 code and validates and reloads nothing.
+
+A `contract_hash` pinned in `vectors/contracts.json` is a contract in the same way: a change that
+moves one gives every Python node of every install a new contract version.
 
 ## Contributing
 

@@ -23,10 +23,11 @@ class CanonicalJsonError(ContractsError):
 
 
 class HashInputError(ContractsError):
-    """A hash input in a form this package refuses, such as a unit key that is empty or a unit
-    digest that is not 64 lowercase hex characters.
+    """A hash input in a form this package refuses, such as a unit key that is empty, a unit
+    digest that is not 64 lowercase hex characters or a `reads` entry of a contract that is not
+    `<schema>.<table>`.
 
-    The message names the offending unit key.
+    The message names the offending unit key or `reads` entry.
     """
 
 

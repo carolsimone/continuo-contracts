@@ -32,6 +32,7 @@ REQUIRED_MEMBERS: tuple[str, ...] = tuple(
     for name in (
         "__init__.py",
         "canonical.py",
+        "contract.py",
         "errors.py",
         "fingerprints.py",
         "fingerprints.yaml",
@@ -42,6 +43,7 @@ REQUIRED_MEMBERS: tuple[str, ...] = tuple(
         "schema.py",
         "validate.py",
         "vectors/canonical_json.json",
+        "vectors/contracts.json",
         "vectors/hashing.json",
         "vectors/projection.json",
         "vectors/sql_types.json",

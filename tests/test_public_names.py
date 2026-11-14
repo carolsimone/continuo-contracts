@@ -25,6 +25,7 @@ MODULES = (
     "yaml_strict",
     "vocabulary",
     "validate",
+    "contract",
     "errors",
 )
 LISTING = "### Public names\n"
