@@ -499,18 +499,20 @@ rules read a document of the shape the schema describes. The module logs nothing
   |---|---|
   | `odcs_schema` | the document does not fit the ODCS JSON schema |
   | `api_version` | `apiVersion` is not `v3.2.0` |
-  | `identity` | the id, `name` or `physicalName` does not agree with the table, the id is not in lower case, or the contract does not hold exactly one schema object that is a table |
+  | `identity` | the id, `name` or `physicalName` does not agree with the table, the id is not in lower case or has a dot in its schema part, the name of the table is blank, has outer whitespace or has a dot, or the contract does not hold exactly one schema object that is a table |
   | `file_name` | the base name of the file is neither `<table>.odcs.yaml` nor `<schema>.<table>.odcs.yaml` |
   | `service` | a `service` property names another service than the release's |
-  | `missing_field` | `team.name` is missing |
-  | `refused_field` | the contract writes `servers`, `tenant` or `contractCreatedTs` |
+  | `missing_field` | `team.name`, `schedule`, `criticality`, the columns or the `physicalType` of a column is missing |
+  | `refused_field` | the contract writes `servers`, `tenant` or `contractCreatedTs`, or a column has a `physicalName` other than its name, is partitioned or has a partition key position |
   | `unknown_property` | a `continuo` property is not in `vocabulary.PROPERTIES` |
   | `refused_property` | a `continuo` property is one that continuo fills or no Python contract carries, or it sits on the wrong object |
-  | `value` | a `continuo` property is written twice in one list |
+  | `kind_rule` | a node misses a property its kind needs, writes one its kind refuses, or a python-csv node does not replace its table |
+  | `column_type` | the `physicalType` of a column is not a type continuo accepts (`canonical_sql_type` refuses it) |
+  | `primary_key` | an `upsert` node has no key, a key column is not `required: true` or is `DOUBLE PRECISION`, or two key columns share a `primaryKeyPosition` |
+  | `value` | a `continuo` property is written twice in one list, or has a value outside what it allows, the `kind` is not a Python kind, or two columns have one name |
 
   `strict_yaml` is for a caller that reports a `yaml_strict.StrictYamlError` as an issue, and this
-  module never gives it. `kind_rule`, `column_type` and `primary_key` name the problems of a node's
-  kind, its column types and its key.
+  module never gives it.
 - `schema_issues(doc: object) -> list[Issue]` gives one `odcs_schema` issue for each error of
   `doc` against the JSON schema, and an empty list when it fits. `doc` can be any value, as
   `yaml_strict.load` returns it: one that is not a mapping gives a single issue at `$`. Two errors
@@ -524,8 +526,8 @@ rules read a document of the shape the schema describes. The module logs nothing
   check. The rules are these:
   - `apiVersion` is `v3.2.0`.
   - The contract holds one schema object, and its `physicalType` is `table`. Its `name` is the
-    table, which is not empty. The `id` is in lower case and ends in `.<table>` in lower case after
-    a schema name. The root `name` and the `physicalName` of the schema object, when written,
+    table. The `id` is in lower case and ends in `.<table>` in lower case after a schema name that
+    has no dot. The root `name` and the `physicalName` of the schema object, when written,
     equal the table.
   - The base name of the file is `<table>.odcs.yaml`, with the table as written, or
     `<schema>.<table>.odcs.yaml`, with the schema part of the id. The issue is at `$`.
@@ -540,7 +542,42 @@ rules read a document of the shape the schema describes. The module logs nothing
     is never looked at, whatever its name, and a `customProperties` key inside a free-form value
     (`value`, `examples`, `arguments`, `implementation`) is data. A property that sits where it may
     is then checked for a repeat, which is a `value` issue at each later copy that names the place of
-    the first, and a `service` property must be the release's service.
+    the first, and a `service` property must be the release's service. Every refusal says why, such
+    as that continuo fills `reads` from the tables the read queries name, or that a dbt property
+    says nothing about a Python node.
+  - The name of the table is not blank, has no whitespace at either end and has no dot, and the
+    schema part of the id has no dot. A table name that fails is compared with nothing else, so it
+    gives one issue.
+  - The contract writes `schedule` and `criticality`, as customProperties of the contract: a
+    missing one is a `missing_field` at `customProperties`. `schedule` and `script` are strings
+    with text in them. `criticality` is `REGULATORY`, `CORE` or `SECONDARY`. `timeoutMinutes` is a
+    whole number from 1 to 10080 (a bool or a float is not). `extraColumns` is `raise` or `warn`.
+    `modeType` is `replace`, `append` or `upsert`. `config` is a mapping. `secretRef` is the name
+    of a Kubernetes Secret, `continuo-api-` and then lowercase letters, digits and `-`, ending
+    with a letter or a digit, at most 253 characters. `csvSource` is `s3://<bucket>/<key>` or
+    `https://<host>[/...]`, each part with text. `readQueries` is a mapping of names with text to
+    queries with text, at least one. `assets` is a list of paths with text, none absolute, none
+    with a `..` segment and none listed twice. A bad value is a `value` issue at the item of the
+    property.
+  - The `kind` is `python-node` when the contract writes none, `python-model` is read as
+    `python-node`, and any other word that is not `python-csv` or `python-api` is one `value`
+    issue that also skips the rules below. A `python-node` writes `script` and `readQueries` and
+    does not write `csvSource` or `secretRef`. A `python-csv` writes `csvSource`, does not write
+    `script`, `readQueries`, `secretRef` or `assets` and replaces its table, so its `modeType` is
+    `replace`. A `python-api` writes `script`, may write `secretRef` and `assets`, and does not
+    write `readQueries` or `csvSource`. A property that is missing is a `kind_rule` issue at
+    `customProperties`, and one that is refused is a `kind_rule` issue at its item and is not
+    checked for its value.
+  - The table lists at least one column (`missing_field` at `schema[0].properties`). Each column
+    has a name with text, used once, and a `physicalType` (a `missing_field` when it is left out)
+    that `canonical_sql_type` accepts, a `column_type` issue at `physicalType` otherwise. A column
+    does not write a `physicalName` other than its name, `partitioned: true` or a
+    `partitionKeyPosition` other than -1. `unique` is not checked.
+  - On an `upsert` node the key is the columns with `primaryKey: true`. There is at least one
+    (`primary_key` at `schema[0].properties`), each is `required: true` and not `DOUBLE PRECISION`,
+    and when there are several no two have the same `primaryKeyPosition`, a position left out
+    being -1. On a `replace` or
+    `append` node `primaryKey` describes the table and is not checked.
 
   The issues come in path order, with the root first and array indexes in numeric order
   (`customProperties[4]` before `customProperties[10]`), then in message order.

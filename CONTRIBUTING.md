@@ -87,7 +87,8 @@ not a service, and layers would add indirection without a second implementation.
 `errors` and `vocabulary` import nothing from the package. `canonical`, `hashing`, `fingerprints` and
 `schema` import only `errors` (`fingerprints` also PyYAML), `yaml_strict` imports `canonical`,
 `errors` and PyYAML, `python` imports `canonical`, `errors`, `hashing` and `fingerprints`,
-`validate` imports `schema`, `vocabulary` and jsonschema, and nothing imports `scripts` or `tests`. The only files the package reads are the packaged `fingerprints.yaml`, in
+`validate` imports `errors`, `python`, `schema`, `vocabulary` and jsonschema, and nothing imports
+`scripts` or `tests`. The only files the package reads are the packaged `fingerprints.yaml`, in
 `fingerprints.load()`, and the packaged ODCS schema, in `schema.load()`. A split into layers is
 proposed only when a module gets a second reason to change.
 

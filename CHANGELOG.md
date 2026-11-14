@@ -29,6 +29,17 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `servers`, `tenant`, `contractCreatedTs`, a `continuo` property that is unknown, filled by
   continuo, not carried by a Python contract or on the wrong object, and a `continuo` property
   written twice.
+- `continuo_contracts.validate` also checks what depends on the kind of the node: `schedule` and
+  `criticality` are written, each property has a value of its kind (`timeoutMinutes` is 1 to
+  10080, `secretRef` is a `continuo-api-` Secret name of at most 253 characters, `csvSource` is
+  `s3://<bucket>/<key>` or `https://<host>`, `readQueries` and `assets` are well formed), and a
+  python-node, python-csv or python-api writes the properties its kind needs and none that it
+  refuses (`kind_rule`). It also checks the columns (a name used once, a `physicalType` that
+  `canonical_sql_type` accepts as `column_type`, no `physicalName`, partition or partition key
+  position) and the key of an `upsert` node (`primary_key`: one exists, each key column is
+  `required` and not `DOUBLE PRECISION`, positions differ). The name of the table may not be
+  blank, have outer whitespace or hold a dot, and the schema part of the id may not hold a dot.
+  A refusal now says why.
 
 ## [0.1.0] - 2026-11-11
 

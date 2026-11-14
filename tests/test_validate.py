@@ -345,6 +345,79 @@ def test_a_table_with_no_name_is_refused():
     assert _found(_check(doc, path="contracts/x.odcs.yaml")) == [("schema[0].name", "identity")]
 
 
+def _rename_table(doc, name):
+    """Give the table, the root name and the id the same new name."""
+    doc["name"] = name
+    doc["schema"][0]["name"] = name
+    doc["id"] = f"analytics.{name}"
+
+
+@pytest.mark.parametrize(
+    "name",
+    [" ", "\t", " \n ", " kpis", "kpis ", "\tkpis", "kpis\n", "a.b", "kpis.", ".kpis", "a..b"],
+)
+def test_a_table_name_that_is_blank_has_outer_whitespace_or_has_a_dot_is_refused(name):
+    doc = _kpis()
+    _rename_table(doc, name)
+    assert _found(_check(doc, path=f"contracts/{name}.odcs.yaml")) == [
+        ("schema[0].name", "identity")
+    ]
+
+
+@pytest.mark.parametrize("name", [" ", " kpis", "kpis ", "a.b"])
+def test_a_table_name_that_is_refused_is_compared_with_nothing(name):
+    doc = _kpis()
+    doc["schema"][0]["name"] = name
+    assert _found(_check(doc)) == [("schema[0].name", "identity")]
+
+
+def test_each_table_name_fault_says_what_is_wrong():
+    messages = {}
+    for name in ("", " ", " kpis", "a.b"):
+        doc = _kpis()
+        doc["schema"][0]["name"] = name
+        (issue,) = _check(doc)
+        messages[name] = issue.message
+    assert "blank" in messages[""]
+    assert messages[""] == messages[" "]
+    assert "whitespace" in messages[" kpis"]
+    assert "dot" in messages["a.b"]
+
+
+@pytest.mark.parametrize("name", ["kpis_2", "Kpis", "k-pis", "kpis kpis", "k\u00e4se"])
+def test_a_table_name_with_inner_characters_is_not_refused_by_the_name_rule(name):
+    doc = _kpis()
+    _rename_table(doc, name)
+    doc["id"] = f"analytics.{name.lower()}"
+    assert _check(doc, path=f"contracts/{name}.odcs.yaml") == []
+
+
+@pytest.mark.parametrize(
+    "bad_id",
+    [
+        "a.b.py_daily_kpis",
+        "analytics..py_daily_kpis",
+        ".analytics.py_daily_kpis",
+        "a.b.c.py_daily_kpis",
+    ],
+)
+def test_the_schema_part_of_the_id_has_no_dot(bad_id):
+    doc = _kpis()
+    doc["id"] = bad_id
+    (issue,) = _check(doc)
+    assert (issue.path, issue.reason) == ("id", "identity")
+    assert "without a dot" in issue.message
+
+
+def test_a_file_named_after_an_id_whose_schema_has_a_dot_is_refused_too():
+    doc = _kpis()
+    doc["id"] = "a.b.py_daily_kpis"
+    assert _found(_check(doc, path="a.b.py_daily_kpis.odcs.yaml")) == [
+        ("$", "file_name"),
+        ("id", "identity"),
+    ]
+
+
 def test_an_id_in_capitals_and_the_wrong_table_gives_two_issues():
     doc = _kpis()
     doc["id"] = "Analytics.other"
@@ -405,6 +478,53 @@ def test_a_filled_property_names_who_fills_it():
     (issue,) = _check(doc)
     assert "reads" in issue.message
     assert "fills" in issue.message
+
+
+def test_a_filled_property_says_what_it_is_filled_from():
+    doc = _kpis()
+    doc["schema"][0]["customProperties"] = [_continuo("reads", ["a.b"])]
+    (issue,) = _check(doc)
+    assert issue.message == (
+        "continuo fills `reads` from the tables the read queries name, an author may not write it"
+    )
+
+
+@pytest.mark.parametrize(
+    "name",
+    "filePath materialization contractEnforced access group deprecationDate freshnessBuildAfter "
+    "snapshot quoteColumns".split(),
+)
+def test_a_dbt_property_is_refused_because_it_says_nothing_about_a_python_node(name):
+    doc = _kpis()
+    doc["customProperties"].append(_continuo(name, "x"))
+    (issue,) = _check(doc)
+    assert issue.message == (
+        f"a Python contract does not carry `{name}`: it describes how dbt builds or governs a "
+        "node, and nothing reads it on a Python node"
+    )
+
+
+def test_provenance_is_refused_because_continuo_adds_it_to_the_published_file():
+    doc = _kpis()
+    doc["customProperties"].append(_continuo("provenance", {}))
+    (issue,) = _check(doc)
+    assert "published file" in issue.message
+    assert "`provenance`" in issue.message
+
+
+def test_an_unknown_property_says_to_check_the_spelling():
+    doc = _kpis()
+    doc["customProperties"].append(_continuo("entity", "Transaction"))
+    (issue,) = _check(doc)
+    assert "`entity`" in issue.message
+    assert "spelling" in issue.message
+
+
+def test_a_repeated_property_says_why_it_is_refused():
+    doc = _kpis()
+    doc["customProperties"].append(_continuo("schedule", "hourly"))
+    (issue,) = _check(doc)
+    assert "which one counts" in issue.message
 
 
 def test_a_refused_property_is_refused_on_any_level():
