@@ -1,0 +1,144 @@
+apiVersion: v3.2.0
+kind: DataContract
+id: analytics.python_node
+name: python_node
+version: "0"
+tags: [orders, daily]
+description:
+  purpose: Order lines with their EUR amount, rebuilt from the order and rate tables.
+  usage: Feeds the daily revenue dashboards and the finance exports.
+  limitations: Amounts of the last hour are provisional until the rates arrive.
+team:
+  name: service-py
+roles:
+  - role: analytics-reader
+    access: read
+    description: Reads the table for the dashboards.
+slaProperties:
+  - property: freshness
+    value: 1
+    unit: d
+    description: The table is rebuilt every day before 06:00 UTC.
+support:
+  - channel: data-platform
+    tool: slack
+    url: https://example.com/support/data-platform
+    description: Questions about this table.
+authoritativeDefinitions:
+  - type: businessDefinition
+    url: https://example.com/glossary/order-line
+customProperties:
+  - {vendor: continuo, property: service, value: service-py}
+  - {vendor: continuo, property: kind, value: python-node}
+  - {vendor: continuo, property: schedule, value: daily}
+  - {vendor: continuo, property: criticality, value: CORE}
+  - {vendor: continuo, property: timeoutMinutes, value: 120}
+  - {vendor: continuo, property: script, value: scripts/python_node.py}
+  - vendor: continuo
+    property: readQueries
+    value:
+      orders: select order_id, line_no, customer_email, amount, seen_at from analytics.orders
+      rates: select currency, rate_to_eur from analytics.fx_rates
+  - {vendor: continuo, property: extraColumns, value: warn}
+  - vendor: continuo
+    property: config
+    value: {batch_size: 5000, compression: zstd, tags: [a, b]}
+  - {vendor: continuo, property: modeType, value: upsert}
+  - {vendor: continuo, property: assets, value: [assets/currencies.csv, assets/rounding.json]}
+  - {vendor: lotse, property: schedule, value: weekly}
+schema:
+  - name: python_node
+    physicalType: table
+    description: One row per order line.
+    properties:
+      - name: order_id
+        physicalType: BIGINT
+        description: The order the line belongs to.
+        required: true
+        unique: false
+        primaryKey: true
+        primaryKeyPosition: 1
+        classification: internal
+        examples: [1001, 1002]
+        relationships:
+          - to: analytics.orders.order_id
+        quality:
+          - metric: nullValues
+            mustBe: 0
+            customProperties:
+              - {vendor: continuo, property: where, value: "order_id > 0"}
+              - {vendor: continuo, property: warnIf, value: ">= 1"}
+              - {vendor: continuo, property: errorIf, value: "> 10"}
+              - {vendor: continuo, property: failCalc, value: "count(*)"}
+      - name: line_no
+        physicalType: INTEGER
+        description: The position of the line in the order, from 1.
+        required: true
+        unique: false
+        primaryKey: true
+        primaryKeyPosition: 2
+        classification: public
+        examples: [1, 2]
+        relationships:
+          - to: analytics.orders.line_no
+        quality:
+          - metric: nullValues
+            mustBe: 0
+            customProperties:
+              - {vendor: continuo, property: where, value: "line_no >= 1"}
+      - name: customer_email
+        physicalType: "VARCHAR(128)"
+        description: The email of the customer who placed the order.
+        required: false
+        unique: false
+        classification: restricted
+        examples: [ada@example.com]
+        relationships:
+          - to: analytics.customers.email
+        quality:
+          - metric: invalidValues
+            mustBe: 0
+            customProperties:
+              - {vendor: continuo, property: where, value: "customer_email is not null"}
+      - name: amount
+        physicalType: "NUMERIC(12,2)"
+        description: The amount of the line in EUR.
+        required: true
+        unique: false
+        classification: internal
+        examples: [19.99, 5]
+        relationships:
+          - to: analytics.order_amounts.amount
+        quality:
+          - metric: nullValues
+            mustBe: 0
+            customProperties:
+              - {vendor: continuo, property: where, value: "amount is not null"}
+      - name: weight
+        physicalType: DOUBLE PRECISION
+        description: The weight of the line in kilograms.
+        required: false
+        unique: false
+        classification: public
+        examples: [0.25]
+        relationships:
+          - to: analytics.products.weight
+        quality:
+          - metric: missingValues
+            mustBe: 0
+            customProperties:
+              - {vendor: continuo, property: where, value: "weight > 0"}
+      - name: seen_at
+        physicalType: TIMESTAMP
+        description: When the line was last seen.
+        required: false
+        unique: false
+        classification: public
+        examples: ["2026-11-14T08:30:00"]
+        relationships:
+          - to: analytics.orders.seen_at
+        quality:
+          - metric: nullValues
+            mustBe: 0
+            customProperties:
+              - {vendor: continuo, property: where, value: "seen_at is not null"}

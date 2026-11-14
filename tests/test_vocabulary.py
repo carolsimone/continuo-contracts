@@ -105,6 +105,17 @@ def test_continuo_values_keeps_any_json_value_and_the_order_of_the_file():
     assert values == {"config": config, "timeoutMinutes": 30, "assets": [], "extraColumns": None}
 
 
+def test_continuo_values_keeps_the_last_value_of_a_repeated_name_in_the_place_of_its_first():
+    items = [
+        {"vendor": "continuo", "property": "schedule", "value": "daily"},
+        {"vendor": "continuo", "property": "criticality", "value": "CORE"},
+        {"vendor": "continuo", "property": "schedule", "value": "hourly"},
+    ]
+    values = continuo_values(items)
+    assert values == {"schedule": "hourly", "criticality": "CORE"}
+    assert list(values) == ["schedule", "criticality"]
+
+
 def test_continuo_values_reads_an_item_with_other_keys():
     item = {"vendor": "continuo", "property": "kind", "value": "python-csv", "description": "d"}
     assert continuo_values([item]) == {"kind": "python-csv"}

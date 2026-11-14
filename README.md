@@ -450,12 +450,13 @@ ones the package knows and where each may sit. It reads no file and checks no co
   author may not. `refused` means no Python contract carries it. A property that is not in the
   mapping is unknown to this release.
 - `continuo_values(custom_properties: object) -> dict[str, Any]` returns the value of each
-  `continuo` item of a `customProperties` list, by property name, in the order of the list. It
-  takes any object, so it can run on a contract that nothing has checked: an argument that is not
-  a list gives `{}`, and an item that is not a mapping, has another vendor, or lacks a string
-  `vendor`, a string `property` or a `value` is skipped. A value is returned as written, whether
-  or not `PROPERTIES` names its property. A property written twice keeps its last value, so a
-  caller that refuses a repeat looks at the list itself.
+  `continuo` item of a `customProperties` list, by property name, in the order of the names' first
+  appearance in the list. It takes any object, so it can run on a contract that nothing has
+  checked: an argument that is not a list gives `{}`, and an item that is not a mapping, has
+  another vendor, or lacks a string `vendor`, a string `property` or a `value` is skipped. A value
+  is returned as written, whether or not `PROPERTIES` names its property. A property written twice
+  keeps its last value, in the place of its first appearance, so a caller that refuses a repeat
+  looks at the list itself.
 
 ```python
 continuo_values([
@@ -473,6 +474,96 @@ PROPERTIES["reads"]  # ContinuoProperty(name="reads", sits_on="schema", python="
 - `PROPERTIES`: the read-only mapping from each property name to its `ContinuoProperty`.
 - `continuo_values`: returns the value of each `continuo` item of a `customProperties` list, by
   property name, and skips every item it cannot use.
+
+## validate
+
+```python
+from continuo_contracts.validate import (
+    REASONS, Issue, rule_issues, schema_issues, validate_python_contract,
+)
+```
+
+`validate_python_contract` checks the ODCS contract of a Python node and returns every problem it
+finds, each with the path of the place it is at and a closed reason code. It runs in two stages. The
+first, `schema_issues`, checks the document against the packaged ODCS v3.2.0 JSON schema. The
+second, `rule_issues`, applies continuo's rules to a document that the first accepted, because the
+rules read a document of the shape the schema describes. The module logs nothing.
+
+- `Issue` is a frozen dataclass with the fields `path`, `reason` and `message`. `path` is written
+  as `schema[0].properties[2].physicalType`, with `$` for the contract as a whole, and `reason` is
+  one of `REASONS`. `str(issue)` is `<path>: <message>`.
+- `REASONS` is the closed tuple of reason codes, so a consumer can label a counter with them. The
+  checks of this module give these:
+
+  | Reason | The problem |
+  |---|---|
+  | `odcs_schema` | the document does not fit the ODCS JSON schema |
+  | `api_version` | `apiVersion` is not `v3.2.0` |
+  | `identity` | the id, `name` or `physicalName` does not agree with the table, the id is not in lower case, or the contract does not hold exactly one schema object that is a table |
+  | `file_name` | the base name of the file is neither `<table>.odcs.yaml` nor `<schema>.<table>.odcs.yaml` |
+  | `service` | a `service` property names another service than the release's |
+  | `missing_field` | `team.name` is missing |
+  | `refused_field` | the contract writes `servers`, `tenant` or `contractCreatedTs` |
+  | `unknown_property` | a `continuo` property is not in `vocabulary.PROPERTIES` |
+  | `refused_property` | a `continuo` property is one that continuo fills or no Python contract carries, or it sits on the wrong object |
+  | `value` | a `continuo` property is written twice in one list |
+
+  `strict_yaml` is for a caller that reports a `yaml_strict.StrictYamlError` as an issue, and this
+  module never gives it. `kind_rule`, `column_type` and `primary_key` name the problems of a node's
+  kind, its column types and its key.
+- `schema_issues(doc: object) -> list[Issue]` gives one `odcs_schema` issue for each error of
+  `doc` against the JSON schema, and an empty list when it fits. `doc` can be any value, as
+  `yaml_strict.load` returns it: one that is not a mapping gives a single issue at `$`. Two errors
+  with the same path and message give one issue, and so does the "Unevaluated properties" error of
+  an object when every property it names has an error of its own, since the error of the value says
+  what is wrong. A message longer than 300 characters is cut and ends in `...`.
+- `rule_issues(doc: Mapping[str, Any], *, path: str, service: str | None) -> list[Issue]` applies
+  the rules to a document that `schema_issues` accepted. `path` is the repository path of the file,
+  of which only the base name counts (`/` and `\` both separate), and `service` is the service of the
+  release that carries the contract, or `None` when it is not known, which skips the `service`
+  check. The rules are these:
+  - `apiVersion` is `v3.2.0`.
+  - The contract holds one schema object, and its `physicalType` is `table`. Its `name` is the
+    table, which is not empty. The `id` is in lower case and ends in `.<table>` in lower case after
+    a schema name. The root `name` and the `physicalName` of the schema object, when written,
+    equal the table.
+  - The base name of the file is `<table>.odcs.yaml`, with the table as written, or
+    `<schema>.<table>.odcs.yaml`, with the schema part of the id. The issue is at `$`.
+  - `team.name` is a string with text in it. A `team` written as a list has no name.
+  - `servers`, `tenant` and `contractCreatedTs` are not written, not even empty.
+  - A custom property of the `continuo` vendor is looked up in `vocabulary.PROPERTIES`, in every
+    `customProperties` list of the contract, wherever it sits. A name the vocabulary does not know
+    is `unknown_property`. A property that continuo fills, or that no Python contract carries, is
+    `refused_property`, and so is a property in the list of another object than the one it
+    belongs to: the contract, the schema object or a quality rule, so a property in the list of a
+    column, of the description or of the team is on the wrong object. A property of another vendor
+    is never looked at, whatever its name, and a `customProperties` key inside a free-form value
+    (`value`, `examples`, `arguments`, `implementation`) is data. A property that sits where it may
+    is then checked for a repeat, which is a `value` issue at each later copy that names the place of
+    the first, and a `service` property must be the release's service.
+
+  The issues come in path order, with the root first and array indexes in numeric order
+  (`customProperties[4]` before `customProperties[10]`), then in message order.
+- `validate_python_contract(doc: object, *, path: str, service: str | None) -> list[Issue]`
+  returns `schema_issues(doc)` when that has any issue, and `rule_issues` of the same `path` and
+  `service` otherwise. An empty list means the contract passed every check of this module.
+
+```python
+validate_python_contract(doc, path="contracts/kpis.odcs.yaml", service="service-py")
+# [Issue(path="$", reason="file_name",
+#        message="the file is named 'kpis.odcs.yaml', it must be 'py_daily_kpis.odcs.yaml' or "
+#                "'analytics.py_daily_kpis.odcs.yaml'")]
+```
+
+### Public names
+
+- `REASONS`: the closed tuple of the reason codes of an issue.
+- `Issue`: one problem of a contract, a frozen dataclass with the fields `path`, `reason` and
+  `message`.
+- `schema_issues`: the issues of a document against the ODCS v3.2.0 JSON schema.
+- `rule_issues`: the issues that continuo's rules find in a document that the schema accepted.
+- `validate_python_contract`: every issue of a Python contract, the schema issues first and the
+  rules once the schema accepts the document.
 
 ## errors
 

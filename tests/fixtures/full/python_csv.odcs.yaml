@@ -1,0 +1,108 @@
+apiVersion: v3.2.0
+kind: DataContract
+id: analytics.python_csv
+name: python_csv
+version: "0"
+tags: [orders, csv]
+description:
+  purpose: The orders export that the shop publishes as a CSV file, loaded as it is.
+  usage: Reconciles the shop's orders with the ledger.
+  limitations: The file is replaced once a day, so the table lags by up to 24 hours.
+team:
+  name: service-py
+roles:
+  - role: reconciliation-reader
+    access: read
+    description: Reads the table for the ledger reconciliation.
+slaProperties:
+  - property: freshness
+    value: 1
+    unit: d
+    description: The table is reloaded every day.
+support:
+  - channel: data-platform
+    tool: email
+    url: mailto:data-platform@example.com
+    description: Questions about this table.
+authoritativeDefinitions:
+  - type: businessDefinition
+    url: https://example.com/glossary/shop-order
+customProperties:
+  - {vendor: continuo, property: service, value: service-py}
+  - {vendor: continuo, property: kind, value: python-csv}
+  - {vendor: continuo, property: schedule, value: daily}
+  - {vendor: continuo, property: criticality, value: SECONDARY}
+  - {vendor: continuo, property: timeoutMinutes, value: 30}
+  - {vendor: continuo, property: csvSource, value: "s3://continuo-dev/static-files/full/orders.csv"}
+  - {vendor: continuo, property: extraColumns, value: warn}
+  - vendor: continuo
+    property: config
+    value: {batch_size: 2500, null_marker: "NULL"}
+  - {vendor: continuo, property: modeType, value: replace}
+  - {vendor: atlan, property: glossaryTerm, value: Shop order}
+schema:
+  - name: python_csv
+    physicalType: table
+    description: One row per order of the export.
+    properties:
+      - name: order_id
+        physicalType: INTEGER
+        description: The order number in the shop.
+        required: true
+        unique: true
+        primaryKey: true
+        primaryKeyPosition: 1
+        classification: internal
+        examples: [1, 2]
+        relationships:
+          - to: analytics.orders.order_id
+        quality:
+          - metric: duplicateValues
+            mustBe: 0
+            customProperties:
+              - {vendor: continuo, property: where, value: "order_id > 0"}
+              - {vendor: continuo, property: warnIf, value: ">= 1"}
+              - {vendor: continuo, property: errorIf, value: "> 10"}
+              - {vendor: continuo, property: failCalc, value: "count(*)"}
+      - name: customer
+        physicalType: "VARCHAR(64)"
+        description: The name of the customer.
+        required: false
+        unique: false
+        classification: restricted
+        examples: [Ada Lovelace]
+        relationships:
+          - to: analytics.customers.name
+        quality:
+          - metric: missingValues
+            mustBe: 0
+            customProperties:
+              - {vendor: continuo, property: where, value: "customer is not null"}
+      - name: amount
+        physicalType: DOUBLE PRECISION
+        description: The amount of the order in EUR.
+        required: false
+        unique: false
+        classification: internal
+        examples: [19.99, 5]
+        relationships:
+          - to: analytics.order_amounts.amount
+        quality:
+          - metric: nullValues
+            mustBe: 0
+            customProperties:
+              - {vendor: continuo, property: where, value: "amount >= 0"}
+      - name: ordered_on
+        physicalType: DATE
+        description: The day of the order.
+        required: false
+        unique: false
+        classification: public
+        examples: ["2026-11-14"]
+        relationships:
+          - to: analytics.calendar.day
+        quality:
+          - metric: nullValues
+            mustBe: 0
+            customProperties:
+              - {vendor: continuo, property: where, value: "ordered_on is not null"}

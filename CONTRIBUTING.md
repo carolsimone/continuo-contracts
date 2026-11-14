@@ -81,11 +81,13 @@ not a service, and layers would add indirection without a second implementation.
 - `yaml_strict`: the reader of a contract file, YAML 1.2 core with no aliases, merge keys or
   repeated keys.
 - `vocabulary`: the custom properties of the `continuo` vendor and where each may sit.
+- `validate`: the check of a Python node's ODCS contract, the JSON schema and continuo's rules, with
+  every problem as an `Issue` that has a path and a closed reason.
 
 `errors` and `vocabulary` import nothing from the package. `canonical`, `hashing`, `fingerprints` and
 `schema` import only `errors` (`fingerprints` also PyYAML), `yaml_strict` imports `canonical`,
-`errors` and PyYAML, `python` imports `canonical`, `errors`, `hashing` and `fingerprints`, and
-nothing imports `scripts` or `tests`. The only files the package reads are the packaged `fingerprints.yaml`, in
+`errors` and PyYAML, `python` imports `canonical`, `errors`, `hashing` and `fingerprints`,
+`validate` imports `schema`, `vocabulary` and jsonschema, and nothing imports `scripts` or `tests`. The only files the package reads are the packaged `fingerprints.yaml`, in
 `fingerprints.load()`, and the packaged ODCS schema, in `schema.load()`. A split into layers is
 proposed only when a module gets a second reason to change.
 

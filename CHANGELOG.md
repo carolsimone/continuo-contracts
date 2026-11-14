@@ -19,8 +19,16 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `continuo_contracts.vocabulary`: `PROPERTIES` lists the custom properties of the `continuo`
   vendor with the object of a contract each sits on (`root`, `schema` or `quality`) and who may
   write it in a Python contract (`authored`, `filled` or `refused`). `continuo_values()` returns
-  the values of the `continuo` items of a `customProperties` list, `VENDOR` is `continuo`, and
-  `ContinuoProperty` is the row type.
+  the values of the `continuo` items of a `customProperties` list (a name written twice keeps its
+  last value), `VENDOR` is `continuo`, and `ContinuoProperty` is the row type.
+- `continuo_contracts.validate`: `validate_python_contract()` checks the ODCS contract of a Python
+  node against the JSON schema and continuo's envelope, identity, file name, team and refusal
+  rules, and returns every problem as an `Issue` (a path, a reason from the closed `REASONS` and a
+  message) in path order. `schema_issues()` runs the JSON schema alone and `rule_issues()` runs the
+  rules alone on a document the schema accepted, so a caller can cache the first. The rules refuse
+  `servers`, `tenant`, `contractCreatedTs`, a `continuo` property that is unknown, filled by
+  continuo, not carried by a Python contract or on the wrong object, and a `continuo` property
+  written twice.
 
 ## [0.1.0] - 2026-11-11
 

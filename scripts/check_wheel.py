@@ -40,6 +40,7 @@ REQUIRED_MEMBERS: tuple[str, ...] = tuple(
         "python.py",
         "py.typed",
         "schema.py",
+        "validate.py",
         "vectors/canonical_json.json",
         "vectors/hashing.json",
         "vectors/projection.json",

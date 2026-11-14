@@ -59,11 +59,12 @@ PROPERTIES: Final[Mapping[str, ContinuoProperty]] = MappingProxyType(
 def continuo_values(custom_properties: object) -> dict[str, Any]:
     """Return the value of each `continuo` item of a `customProperties` list, by property name.
 
-    The names come in the order of the list. An item of another vendor is skipped, and so is an
-    item that is not a mapping or has no string `vendor`, no string `property` or no `value`. A
-    value is returned as written, whether or not `PROPERTIES` names the property. An argument
-    that is not a list gives an empty dict. A name that appears twice keeps its last value, so a
-    caller that must refuse a repeat checks the list itself.
+    The names come in the order of their first appearance in the list. An item of another vendor
+    is skipped, and so is an item that is not a mapping or has no string `vendor`, no string
+    `property` or no `value`. A value is returned as written, whether or not `PROPERTIES` names
+    the property. An argument that is not a list gives an empty dict. A name that appears twice
+    keeps its last value, in the place of its first appearance, so a caller that must refuse a
+    repeat checks the list itself.
     """
     if not isinstance(custom_properties, list):
         return {}

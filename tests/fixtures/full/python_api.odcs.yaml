@@ -1,0 +1,112 @@
+apiVersion: v3.2.0
+kind: DataContract
+id: analytics.python_api
+name: python_api
+version: "0"
+tags: [rates, api]
+description:
+  purpose: Exchange rates that a script fetches from the rates API and appends every hour.
+  usage: Joins the order lines with the rate of their day.
+  limitations: The API publishes no rate on weekends, so Monday carries Friday's rate.
+team:
+  name: service-py
+roles:
+  - role: rates-reader
+    access: read
+    description: Reads the table for the revenue models.
+slaProperties:
+  - property: freshness
+    value: 2
+    unit: h
+    description: A new rate is appended every hour.
+support:
+  - channel: data-platform
+    tool: slack
+    url: https://example.com/support/data-platform
+    description: Questions about this table.
+authoritativeDefinitions:
+  - type: businessDefinition
+    url: https://example.com/glossary/exchange-rate
+customProperties:
+  - {vendor: continuo, property: service, value: service-py}
+  - {vendor: continuo, property: kind, value: python-api}
+  - {vendor: continuo, property: schedule, value: hourly}
+  - {vendor: continuo, property: criticality, value: REGULATORY}
+  - {vendor: continuo, property: timeoutMinutes, value: 60}
+  - {vendor: continuo, property: script, value: scripts/python_api.py}
+  - {vendor: continuo, property: extraColumns, value: warn}
+  - vendor: continuo
+    property: config
+    value: {batch_size: 500, retries: 3}
+  - {vendor: continuo, property: secretRef, value: continuo-api-rates}
+  - {vendor: continuo, property: modeType, value: append}
+  - {vendor: continuo, property: assets, value: [assets/currencies.json]}
+  - {vendor: atlan, property: glossaryTerm, value: Exchange rate}
+schema:
+  - name: python_api
+    physicalType: table
+    description: One row per currency and fetch time.
+    properties:
+      - name: currency
+        physicalType: "CHAR(3)"
+        description: The ISO 4217 code of the currency.
+        required: true
+        unique: false
+        primaryKey: true
+        primaryKeyPosition: 1
+        classification: public
+        examples: [USD, GBP]
+        relationships:
+          - to: analytics.currencies.code
+        quality:
+          - metric: nullValues
+            mustBe: 0
+            customProperties:
+              - {vendor: continuo, property: where, value: "currency is not null"}
+              - {vendor: continuo, property: warnIf, value: ">= 1"}
+              - {vendor: continuo, property: errorIf, value: "> 10"}
+              - {vendor: continuo, property: failCalc, value: "count(*)"}
+      - name: fetched_at
+        physicalType: TIMESTAMP
+        description: When the script fetched the rate.
+        required: true
+        unique: false
+        primaryKey: true
+        primaryKeyPosition: 2
+        classification: public
+        examples: ["2026-11-14T08:00:00"]
+        relationships:
+          - to: analytics.fetches.fetched_at
+        quality:
+          - metric: nullValues
+            mustBe: 0
+            customProperties:
+              - {vendor: continuo, property: where, value: "fetched_at is not null"}
+      - name: rate_to_eur
+        physicalType: "NUMERIC(18,8)"
+        description: The value of one unit of the currency in EUR.
+        required: true
+        unique: false
+        classification: public
+        examples: [1.0837, 0.8581]
+        relationships:
+          - to: analytics.rates.rate_to_eur
+        quality:
+          - metric: nullValues
+            mustBe: 0
+            customProperties:
+              - {vendor: continuo, property: where, value: "rate_to_eur > 0"}
+      - name: is_estimate
+        physicalType: BOOLEAN
+        description: True when the API marks the rate as an estimate.
+        required: false
+        unique: false
+        classification: public
+        examples: [true, false]
+        relationships:
+          - to: analytics.rates.is_estimate
+        quality:
+          - metric: missingValues
+            mustBe: 0
+            customProperties:
+              - {vendor: continuo, property: where, value: "is_estimate is not null"}

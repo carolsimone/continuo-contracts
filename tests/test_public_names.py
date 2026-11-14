@@ -24,6 +24,7 @@ MODULES = (
     "schema",
     "yaml_strict",
     "vocabulary",
+    "validate",
     "errors",
 )
 LISTING = "### Public names\n"
