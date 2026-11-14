@@ -72,6 +72,31 @@ def test_a_bom_and_crlf_read_like_plain_lf():
     assert yaml_strict.load("\ufeffa: 1\r\nb: two\r\n") == {"a": 1, "b": "two"}
 
 
+def test_a_second_byte_order_mark_is_refused_with_its_position():
+    with pytest.raises(StrictYamlError) as raised:
+        yaml_strict.load("\ufeff\ufeffa: 1\n")
+    assert str(raised.value) == "line 1, column 1: a byte order mark may only start the text once"
+    with pytest.raises(StrictYamlError):
+        yaml_strict.load("\ufeff\ufeff\ufeffa: 1\n")
+
+
+def test_a_byte_order_mark_inside_the_text_is_part_of_the_text():
+    assert yaml_strict.load("a: x\ufeffy\n") == {"a": "x\ufeffy"}
+
+
+def test_a_scalar_after_a_lone_bang_is_a_string_whatever_its_form():
+    value = yaml_strict.load("a: ! 5\nb: ! \"5\"\nc: [! 1, ! 2.5, ! null]\nd: &x ! true\ne: !\n")
+    assert value == {"a": "5", "b": "5", "c": ["1", "2.5", "null"], "d": "true", "e": ""}
+
+
+def test_a_lone_bang_leaves_a_sequence_and_a_mapping_alone():
+    assert yaml_strict.load("a: ! [1, 2]\nb: ! {c: 1}\n") == {"a": [1, 2], "b": {"c": 1}}
+
+
+def test_a_lone_bang_on_a_key_makes_a_string_key():
+    assert yaml_strict.load("! 1: a\n") == {"1": "a"}
+
+
 def test_a_quoted_merge_spelling_is_an_ordinary_key():
     assert yaml_strict.load('"<<": 1\n') == {"<<": 1}
 

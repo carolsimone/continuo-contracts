@@ -56,15 +56,19 @@ _BYTE_ORDER_MARK: Final = "\ufeff"
 def load(text: str) -> object:
     """Return the value of the one YAML document in `text`, or `None` when it holds no document.
 
-    A leading byte order mark is dropped, and CRLF reads like LF. Raises `StrictYamlError` for
-    YAML that does not parse, for any of the refusals in the module description, for
-    nesting deeper than `canonical.MAX_DEPTH` levels, and for a value that `canonical_json`
-    refuses (a float that is not finite, an integer outside -(2**53 - 1) to 2**53 - 1, a lone
-    surrogate). The error names the line and the column of the problem, counted from 1, except
-    for the last kind, which has no position in the text and gives 0 for both, its reason
-    starting with the JSON path of the value.
+    A leading byte order mark is dropped, and CRLF reads like LF. A scalar written after a lone
+    `!` is a string, as in YAML 1.2. Raises `StrictYamlError` for a second byte order mark right
+    after the first, for YAML that does not parse, for any of the refusals in the module
+    description, for nesting deeper than `canonical.MAX_DEPTH` levels, and for a value that
+    `canonical_json` refuses (a float that is not finite, an integer outside
+    -(2**53 - 1) to 2**53 - 1, a lone surrogate). The error names the line and the column of the
+    problem, counted from 1, except for the last kind, which has no position in the text and
+    gives 0 for both, its reason starting with the JSON path of the value.
     """
     text = text.removeprefix(_BYTE_ORDER_MARK)
+    if text.startswith(_BYTE_ORDER_MARK):
+        # PyYAML drops one more mark at the start of its input, so it would read two as one.
+        raise StrictYamlError(1, 1, "a byte order mark may only start the text once")
     try:
         # PyYAML checks every character of the text when it builds the loader.
         loader = _Loader(text)
@@ -128,6 +132,9 @@ class _Loader(yaml.SafeLoader):
         if self._next_is(yaml.AliasEvent):
             raise _error(self._next_mark(), "YAML aliases are not allowed")
         is_container = self._next_is(yaml.SequenceStartEvent, yaml.MappingStartEvent)
+        # PyYAML resolves a scalar after a lone `!` like a plain one, so `! 5` is 5. YAML 1.2
+        # gives it the tag of a string.
+        lone_bang = self._next_is(yaml.ScalarEvent) and self._next_event().tag == "!"
         if is_container:
             if self._depth >= MAX_DEPTH:
                 raise _error(
@@ -135,9 +142,11 @@ class _Loader(yaml.SafeLoader):
                     f"nesting is too deep, a container may be at most {MAX_DEPTH} levels down",
                 )
             self._depth += 1
-        node = super().compose_node(parent, index)
+        node: Any = super().compose_node(parent, index)
         if is_container:
             self._depth -= 1
+        if lone_bang:
+            node.tag = _STR_TAG
         return node
 
     def construct_mapping(self, node: Any, deep: bool = False) -> dict[Hashable, Any]:
@@ -167,8 +176,11 @@ class _Loader(yaml.SafeLoader):
     def _next_is(self, *events: type[yaml.Event]) -> bool:
         return bool(self.check_event(*events))  # type: ignore[no-untyped-call]
 
+    def _next_event(self) -> Any:
+        return self.peek_event()  # type: ignore[no-untyped-call]
+
     def _next_mark(self) -> yaml.Mark:
-        mark: yaml.Mark = self.peek_event().start_mark  # type: ignore[no-untyped-call]
+        mark: yaml.Mark = self._next_event().start_mark
         return mark
 
     def _construct(self, node: yaml.Node, deep: bool) -> object:

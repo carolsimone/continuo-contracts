@@ -387,14 +387,18 @@ what lets one small file mean more than it says or mean different things to diff
 
 - `load(text: str) -> object` returns the value of the one document in `text`: a `dict` with `str`
   keys in the order of the file, a `list`, a `str`, an `int`, a `float`, a `bool` or `None`. A text
-  with no document, such as an empty text or a comment only, reads as `None`. A leading byte order
-  mark is dropped and CRLF reads like LF, so the same file saved by another editor reads the
-  same. It raises `StrictYamlError` (a `ContractsError`) for every refusal below.
+  with no document, such as an empty text or a comment only, reads as `None`. One leading byte
+  order mark is dropped and CRLF reads like LF, so the same file saved by another editor reads the
+  same. A second byte order mark right after the first is refused (`line 1, column 1`), and one
+  anywhere else in the text is an ordinary character of the text. It raises `StrictYamlError` (a
+  `ContractsError`) for every refusal below.
 - Only these plain scalars are not strings: `true`, `True`, `TRUE`, `false`, `False` and `FALSE`
   (`bool`), `~`, `null`, `Null`, `NULL` and an empty value (`None`), a decimal integer with an
   optional sign, `0o17` and `0x1F` (`int`; a leading zero is decimal, so `0777` is 777), and a
   number with a point or an exponent such as `1e3`, `.5` and `1.` (`float`). So `on`, `yes`, `NO`,
-  `y`, `2026-11-14`, `1:20`, `1_000` and `0b101` are strings. A quoted scalar is always a string.
+  `y`, `2026-11-14`, `1:20`, `1_000` and `0b101` are strings. A quoted scalar is always a string,
+  and so is a scalar written after a lone `!` (`! 5` is `"5"`), as in YAML 1.2; a sequence or a
+  mapping after a lone `!` stays a sequence or a mapping.
 - The reader refuses an alias (`*name`, which lets a few lines expand into a tree of any size), a
   plain `<<` key (a merge key), a repeated key at any level, a key that is not a string, a tag
   other than the seven core ones (`!!str`, `!!int`, `!!float`, `!!bool`, `!!null`, `!!seq` and
@@ -490,11 +494,12 @@ every case of every file.
   (`1000.0` is a float, `1` an integer and `true` a boolean). A case `{"name", "text", "error":
   true}` must be refused. The cases cover the scalars that YAML 1.1 reads as booleans, numbers and
   dates and the core schema reads as strings (`on`, `yes`, `NO`, `1:20`, `2026-11-14`, `1_000`),
-  the core integers, floats, booleans and nulls, the safe integer range, a byte order mark with
-  CRLF, and the refusals: infinities and NaN, integers outside the range, repeated keys, keys that
-  are not strings, tags other than the core ones, aliases, merge keys, two documents, a control
-  character and a lone surrogate. The file is ASCII, so the byte order mark and the line endings
-  are written as JSON escapes.
+  the core integers, floats, booleans and nulls, the safe integer range, a lone `!` before a
+  scalar, a quoted `"<<"` key, a byte order mark with CRLF, and the refusals: infinities and NaN,
+  integers outside the range, repeated keys, keys that are not strings, tags other than the core
+  ones, aliases, merge keys, two documents, two byte order marks, a control character and a lone
+  surrogate. The file is ASCII, so the byte order mark and the line endings are written as JSON
+  escapes.
 
 ## Pinning
 

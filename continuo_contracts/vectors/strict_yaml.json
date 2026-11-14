@@ -28,6 +28,10 @@
  {"name": "core_tags_are_read", "text": "a: !!str 5\nb: !!float 1\nc: !!int 0x10\nd: !!bool true\n", "value": {"a": "5", "b": 1.0, "c": 16, "d": true}},
  {"name": "a_contract_shaped_document", "text": "apiVersion: v3.2.0\nid: a.b\nitems:\n  - name: x\n    flag: no\n  - {name: y, n: 2}\n", "value": {"apiVersion": "v3.2.0", "id": "a.b", "items": [{"name": "x", "flag": "no"}, {"name": "y", "n": 2}]}},
  {"name": "a_byte_order_mark_and_crlf_read_like_lf", "text": "\ufeffa: 1\r\nb: two\r\n", "value": {"a": 1, "b": "two"}},
+ {"name": "a_lone_bang_makes_a_scalar_a_string", "text": "a: ! 5\nb: ! \"5\"\nc: ! true\nd: ! ~\ne: !\n", "value": {"a": "5", "b": "5", "c": "true", "d": "~", "e": ""}},
+ {"name": "a_lone_bang_keeps_a_sequence_and_a_mapping", "text": "a: ! [1]\nb: ! {c: 1}\n", "value": {"a": [1], "b": {"c": 1}}},
+ {"name": "a_lone_bang_on_a_key_makes_a_string_key", "text": "! 1: a\n", "value": {"1": "a"}},
+ {"name": "a_quoted_merge_spelling_is_an_ordinary_key", "text": "\"<<\": 1\n", "value": {"<<": 1}},
  {"name": "infinity", "text": "a: .inf\n", "error": true},
  {"name": "negative_infinity", "text": "a: -.inf\n", "error": true},
  {"name": "not_a_number", "text": "a: .nan\n", "error": true},
@@ -50,6 +54,7 @@
  {"name": "an_alias", "text": "a: &x 1\nb: *x\n", "error": true},
  {"name": "a_merge_key", "text": "base: {a: 1}\nother:\n  <<: {a: 1}\n", "error": true},
  {"name": "two_documents", "text": "a: 1\n---\nb: 2\n", "error": true},
+ {"name": "two_byte_order_marks", "text": "\ufeff\ufeffa: 1\n", "error": true},
  {"name": "an_unclosed_flow_sequence", "text": "a: [1, 2\n", "error": true},
  {"name": "a_control_character", "text": "a: \u0007\n", "error": true},
  {"name": "a_lone_surrogate_escape", "text": "a: \"\\ud800\"\n", "error": true}
