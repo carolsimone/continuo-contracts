@@ -1,4 +1,5 @@
 import copy
+import time
 from pathlib import Path
 
 import pytest
@@ -924,6 +925,106 @@ def test_the_schema_issues_do_not_change_the_document():
     assert doc == before
 
 
+# a column that nests, which the schema check refuses before it runs the JSON schema
+
+# The time a check of a deep nesting may take. The check takes milliseconds, and the JSON schema
+# alone takes seconds at eight levels and doubles or triples with each level after.
+QUICK = 0.5
+
+
+def _nesting(shape, levels):
+    """Return a column that nests `levels` levels deep, each level through `properties`, `items`
+    or a `map` value as `shape` says, or through the three in turn when `shape` is `mix`."""
+    column = {"name": "payload", "physicalType": "TEXT"}
+    current = column
+    for level in range(levels):
+        field = shape if shape != "mix" else ("properties", "items", "map")[level % 3]
+        inner = {"name": f"n{level + 1}"}
+        if field == "properties":
+            current.update(logicalType="object", properties=[inner])
+        elif field == "items":
+            current.update(logicalType="array", items=inner)
+        else:
+            current.update(
+                logicalType="map", map={"key": {"logicalType": "string"}, "value": inner}
+            )
+        current = inner
+    return column
+
+
+def _with_nesting(shape, levels=30):
+    doc = _kpis()
+    doc["schema"][0]["properties"].append(_nesting(shape, levels))
+    return doc
+
+
+def _timed(check, doc):
+    start = time.perf_counter()
+    issues = check(doc)
+    return issues, time.perf_counter() - start
+
+
+# Where the issue of each shape is: the field the column itself carries.
+FIRST_FIELD = {"properties": "properties", "items": "items", "map": "map", "mix": "properties"}
+
+
+@pytest.mark.parametrize("shape", sorted(FIRST_FIELD))
+@pytest.mark.parametrize("check", [schema_issues, _check], ids=["schema_issues", "validate"])
+def test_a_column_nested_thirty_levels_deep_is_refused_at_once(check, shape):
+    issues, seconds = _timed(check, _with_nesting(shape))
+    assert seconds < QUICK
+    assert _found(issues) == [(f"schema[0].properties[3].{FIRST_FIELD[shape]}", "refused_field")]
+
+
+@pytest.mark.parametrize("shape", sorted(FIRST_FIELD))
+def test_the_schema_check_refuses_a_nesting_as_the_rules_do(shape):
+    doc = _with_nesting(shape, levels=2)
+    assert schema_issues(doc) == rule_issues(doc, path=KPIS_PATH, service=SERVICE)
+
+
+def test_a_column_that_carries_items_and_a_map_gives_an_issue_for_each():
+    doc = _kpis()
+    doc["schema"][0]["properties"][1].update(
+        items={"logicalType": "string"}, map={"key": {}, "value": {}}
+    )
+    assert _found(schema_issues(doc)) == [
+        ("schema[0].properties[1].items", "refused_field"),
+        ("schema[0].properties[1].map", "refused_field"),
+    ]
+
+
+def test_a_nesting_in_any_schema_object_is_refused_before_the_json_schema():
+    doc = _kpis()
+    second = copy.deepcopy(doc["schema"][0])
+    second["name"] = "other"
+    second["properties"] = [_nesting("map", 30)]
+    doc["schema"].append(second)
+    for check in (schema_issues, _check):
+        issues, seconds = _timed(check, doc)
+        assert seconds < QUICK
+        assert _found(issues) == [("schema[1].properties[0].map", "refused_field")]
+
+
+def test_a_nesting_hides_the_other_schema_errors():
+    doc = _with_nesting("properties")
+    doc["schema"][0]["properties"][0]["name"] = 3
+    assert _found(schema_issues(doc)) == [("schema[0].properties[3].properties", "refused_field")]
+    del doc["schema"][0]["properties"][3]
+    assert _found(schema_issues(doc)) == [("schema[0].properties[0].name", "odcs_schema")]
+
+
+@pytest.mark.parametrize(
+    "schema",
+    ["text", [1, "column"], [{"name": "t", "properties": "columns"}], [{"properties": [1, None]}]],
+)
+def test_a_schema_too_malformed_to_scan_is_left_to_the_json_schema(schema):
+    doc = _kpis()
+    doc["schema"] = schema
+    issues = schema_issues(doc)
+    assert issues
+    assert {issue.reason for issue in issues} == {"odcs_schema"}
+
+
 # the order
 
 
@@ -1034,7 +1135,9 @@ def test_the_value_of_a_map_is_a_property_and_is_walked():
             "value": {"logicalType": "string", "customProperties": [_continuo("entity", "x")]},
         },
     )
-    assert _found(_check(doc)) == [
+    assert _found(rule_issues(doc, path=KPIS_PATH, service=SERVICE)) == [
         ("schema[0].properties[0].map", "refused_field"),
         ("schema[0].properties[0].map.value.customProperties[0]", "unknown_property"),
     ]
+    # The schema check refuses the map before anything walks it.
+    assert _found(_check(doc)) == [("schema[0].properties[0].map", "refused_field")]

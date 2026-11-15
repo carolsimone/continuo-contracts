@@ -527,9 +527,10 @@ from continuo_contracts.validate import (
 
 `validate_python_contract` checks the ODCS contract of a Python node and returns every problem it
 finds, each with the path of the place it is at and a closed reason code. It runs in two stages. The
-first, `schema_issues`, checks the document against the packaged ODCS v3.2.0 JSON schema. The
-second, `rule_issues`, applies continuo's rules to a document that the first accepted, because the
-rules read a document of the shape the schema describes. The module logs nothing.
+first, `schema_issues`, checks the document against the packaged ODCS v3.2.0 JSON schema, after a
+scan that refuses a column that nests. The second, `rule_issues`, applies continuo's rules to a
+document that the first accepted, because the rules read a document of the shape the schema
+describes. The module logs nothing.
 
 - `Issue` is a frozen dataclass with the fields `path`, `reason` and `message`. `path` is written
   as `schema[0].properties[2].physicalType`, with `$` for the contract as a whole, and `reason` is
@@ -555,12 +556,19 @@ rules read a document of the shape the schema describes. The module logs nothing
 
   `strict_yaml` is for a caller that reports a `yaml_strict.StrictYamlError` as an issue, and this
   module never gives it.
-- `schema_issues(doc: object) -> list[Issue]` gives one `odcs_schema` issue for each error of
-  `doc` against the JSON schema, and an empty list when it fits. `doc` can be any value, as
-  `yaml_strict.load` returns it: one that is not a mapping gives a single issue at `$`. Two errors
-  with the same path and message give one issue, and so does the "Unevaluated properties" error of
-  an object when every property it names has an error of its own, since the error of the value says
-  what is wrong. A message longer than 300 characters is cut and ends in `...`.
+- `schema_issues(doc: object) -> list[Issue]` first scans the columns of every schema object of
+  `doc`. When a column carries `items`, a `map` or `properties`, it returns a `refused_field` issue
+  at `schema[<n>].properties[<i>].<field>` for each such field, the issue `rule_issues` gives for
+  it, and does not run the JSON schema. The column of a Python contract nests nothing, and the JSON
+  schema check of a nested column takes time that grows exponentially with the depth of the
+  nesting, while the scan takes time in proportion to the number of columns. The other problems of
+  such a document show once the nesting is gone. Otherwise it gives one `odcs_schema` issue for
+  each error of `doc` against the JSON schema, and an empty list when it fits. `doc` can be any
+  value, as `yaml_strict.load` returns it: one that is not a mapping gives a single issue at `$`.
+  Two errors with the same path and message give one issue, and so does the "Unevaluated
+  properties" error of an object when every property it names has an error of its own, since the
+  error of the value says what is wrong. A message longer than 300 characters is cut and ends in
+  `...`.
 - `rule_issues(doc: Mapping[str, Any], *, path: str, service: str | None) -> list[Issue]` applies
   the rules to a document that `schema_issues` accepted. `path` is the repository path of the file,
   of which only the base name counts (`/` and `\` both separate), and `service` is the service of the
@@ -663,7 +671,8 @@ validate_python_contract(doc, path="contracts/kpis.odcs.yaml", service="service-
 - `REASONS`: the closed tuple of the reason codes of an issue.
 - `Issue`: one problem of a contract, a frozen dataclass with the fields `path`, `reason` and
   `message`.
-- `schema_issues`: the issues of a document against the ODCS v3.2.0 JSON schema.
+- `schema_issues`: the issues of a document against the ODCS v3.2.0 JSON schema, or the
+  `refused_field` issues of its columns that nest, which it finds first.
 - `rule_issues`: the issues that continuo's rules find in a document that the schema accepted.
 - `validate_python_contract`: every issue of a Python contract, the schema issues first and the
   rules once the schema accepts the document.

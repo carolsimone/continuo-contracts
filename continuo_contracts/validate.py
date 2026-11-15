@@ -1,12 +1,13 @@
 """Check the ODCS contract of a Python node and list every problem it has.
 
 A Python node is declared by one ODCS contract file. Checking it takes two stages. The first
-stage, `schema_issues`, checks the document against the ODCS v3.2.0 JSON schema. The second
-stage, `rule_issues`, checks continuo's own rules on a document that the first stage accepted:
-the envelope, the identity of the table, the file name, the team, the fields a Python contract
-may not carry, the custom properties of the `continuo` vendor, the rules of each kind of node,
-the columns and the key of an upsert node. `validate_python_contract` runs the first stage and,
-when it finds nothing, the second.
+stage, `schema_issues`, checks the document against the ODCS v3.2.0 JSON schema, after a scan
+that refuses a column that nests, on which the JSON schema check would take exponential time.
+The second stage, `rule_issues`, checks continuo's own rules on a document that the first stage
+accepted: the envelope, the identity of the table, the file name, the team, the fields a Python
+contract may not carry, the custom properties of the `continuo` vendor, the rules of each kind
+of node, the columns and the key of an upsert node. `validate_python_contract` runs the first
+stage and, when it finds nothing, the second.
 
 Every problem is an `Issue` with the path of the place it is found at, one of the closed reason
 codes of `REASONS` and a sentence for a person. The issues come in path order, so the same
@@ -254,16 +255,70 @@ def _is_knock_on(error: ValidationError, failing: set[tuple[str | int, ...]]) ->
     )
 
 
-def schema_issues(doc: object) -> list[Issue]:
-    """Return an `odcs_schema` issue for each error of `doc` against the ODCS v3.2.0 JSON schema.
+def _nested_field_issues(where: str, column: Mapping[str, Any]) -> Iterator[Issue]:
+    """Yield a `refused_field` issue for each of `items`, `map` and `properties` that the column
+    at `where` carries, since the column of a Python node nests nothing."""
+    shown = _shown(column.get("name"))
+    for field in _NESTED_COLUMN_FIELDS:
+        if field in column:
+            yield _issue(
+                f"{where}.{field}",
+                "refused_field",
+                f"column {shown} must not carry `{field}`, the column of a Python node has "
+                "a name, type and nullability and nothing nested",
+            )
 
-    `doc` is whatever `yaml_strict.load` returned, so it may be any value: one that is not a
-    mapping gives a single issue at `$`. Two errors with the same path and message give one
+
+def _nesting_issues(doc: object) -> list[Issue]:
+    """Return the `refused_field` issues of the columns of every schema object of `doc` that nest
+    `items`, a `map` or `properties`, in path order.
+
+    The ODCS schema describes a nested column through itself, and the JSON schema check of such a
+    column takes time that grows exponentially with the depth of the nesting. This scan reads
+    only the fields of each column, so it takes time in proportion to the number of columns. A
+    `doc` that is not a mapping, a `schema` that is not a list, a schema object that is not a
+    mapping or has no list of columns, and a column that is not a mapping are not scanned, and the
+    JSON schema reports them.
+    """
+    if not isinstance(doc, Mapping):
+        return []
+    objects = doc.get("schema")
+    if not isinstance(objects, list):
+        return []
+    issues: list[Issue] = []
+    for position, obj in enumerate(objects):
+        columns = obj.get("properties") if isinstance(obj, Mapping) else None
+        if not isinstance(columns, list):
+            continue
+        for index, column in enumerate(columns):
+            if isinstance(column, Mapping):
+                issues.extend(
+                    _nested_field_issues(f"schema[{position}].properties[{index}]", column)
+                )
+    return _ordered(issues)
+
+
+def schema_issues(doc: object) -> list[Issue]:
+    """Return the issues of `doc` against the ODCS v3.2.0 JSON schema.
+
+    The check starts with a scan of the columns of every schema object. When a column carries
+    `items`, a `map` or `properties`, the result is a `refused_field` issue for each such field,
+    the issue the rules give for it, and the JSON schema is not run: the column of a Python
+    contract nests nothing, and the JSON schema check of a nested column takes time that grows
+    exponentially with the depth of the nesting. The other errors of such a document show once the
+    nesting is gone.
+
+    Otherwise the result is an `odcs_schema` issue for each error of `doc` against the JSON
+    schema. `doc` is whatever `yaml_strict.load` returned, so it may be any value: one that is not
+    a mapping gives a single issue at `$`. Two errors with the same path and message give one
     issue, and so does an "Unevaluated properties" error that names only properties with an error
     of their own, because the error of the property says what is wrong. The issues are sorted by
     path, with array indexes in numeric order, and then by message. A message that is longer
     than 300 characters is cut and ends in `...`.
     """
+    nesting = _nesting_issues(doc)
+    if nesting:
+        return nesting
     errors = list(_validator().iter_errors(doc))
     failing = {tuple(error.absolute_path) for error in errors}
     return _ordered(
@@ -897,14 +952,7 @@ def _columns(contract: _Contract) -> Iterator[Issue]:
             issue = _column_type_issue(column["physicalType"], f"{where}.physicalType")
             if issue is not None:
                 yield issue
-        for field in _NESTED_COLUMN_FIELDS:
-            if field in column:
-                yield _issue(
-                    f"{where}.{field}",
-                    "refused_field",
-                    f"column {shown} must not carry `{field}`, the column of a Python node has "
-                    "a name, type and nullability and nothing nested",
-                )
+        yield from _nested_field_issues(where, column)
         if "logicalTypeOptions" in column:
             yield _issue(
                 f"{where}.logicalTypeOptions",

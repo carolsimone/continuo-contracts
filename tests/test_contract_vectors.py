@@ -1,6 +1,7 @@
 """The `contracts.json` vectors: each case's text, read strictly, checked, stored and hashed."""
 
 import json
+import time
 from importlib import resources
 from pathlib import Path
 
@@ -80,6 +81,7 @@ REFUSED = {
     "assets_are_not_normalised_paths": ["value"] * 6,
     "varchar_of_length_zero": ["column_type"],
     "service_property_is_blank": ["value"],
+    "column_nests_thirty_levels": ["refused_field"],
 }
 
 
@@ -132,6 +134,17 @@ def test_no_invalid_case_is_refused_by_the_json_schema():
 
 def _case(name):
     return next(case for case in CASES if case["name"] == name)
+
+
+def test_the_deep_nesting_case_nests_through_each_field_and_is_refused_at_once():
+    case = _case("column_nests_thirty_levels")
+    column = case["text"].splitlines()[-1]
+    assert column.count("properties: [") == 10
+    assert column.count("items: {") == 10
+    assert column.count("map: {") == 10
+    start = time.perf_counter()
+    assert _run(case) == {"issues": case["issues"]}
+    assert time.perf_counter() - start < 0.5
 
 
 def test_the_messy_case_writes_every_spelling_it_is_there_for():

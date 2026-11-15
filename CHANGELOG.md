@@ -22,8 +22,11 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   last value), `VENDOR` is `continuo`, and `ContinuoProperty` is the row type.
 - `continuo_contracts.validate`: `validate_python_contract()` checks the ODCS contract of a Python
   node and returns every problem as an `Issue` (a path, a reason from the closed `REASONS` and a
-  message) in path order. `schema_issues()` runs the JSON schema alone and `rule_issues()` runs
+  message) in path order. `schema_issues()` runs the JSON schema and `rule_issues()` runs
   continuo's rules alone on a document the schema accepted, so a caller can cache the first.
+  `schema_issues()` first scans the columns of every schema object and, when one nests `items`, a
+  `map` or `properties`, returns the `refused_field` issues the rules give for them without
+  running the JSON schema, whose check of a nested column takes exponential time.
 - The rules of `continuo_contracts.validate` check the envelope, the identity (the id, `name` and
   `physicalName` agree with the table, the id is in lower case, and the file is named
   `<table>.odcs.yaml` or `<schema>.<table>.odcs.yaml`), `team.name`, `schedule` and
