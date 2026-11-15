@@ -1,0 +1,6 @@
+# Files whose bytes are compared or hashed are never rewritten on checkout: the packaged ODCS
+# schema is checked against its SHA-256, the vector files are read by every consumer of the
+# package, and the contract fixtures stand for files a producer copies byte for byte.
+continuo_contracts/*.json -text
+continuo_contracts/vectors/*.json -text
+tests/fixtures/** -text
