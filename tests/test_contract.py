@@ -111,10 +111,10 @@ def _custom(name, value, vendor="continuo"):
     return {"vendor": vendor, "property": name, "value": value}
 
 
-# the design's examples
+# the stored form of the demo nodes
 
 
-def test_the_demo_node_stores_as_the_design_shows():
+def test_the_stored_form_of_the_demo_node():
     assert (
         normalise_python(_kpis(), service="service-py", reads=["Analytics.Daily_Transactions"])
         == KPIS_STORED

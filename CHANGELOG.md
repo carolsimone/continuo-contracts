@@ -45,15 +45,15 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   value of its kind (`timeoutMinutes` is 1 to 10080, `secretRef` is a `continuo-api-` Secret name
   of at most 253 characters, `csvSource` is `s3://<bucket>/<key>` or `https://<host>`,
   `readQueries` maps names to queries with text, and `assets` lists each path once), and a
-  python-node, python-csv or python-api writes
-  the properties its kind needs and none that it refuses.
+  python-node, python-csv or python-api writes the properties its kind needs and none that it
+  refuses.
 - The rules check the columns and the key. A column has a name used once and a `physicalType` that
   `canonical_sql_type` accepts (`column_type`, with a `VARCHAR(n)` or `CHAR(n)` of length 1 to
-  2**53 - 1), and no `physicalName`, partition, partition key position, nested `properties`,
-  `items` or `map`, or `logicalTypeOptions` (`refused_field`). The key of an `upsert` node
-  (`primary_key`) exists, each key column is `required` and not `DOUBLE PRECISION`, and each
-  column of a key of several has its own whole-number `primaryKeyPosition` from 1. A custom
-  quality rule has a non-empty `implementation`.
+  2**53 - 1), and no `physicalName` other than its name, partition, partition key position,
+  nested `properties`, `items` or `map`, or `logicalTypeOptions` (`refused_field`). The key of an
+  `upsert` node (`primary_key`) exists, each key column is `required` and not `DOUBLE PRECISION`,
+  and each column of a key of several has its own whole-number `primaryKeyPosition` from 1. A
+  custom quality rule has a non-empty `implementation`.
 - `continuo_contracts.python.node_from_odcs()` returns the `PythonNode` that a Python node's ODCS
   contract declares, so its `code_projection()` and `projection_hash()` are those of the same node
   written as a wire entry.
@@ -90,20 +90,17 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (`validate`: `valid` and the `issues` of each file, `hash`: `contract_hash` and the `stored`
   form), and the log goes to stderr in either mode. Exit status 0 is valid, 1 is an issue and 2 is
   a usage error (a `--service` that is empty or blank among them), a path that names no contract
-  file or a file that cannot be read.
+  file, a file that cannot be read or a `--read` value that is not `<schema>.<table>`.
 - `errors.SchemaFileError` and `errors.StrictYamlError`, each a `ContractsError`.
 
 ### Changed
 
 - `jsonschema>=4.26` is a runtime dependency, next to PyYAML. The wheel stays pure Python.
-- `fingerprints.yaml` has the list `lists.contract_hash_exclusions`, and `parse_fingerprints()`
-  refuses a file without it. A `rule` entry is either `outside_denylist` (a dbt family) or
-  `standard_field` (a Python family).
-- `errors.HashInputError` is also the error of `contract.normalise_python`.
+- `parse_fingerprints()` refuses a file without `lists.contract_hash_exclusions`, and a `rule`
+  entry is either `outside_denylist` (a dbt family) or `standard_field` (a Python family).
 - The README says in Stability that a newer version accepts every contract an older one accepted,
   with the same stored form and `contract_hash`, and in Pinning that topology-controller refuses a
   producer bundle written by a newer version than the one it runs.
-- Every hash of 0.1.0 is unchanged: the four vector files of 0.1.0 keep their bytes.
 
 ## [0.1.0] - 2026-11-11
 
