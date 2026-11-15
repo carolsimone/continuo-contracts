@@ -48,6 +48,7 @@ the merge. `render_markdown` writes the file as the tables of `docs/fingerprints
 import functools
 import importlib.resources
 import re
+
 from collections.abc import Hashable, Iterable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
@@ -113,8 +114,11 @@ _KEY_NAME = re.compile(r"[^\s.]+")
 
 @dataclass(frozen=True)
 class _Rule:
-    """What an entry with a `rule` looks like: where it may sit, the fingerprint and parts it has
-    and the one input it names, which stands for every input that no entry names."""
+    """What an entry with a `rule` looks like.
+
+    It says where the entry may sit, the fingerprint and parts it has and the one
+    input it names, which stands for every input that no entry names.
+    """
 
     families: tuple[str, ...]
     where: str
@@ -758,8 +762,11 @@ def _inputs(value: object, rule: str | None, where: str) -> tuple[str, ...]:
 
 
 def _is_input_name(name: object) -> bool:
-    """Say whether `name` is an input name other than a rule's: a name that starts with `odcs`
-    is `odcs.<path>`, with no `*`, and every other name is lowercase words joined by dots."""
+    """Say whether `name` is an input name other than a rule's.
+
+    A name that starts with `odcs` is `odcs.<path>`, with no `*`, and every other
+    name is lowercase words joined by dots.
+    """
     if not isinstance(name, str):
         return False
     if name == "odcs" or name.startswith("odcs."):

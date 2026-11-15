@@ -8,6 +8,7 @@ Scheme) defines, so two processes that hold the same value write the same bytes.
 import math
 import re
 import string
+
 from collections.abc import Mapping, Sequence
 from typing import Final
 
@@ -86,8 +87,11 @@ def _ascii_lower(text: str) -> str:
 
 
 def _has_whitespace(text: str) -> bool:
-    """Say whether `text` holds a character that `str.isspace` reads as whitespace: the 29
-    code points that `python.canonical_sql_type` lists."""
+    """Say whether `text` holds a character that `str.isspace` reads as whitespace.
+
+    Those characters are the 29 code points that `python.canonical_sql_type`
+    lists.
+    """
     return any(character.isspace() for character in text)
 
 

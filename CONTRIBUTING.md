@@ -44,6 +44,7 @@ and the PyYAML and jsonschema type stubs) into `.venv`.
 
 ```bash
 uv run ruff check .
+uv run ruff format --check .
 uv run mypy continuo_contracts scripts
 uv run pytest
 ```
@@ -57,7 +58,11 @@ These are the checks `.github/workflows/ci.yml` runs on Python 3.14.
 - **Python logging.** Use the standard `logging` module for diagnostic output, written to
   stderr, never `print`. The library modules log nothing, and `cli` logs from `main`, not at
   import. The only exception is a machine-read stdout value, such as the JSON or the hash that
-  `cli` prints, which stays an explicit `print`.
+  `cli` prints, which stays an explicit `print` with a `# noqa: T201` that says why.
+- **Formatting and lint.** `uv run ruff format .` formats the code at 82 columns, and
+  `ruff check` enforces the rules `pyproject.toml` selects. A docstring follows the numpy
+  convention: a one-line summary, a blank line, then the description. A test needs no
+  docstring.
 - **Fingerprint declaration.** Change `continuo_contracts/fingerprints.yaml`, never
   `docs/fingerprints.md`; then run `uv run python scripts/render_fingerprints.py`. The test
   `test_the_docs_are_the_rendered_file` fails until you do.

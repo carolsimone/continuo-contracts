@@ -16,6 +16,7 @@ import email.parser
 import logging
 import sys
 import zipfile
+
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -80,8 +81,10 @@ def wheel_problems(wheel: Path) -> list[str]:
 def _dist_info_problems(
     label: str, archive: zipfile.ZipFile, names: set[str]
 ) -> list[str]:
-    """Return the problems of the licence files, the METADATA and the console script of the
-    wheel's `.dist-info`."""
+    """Return the problems of the wheel's `.dist-info` files.
+
+    The files checked are the licence files, the METADATA and the console script.
+    """
     top_levels = {name.split("/")[0] for name in names}
     directories = sorted(d for d in top_levels if d.endswith(DIST_INFO_SUFFIX))
     if len(directories) != 1:
@@ -141,8 +144,11 @@ def _metadata_problems(label: str, text: str) -> list[str]:
 
 
 def _entry_point_problems(label: str, text: str) -> list[str]:
-    """Return the problems of the `entry_points.txt` text of a wheel: it must declare the console
-    script `continuo-contracts` that runs `continuo_contracts.cli:main`."""
+    """Return the problems of the `entry_points.txt` text of a wheel.
+
+    It must declare the console script `continuo-contracts` that runs
+    `continuo_contracts.cli:main`.
+    """
     # Entry point names keep their case, and a value has no `%` interpolation.
     parser = configparser.ConfigParser(delimiters=("=",), interpolation=None)
     parser.optionxform = str  # type: ignore[assignment,method-assign]

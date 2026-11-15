@@ -10,6 +10,7 @@ import ast
 import importlib
 import inspect
 import re
+
 from pathlib import Path
 
 import pytest
@@ -139,7 +140,18 @@ def test_the_readme_item_of_a_class_names_its_fields_and_methods(module):
 
 def test_the_scan_sees_every_field_of_entry():
     ten_fields = set(
-        "family id field source fingerprint parts why inputs when rule".split()
+        [
+            "family",
+            "id",
+            "field",
+            "source",
+            "fingerprint",
+            "parts",
+            "why",
+            "inputs",
+            "when",
+            "rule",
+        ]
     )
     assert ten_fields <= _defined("fingerprints")["Entry"]
     assert ten_fields <= _backticked_words(dict(_listed("fingerprints"))["Entry"])

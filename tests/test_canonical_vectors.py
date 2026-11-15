@@ -1,5 +1,6 @@
 import json
 import math
+
 from importlib import resources
 
 import pytest

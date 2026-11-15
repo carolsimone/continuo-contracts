@@ -4,6 +4,7 @@ old-style entry or as an ODCS contract."""
 
 import copy
 import json
+
 from importlib import resources
 from pathlib import Path
 

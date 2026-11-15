@@ -3,6 +3,7 @@
 import functools
 import hashlib
 import json
+
 from collections.abc import Mapping
 from importlib import resources
 from typing import Any, Final

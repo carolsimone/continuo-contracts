@@ -46,6 +46,7 @@ holds with the same values.
 """
 
 import re
+
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from types import MappingProxyType
@@ -238,8 +239,10 @@ def logical_type(physical_type: str) -> dict[str, Any] | None:
 
 
 def _length(canonical: str) -> int | None:
-    """Return the length `n` of the canonical type `VARCHAR(n)` or `CHAR(n)` when it is from 1 to
-    2**53 - 1, or `None` for a length outside that range and for any other type.
+    """Return the length `n` of the canonical type `VARCHAR(n)` or `CHAR(n)`.
+
+    The result is `n` when it is from 1 to 2**53 - 1, and `None` for a length
+    outside that range and for any other type.
 
     A length of more than 16 digits is above the range, and checking the number of digits first
     keeps a very long digit string from reaching `int`, which refuses it.
@@ -333,8 +336,10 @@ def contract_hash(stored: Mapping[str, Any]) -> str:
 
 
 def _reads(reads: Sequence[str]) -> list[str]:
-    """Return the tables of `reads` with their ASCII letters in lower case, sorted by code point
-    and listed once."""
+    """Return the tables of `reads` with their ASCII letters in lower case.
+
+    The tables are sorted by code point and listed once.
+    """
     if isinstance(reads, str):
         raise HashInputError(
             f"reads {reads!r}: reads is a list of tables, not one string"
@@ -357,8 +362,10 @@ def _reads(reads: Sequence[str]) -> list[str]:
 
 
 def _set_property(items: list[Any], name: str, value: str) -> None:
-    """Set the value of the `continuo` property `name` of the list `items`, adding it when the
-    list has none."""
+    """Set the value of the `continuo` property `name` of the list `items`.
+
+    The property is added when the list has none.
+    """
     for item in items:
         if (
             isinstance(item, dict)
@@ -378,8 +385,11 @@ def _number(value: float) -> float | int:
 
 
 def _as_written(value: Any) -> Any:
-    """Copy `value` with each mapping as a `dict` and each list or tuple as a `list`, and each
-    float that is a whole number in the safe integer range as an integer. Nothing else changes."""
+    """Copy `value` with mappings as `dict`, lists and tuples as `list`.
+
+    Each float that is a whole number in the safe integer range becomes an
+    integer. Nothing else changes.
+    """
     if isinstance(value, Mapping):
         return {key: _as_written(item) for key, item in value.items()}
     if isinstance(value, list | tuple):
@@ -401,8 +411,11 @@ def _is_default(value: object, default: object) -> bool:
 
 
 def _clean(value: Any, shape: str) -> Any:
-    """Return `value`, an object or a list of objects of the ODCS type `shape`, or a scalar, in
-    the canonical form."""
+    """Return `value` in the canonical form.
+
+    `value` is an object or a list of objects of the ODCS type `shape`, or a
+    scalar.
+    """
     if isinstance(value, Mapping):
         return _clean_object(value, _SHAPES[shape])
     if isinstance(value, list | tuple):
@@ -418,8 +431,11 @@ def _clean(value: Any, shape: str) -> Any:
 
 
 def _dropped(item: object, shape: str) -> bool:
-    """Say whether `item` is a custom property that the stored form leaves out: one whose value
-    is null or empty, or a `continuo` property that says continuo's default."""
+    """Say whether `item` is a custom property that the stored form leaves out.
+
+    It is one whose value is null or empty, or a `continuo` property that says
+    continuo's default.
+    """
     if shape != "custom_property" or not isinstance(item, Mapping):
         return False
     value = item.get("value")
@@ -465,7 +481,9 @@ def _clean_object(obj: Mapping[str, Any], shape: _Shape) -> dict[str, Any]:
 
 
 def _sorted_once(items: list[Any]) -> list[Any]:
-    """Return `items` sorted by the canonical JSON of each, with an item that equals an earlier
-    one left out."""
+    """Return `items` sorted by the canonical JSON of each.
+
+    An item that equals an earlier one is left out.
+    """
     by_bytes = {canonical_json(item): item for item in items}
     return [by_bytes[key] for key in sorted(by_bytes)]

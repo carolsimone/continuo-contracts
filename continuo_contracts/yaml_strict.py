@@ -11,10 +11,12 @@ than the seven core ones, a second document, and a value that canonical JSON can
 
 import math
 import re
+
 from collections.abc import Callable, Hashable
 from typing import Any, ClassVar, Final
 
 import yaml
+
 from yaml.reader import ReaderError
 
 from continuo_contracts.canonical import MAX_DEPTH, canonical_json
@@ -221,8 +223,11 @@ def _scalar_text(node: yaml.Node) -> str:
 
 
 def _core_text(node: yaml.Node, pattern: re.Pattern[str], what: str) -> str:
-    """Return the text of a scalar node that must have the form `pattern`, as it does for an
-    implicit scalar and may not for one written with a tag such as `!!int abc`."""
+    """Return the text of a scalar node that must have the form `pattern`.
+
+    An implicit scalar has that form, and one written with a tag such as
+    `!!int abc` may not.
+    """
     text = _scalar_text(node)
     if not pattern.match(text):
         raise _error(node.start_mark, f"{text!r} is not {what}")

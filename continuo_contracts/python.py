@@ -24,6 +24,7 @@ bytes.
 """
 
 import re
+
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, fields
 from typing import Any, Final, Self
@@ -64,8 +65,11 @@ _PARAMETERISED_SQL_TYPE = re.compile(
 
 @dataclass(frozen=True)
 class PythonColumn:
-    """An output column of a Python node: its name, its SQL type as declared and whether it
-    accepts NULL."""
+    """An output column of a Python node.
+
+    It holds the name of the column, its SQL type as declared and whether it
+    accepts NULL.
+    """
 
     name: str
     type: str
@@ -177,8 +181,10 @@ def canonical_sql_type(raw: str) -> str:
 
 
 def code_projection(node: PythonNode) -> dict[str, Any]:
-    """Return the code projection of `node`: one entry for each key of
-    `fingerprints.projection_keys()`, in that order.
+    """Return the code projection of `node`.
+
+    It has one entry for each key of `fingerprints.projection_keys()`, in that
+    order.
 
     `config` is copied with every mapping as a `dict` and every list or tuple as a `list`, down to
     level `canonical.MAX_DEPTH` (the config itself is level 1), so changing the result does not
@@ -314,9 +320,11 @@ def _table_name(table_object: Mapping[str, Any]) -> str:
 
 
 def _id_schema(identifier: object, table: str) -> str | None:
-    """Return the schema part of the id `identifier`: the id without the `.<table>` that ends it,
-    as written, or `None` when the id is not a string that ends in a dot and the table after a
-    schema part that is not empty.
+    """Return the schema part of the id `identifier`.
+
+    That is the id without the `.<table>` that ends it, as written, or `None` when
+    the id is not a string that ends in a dot and the table after a schema part
+    that is not empty.
 
     The id and the table are compared with their ASCII letters in lower case and every other
     character as written, so the id `analytics.k\u00c4se` names the table `K\u00c4SE`. The
@@ -344,8 +352,10 @@ def _schema_name(identifier: object, table: str) -> str:
 
 
 def _properties(table_object: Mapping[str, Any]) -> list[Mapping[str, Any]]:
-    """Return the columns of the schema object, each checked to be a mapping with a name and a
-    `physicalType`."""
+    """Return the columns of the schema object.
+
+    Each column is checked to be a mapping with a name and a `physicalType`.
+    """
     properties = table_object.get("properties", [])
     if not isinstance(properties, list):
         raise ProjectionError(
@@ -364,9 +374,12 @@ def _properties(table_object: Mapping[str, Any]) -> list[Mapping[str, Any]]:
 
 
 def _key_position(value: object) -> int | None:
-    """Return `value` as a position in a key, a whole number from 1 (`1.0` is 1), or `None` when
-    it is not one. The validator reads the positions of an upsert key through this function, so
-    that it and `node_from_odcs` order a key the same way."""
+    """Return `value` as a position in a key, or `None` when it is not one.
+
+    A position is a whole number from 1 (`1.0` is 1). The validator reads the
+    positions of an upsert key through this function, so that it and
+    `node_from_odcs` order a key the same way.
+    """
     if isinstance(value, bool):
         return None
     if isinstance(value, int):
@@ -379,8 +392,11 @@ def _key_position(value: object) -> int | None:
 
 
 def _key_names(properties: Sequence[Mapping[str, Any]]) -> list[Any]:
-    """Return the names of the columns with `primaryKey: true`: those with a position first, by
-    position, then the others, and a tie by file order."""
+    """Return the names of the columns with `primaryKey: true`.
+
+    The columns with a position come first, by position, then the others, and a
+    tie goes by file order.
+    """
     keyed = []
     for index, column in enumerate(properties):
         if column.get("primaryKey") is True:
@@ -558,9 +574,11 @@ def _config(node: PythonNode, kind: str) -> dict[str, Any]:
 
 
 def _json_copy(value: object, on_path: dict[int, object], depth: int) -> object:
-    """Copy `value`, a container on level `depth` of `config`, by its JSON shape: a mapping
-    becomes a `dict`, a list or tuple becomes a `list`, and anything else is returned as it is,
-    for `canonical_json` to accept or to refuse with the path of the value.
+    """Copy `value`, a container on level `depth` of `config`, by its JSON shape.
+
+    A mapping becomes a `dict`, a list or tuple becomes a `list`, and anything
+    else is returned as it is, for `canonical_json` to accept or to refuse with
+    the path of the value.
 
     `on_path` maps each container that is being copied, from the root down to `value`, to its
     copy. A container that contains itself is copied as a copy that contains itself, so the copy

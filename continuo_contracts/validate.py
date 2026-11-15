@@ -17,6 +17,7 @@ document always gives the same list.
 import ast
 import functools
 import re
+
 from collections import Counter
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
@@ -97,8 +98,17 @@ _WHY_REFUSED: Final = {
     "provenance": "continuo adds `provenance` to the published file and never stores it in a "
     "contract",
     **dict.fromkeys(
-        "filePath materialization contractEnforced access group deprecationDate "
-        "freshnessBuildAfter snapshot quoteColumns".split(),
+        [
+            "filePath",
+            "materialization",
+            "contractEnforced",
+            "access",
+            "group",
+            "deprecationDate",
+            "freshnessBuildAfter",
+            "snapshot",
+            "quoteColumns",
+        ],
         "it describes how dbt builds or governs a node, and nothing reads it on a Python node",
     ),
 }
@@ -137,8 +147,11 @@ _NEEDS: Final = {
 
 @dataclass(frozen=True)
 class _KindRule:
-    """What a kind of node needs and refuses. `required` lists the properties it must write and
-    `refused` maps each property it may not write to the reason."""
+    """What a kind of node needs and refuses.
+
+    `required` lists the properties it must write and `refused` maps each property
+    it may not write to the reason.
+    """
 
     required: tuple[str, ...]
     refused: Mapping[str, str]
@@ -202,20 +215,26 @@ class Issue:
     message: str
 
     def __str__(self) -> str:
+        """Return the path and the message of the issue."""
         return f"{self.path}: {self.message}"
 
 
 def _issue(path: str, reason: str, message: str) -> Issue:
-    """Build an issue whose message is cut when it is long, so one huge value of a contract
-    cannot make a huge message."""
+    """Build an issue whose message is cut when it is long.
+
+    One huge value of a contract cannot make a huge message.
+    """
     if len(message) > _MAX_MESSAGE:
         message = message[: _MAX_MESSAGE - 3] + "..."
     return Issue(path, reason, message)
 
 
 def _path_key(path: str) -> list[tuple[int, int, str]]:
-    """Return the sort key of a path: the root first, a key by its text and an array index by its
-    number, so `a[4]` comes before `a[10]`."""
+    """Return the sort key of a path.
+
+    The root comes first, a key sorts by its text and an array index by its
+    number, so `a[4]` comes before `a[10]`.
+    """
     if path == "$":
         return []
     return [
@@ -274,8 +293,11 @@ def _is_knock_on(
 def _nested_field_issues(
     where: str, column: Mapping[str, Any]
 ) -> Iterator[Issue]:
-    """Yield a `refused_field` issue for each of `items`, `map` and `properties` that the column
-    at `where` carries, since the column of a Python node nests nothing."""
+    """Yield a `refused_field` issue for each nested field of `column`.
+
+    `column` is at `where`. A nested field is `items`, `map` or `properties`,
+    since the column of a Python node nests nothing.
+    """
     shown = _shown(column.get("name"))
     for field in _NESTED_COLUMN_FIELDS:
         if field in column:
@@ -288,8 +310,10 @@ def _nested_field_issues(
 
 
 def _nesting_issues(doc: object) -> list[Issue]:
-    """Return the `refused_field` issues of the columns of every schema object of `doc` that nest
-    `items`, a `map` or `properties`, in path order.
+    """Return the `refused_field` issues of the nested columns of `doc`.
+
+    A nested column is a column of a schema object of `doc` that has `items`, a
+    `map` or `properties`. The issues come in path order.
 
     The ODCS schema describes a nested column through itself, and the JSON schema check of such a
     column takes time that grows exponentially with the depth of the nesting. This scan reads
@@ -388,16 +412,19 @@ def _name_fault(
 
 
 def _identifier_fault(value: object) -> str | None:
-    """Return what is wrong with `value` as the name of a table or a schema, or `None`: it is a
-    name with no whitespace, dot or slash anywhere."""
+    """Return what is wrong with `value` as the name of a table or a schema.
+
+    A name has no whitespace, dot or slash anywhere. The result is `None` when
+    `value` is one.
+    """
     return _name_fault(value, inner_whitespace=False, separators=False)
 
 
 def _path_fault(value: object) -> str | None:
-    """Return what is wrong with `value` as the path of a file inside the project, or `None`.
+    r"""Return what is wrong with `value` as the path of a file inside the project, or `None`.
 
     The path is a name, POSIX and relative, written in its normalised form: its parts are
-    separated by `/` and not `\\`, it does not start with `/`, `~` or a drive letter such as
+    separated by `/` and not `\`, it does not start with `/`, `~` or a drive letter such as
     `C:`, and no part is empty, `.` or `..`. Two paths that name one file are then written alike.
     """
     fault = _name_fault(value)
@@ -418,8 +445,10 @@ def _path_fault(value: object) -> str | None:
 
 @dataclass(frozen=True)
 class _Contract:
-    """A document that the JSON schema accepted, with what the rules read of it besides its
-    fields."""
+    """A document that the JSON schema accepted.
+
+    It holds what the rules read of the document besides its fields.
+    """
 
     doc: Mapping[str, Any]
     file_name: str
@@ -441,8 +470,11 @@ class _Contract:
 
     @property
     def table(self) -> str | None:
-        """The name of the table, or `None` when the contract has no single schema object or
-        that object has no name that a table can have, so that nothing is compared with it."""
+        """The name of the table, or `None` when the contract has none.
+
+        The contract has none when it has no single schema object or that object
+        has no name that a table can have, so that nothing is compared with it.
+        """
         obj = self.table_object
         name = obj.get("name") if obj is not None else None
         return (
@@ -453,15 +485,21 @@ class _Contract:
 
     @property
     def written_id_schema(self) -> str | None:
-        """The schema part of the id as `python._id_schema` reads it, whatever it holds, or
-        `None` when there is no table or the id does not end in a dot and the table."""
+        """The schema part of the id as `python._id_schema` reads it.
+
+        It is whatever that part holds, or `None` when there is no table or the id
+        does not end in a dot and the table.
+        """
         table = self.table
         return None if table is None else _id_schema(self.doc.get("id"), table)
 
     @property
     def id_schema(self) -> str | None:
-        """The schema part of the id, or `None` when the id does not end in a dot and the table
-        or its schema part is not a name that a schema can have."""
+        """The schema part of the id, or `None` when the id has no usable one.
+
+        The id has none when it does not end in a dot and the table, or when its
+        schema part is not a name that a schema can have.
+        """
         part = self.written_id_schema
         return (
             part if part is not None and _identifier_fault(part) is None else None
@@ -493,9 +531,11 @@ class _Contract:
 
     @cached_property
     def kind(self) -> str | None:
-        """The kind of the node, with an old name read as the kind it stands for, or `None` when
-        the `kind` property is not one of `PYTHON_KINDS`. A contract with no `kind` is a
-        python-node."""
+        """The kind of the node, with an old name read as the kind it stands for.
+
+        It is `None` when the `kind` property is not one of `PYTHON_KINDS`. A
+        contract with no `kind` is a python-node.
+        """
         prop = self.properties.get("kind")
         declared = prop.value if prop is not None else "python-node"
         if not isinstance(declared, str):
@@ -505,8 +545,10 @@ class _Contract:
 
     @cached_property
     def mode_type(self) -> str | None:
-        """The `modeType` of the node, `replace` when the contract writes none, or `None` when
-        the written one is not one of `MODE_TYPES`."""
+        """The `modeType` of the node, `replace` when the contract writes none.
+
+        It is `None` when the written one is not one of `MODE_TYPES`.
+        """
         prop = self.properties.get("modeType")
         if prop is None:
             return "replace"
@@ -636,8 +678,10 @@ def _refused_fields(contract: _Contract) -> Iterator[Issue]:
 def _custom_property_lists(
     node: object, path: str, shape: str
 ) -> Iterator[tuple[str, str, list[Any]]]:
-    """Yield the path, the level and the items of every `customProperties` list under `node`, an
-    object or a list of objects of the ODCS type `shape`.
+    """Yield the path, the level and the items of every `customProperties` list.
+
+    The lists are those under `node`, an object or a list of objects of the ODCS
+    type `shape`.
 
     The level says which object the list belongs to: `root` (the contract), `schema` (a schema
     object), `quality` (a quality rule) or `other`. The object types and their free-form values
@@ -663,8 +707,11 @@ def _custom_property_lists(
 
 
 def _placement_fault(name: str, level: str) -> tuple[str, str] | None:
-    """Return the reason and the message for a `continuo` property that may not sit on `level`
-    of a Python contract, or `None` when it may."""
+    """Return why a `continuo` property may not sit on `level`.
+
+    `level` is a level of a Python contract. The result is the reason and the
+    message, or `None` when it may sit there.
+    """
     prop = PROPERTIES.get(name)
     if prop is None:
         return (
@@ -724,9 +771,13 @@ def _custom_properties(contract: _Contract) -> Iterator[Issue]:
 def _service_issues(
     value: object, where: str, service: str | None
 ) -> Iterator[Issue]:
-    """Yield the issue of the `service` property at `where`, whose value is `value`, when the
-    release's service is `service`: a `value` issue when it is not a string with text, whether or
-    not the service is known, and a `service` issue when it names another service."""
+    """Yield the issue of the `service` property at `where`.
+
+    Its value is `value`, and `service` is the service of the release, or `None`
+    when it is not known. A `value` issue says the value is not a string with
+    text, whether or not the service is known, and a `service` issue says it names
+    another service than the release's.
+    """
     if not _is_text(value):
         yield _issue(
             where,
@@ -742,8 +793,11 @@ def _service_issues(
 
 
 def _shown(value: object) -> str:
-    """Write `value` for a message, cut when it is long, so one huge value of a contract cannot
-    push the rest of the sentence out of the message."""
+    """Write `value` for a message, cut when it is long.
+
+    One huge value of a contract cannot push the rest of the sentence out of the
+    message.
+    """
     text = repr(value)
     return text if len(text) <= _SHOWN else text[: _SHOWN - 3] + "..."
 

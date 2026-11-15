@@ -1,5 +1,6 @@
 import json
 import re
+
 from pathlib import Path
 
 import pytest
@@ -469,10 +470,20 @@ REFUSED_PROPERTIES = sorted(
 
 
 def test_the_refused_continuo_properties_are_the_eleven_of_a_python_contract():
-    assert REFUSED_PROPERTIES == sorted(
-        "provenance filePath materialization contractEnforced access group deprecationDate "
-        "freshnessBuildAfter snapshot quoteColumns reads".split()
-    )
+    eleven = [
+        "provenance",
+        "filePath",
+        "materialization",
+        "contractEnforced",
+        "access",
+        "group",
+        "deprecationDate",
+        "freshnessBuildAfter",
+        "snapshot",
+        "quoteColumns",
+        "reads",
+    ]
+    assert sorted(eleven) == REFUSED_PROPERTIES
 
 
 @pytest.mark.parametrize("family", PYTHON_FAMILIES)

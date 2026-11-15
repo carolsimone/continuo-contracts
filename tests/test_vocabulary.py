@@ -10,16 +10,45 @@ from continuo_contracts.vocabulary import (
     continuo_values,
 )
 
-ROOT_AUTHORED = (
-    "service kind schedule criticality timeoutMinutes script readQueries csvSource extraColumns "
-    "config secretRef modeType assets"
-).split()
-ROOT_REFUSED = (
-    "filePath materialization contractEnforced access group deprecationDate freshnessBuildAfter "
-    "snapshot quoteColumns provenance"
-).split()
-QUALITY_AUTHORED = "where warnIf errorIf failCalc".split()
-ONTOLOGY = "entity grain fixed filter property local from agg period".split()
+ROOT_AUTHORED = [
+    "service",
+    "kind",
+    "schedule",
+    "criticality",
+    "timeoutMinutes",
+    "script",
+    "readQueries",
+    "csvSource",
+    "extraColumns",
+    "config",
+    "secretRef",
+    "modeType",
+    "assets",
+]
+ROOT_REFUSED = [
+    "filePath",
+    "materialization",
+    "contractEnforced",
+    "access",
+    "group",
+    "deprecationDate",
+    "freshnessBuildAfter",
+    "snapshot",
+    "quoteColumns",
+    "provenance",
+]
+QUALITY_AUTHORED = ["where", "warnIf", "errorIf", "failCalc"]
+ONTOLOGY = [
+    "entity",
+    "grain",
+    "fixed",
+    "filter",
+    "property",
+    "local",
+    "from",
+    "agg",
+    "period",
+]
 
 
 def _named(sits_on, python):

@@ -12,12 +12,14 @@ of it held, 1 means a failure was logged.
 import json
 import logging
 import sys
+
 from collections.abc import Mapping
 from importlib import resources
 from pathlib import Path
 from typing import Any, cast
 
 import continuo_contracts
+
 from continuo_contracts import schema, yaml_strict
 from continuo_contracts.canonical import canonical_json
 from continuo_contracts.contract import contract_hash, normalise_python
@@ -211,9 +213,11 @@ def _strict_yaml_failures(cases: list[dict[str, Any]]) -> list[str]:
 
 
 def _contract_result(case: dict[str, Any]) -> dict[str, Any]:
-    """Return the stored form and the hash of the contract vector `case`, or its issues as
-    `{path, reason}`, a strict YAML refusal being the issue `{"path": "$", "reason":
-    "strict_yaml"}`."""
+    """Return the stored form and the hash of the contract vector `case`.
+
+    A contract with issues returns them as `{path, reason}` instead, and a strict
+    YAML refusal is the issue `{"path": "$", "reason": "strict_yaml"}`.
+    """
     try:
         doc = yaml_strict.load(case["text"])
     except StrictYamlError:

@@ -1,6 +1,7 @@
 """`contract`: the stored form of a Python contract and its `contract_hash`."""
 
 import copy
+
 from pathlib import Path
 
 import pytest

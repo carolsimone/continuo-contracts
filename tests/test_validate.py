@@ -1,5 +1,6 @@
 import copy
 import time
+
 from pathlib import Path
 
 import pytest
@@ -631,8 +632,17 @@ def test_a_filled_property_says_what_it_is_filled_from():
 
 @pytest.mark.parametrize(
     "name",
-    "filePath materialization contractEnforced access group deprecationDate freshnessBuildAfter "
-    "snapshot quoteColumns".split(),
+    [
+        "filePath",
+        "materialization",
+        "contractEnforced",
+        "access",
+        "group",
+        "deprecationDate",
+        "freshnessBuildAfter",
+        "snapshot",
+        "quoteColumns",
+    ],
 )
 def test_a_dbt_property_is_refused_because_it_says_nothing_about_a_python_node(
     name,
@@ -679,8 +689,18 @@ def test_a_refused_property_is_refused_on_any_level():
 
 @pytest.mark.parametrize(
     "name",
-    "filePath materialization contractEnforced access group deprecationDate freshnessBuildAfter "
-    "snapshot quoteColumns provenance".split(),
+    [
+        "filePath",
+        "materialization",
+        "contractEnforced",
+        "access",
+        "group",
+        "deprecationDate",
+        "freshnessBuildAfter",
+        "snapshot",
+        "quoteColumns",
+        "provenance",
+    ],
 )
 def test_each_property_a_python_contract_does_not_carry_is_refused(name):
     doc = _kpis()
@@ -690,8 +710,21 @@ def test_each_property_a_python_contract_does_not_carry_is_refused(name):
 
 @pytest.mark.parametrize(
     "name",
-    "service kind schedule criticality timeoutMinutes script readQueries csvSource extraColumns "
-    "config secretRef modeType assets".split(),
+    [
+        "service",
+        "kind",
+        "schedule",
+        "criticality",
+        "timeoutMinutes",
+        "script",
+        "readQueries",
+        "csvSource",
+        "extraColumns",
+        "config",
+        "secretRef",
+        "modeType",
+        "assets",
+    ],
 )
 def test_an_authored_property_on_the_schema_object_is_on_the_wrong_level(name):
     doc = _kpis()

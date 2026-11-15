@@ -1,5 +1,6 @@
 import importlib.util
 import zipfile
+
 from pathlib import Path
 
 import pytest
@@ -105,7 +106,7 @@ def test_the_required_members_are_the_files_of_the_package_tree():
 def test_a_platform_wheel_is_refused(tmp_path):
     problems = check_wheel.wheel_problems(
         _wheel(
-            tmp_path, name="continuo_contracts-0.1.0-cp312-cp312-linux_x86_64.whl"
+            tmp_path, name="continuo_contracts-0.1.0-cp314-cp314-linux_x86_64.whl"
         )
     )
     assert any("py3-none-any" in p for p in problems)

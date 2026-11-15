@@ -1,4 +1,5 @@
 import hashlib
+
 from importlib import resources
 
 import pytest

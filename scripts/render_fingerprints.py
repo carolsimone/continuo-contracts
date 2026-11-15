@@ -6,6 +6,7 @@ from this script's own location.
 
 import logging
 import sys
+
 from pathlib import Path
 
 from continuo_contracts.fingerprints import load, render_markdown

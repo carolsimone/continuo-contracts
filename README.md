@@ -262,12 +262,10 @@ node = PythonNode(
         PythonColumn("total_amount", "decimal(12, 2)", nullable=False),
     ),
 )
-code_projection(node)["output_columns"][
-    1
-]  # {"name": "tx_count", "nullable": False, "type": "INTEGER"}
-projection_hash(
-    node
-)  # "a01d7d6065f055bb2d87959aaf178d08f5a3f96c86912099b9876239d84f6efe"
+code_projection(node)["output_columns"][1]
+# {"name": "tx_count", "nullable": False, "type": "INTEGER"}
+projection_hash(node)
+# "a01d7d6065f055bb2d87959aaf178d08f5a3f96c86912099b9876239d84f6efe"
 ```
 
 Two data files pin this behaviour, and the wheel ships both:
@@ -477,12 +475,10 @@ what lets one small file mean more than it says or mean different things to diff
   in `line 0, column 0: $.config.rate: NaN and the infinities are not JSON numbers`.
 
 ```python
-load(
-    "a: on\nb: 1e3\nc: 2026-11-14\n"
-)  # {"a": "on", "b": 1000.0, "c": "2026-11-14"}
-load(
-    "a: &x 1\nb: *x\n"
-)  # StrictYamlError: line 2, column 4: YAML aliases are not allowed
+load("a: on\nb: 1e3\nc: 2026-11-14\n")
+# {"a": "on", "b": 1000.0, "c": "2026-11-14"}
+load("a: &x 1\nb: *x\n")
+# StrictYamlError: line 2, column 4: YAML aliases are not allowed
 ```
 
 ### Public names
@@ -536,10 +532,10 @@ continuo_values(
         {"vendor": "lotse", "property": "schedule", "value": "x"},
         {"vendor": "continuo", "property": "schedule", "value": "daily"},
     ]
-)  # {"schedule": "daily"}
-PROPERTIES[
-    "reads"
-]  # ContinuoProperty(name="reads", sits_on="schema", python="filled")
+)
+# {"schedule": "daily"}
+PROPERTIES["reads"]
+# ContinuoProperty(name="reads", sits_on="schema", python="filled")
 ```
 
 ### Public names
@@ -813,12 +809,10 @@ stored = normalise_python(
 )
 stored["schema"][0]["customProperties"]
 # [{"vendor": "continuo", "property": "reads", "value": ["analytics.daily_transactions"]}]
-contract_hash(
-    stored
-)  # "sha256:15268bb30f205e0e5cfb4791715391f3cf7ba527a671f319a6b77e1b087dda59"
-logical_type(
-    "varchar(64)"
-)  # {"logicalType": "string", "logicalTypeOptions": {"maxLength": 64}}
+contract_hash(stored)
+# "sha256:15268bb30f205e0e5cfb4791715391f3cf7ba527a671f319a6b77e1b087dda59"
+logical_type("varchar(64)")
+# {"logicalType": "string", "logicalTypeOptions": {"maxLength": 64}}
 ```
 
 ### Public names
