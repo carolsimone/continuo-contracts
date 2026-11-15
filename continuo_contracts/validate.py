@@ -26,6 +26,7 @@ from jsonschema import Draft201909Validator
 from jsonschema.exceptions import ValidationError
 
 from continuo_contracts import schema
+from continuo_contracts.contract import _SHAPES
 from continuo_contracts.errors import ProjectionError
 from continuo_contracts.python import (
     EXTRA_COLUMNS_POLICIES,
@@ -65,9 +66,16 @@ _REFUSED_FIELDS: Final = {
     "contractCreatedTs": "a Python contract carries no creation time, a clock is not part of it",
 }
 
-# The keys whose value the JSON schema leaves free-form: a value there is data of the author, so
-# a `customProperties` key inside it is not a list of custom properties.
-_FREE_FORM: Final = frozenset({"value", "examples", "arguments", "implementation"})
+# The level of the `customProperties` list of an object, by the ODCS type of the object that
+# `contract` walks: the contract, its schema object, a quality rule, or any other object.
+_LEVELS: Final = {"root": "root", "schema_object": "schema", "quality": "quality"}
+
+# The longest length of a `VARCHAR(n)` or `CHAR(n)`: canonical JSON writes no larger integer.
+_MAX_LENGTH: Final = 2**53 - 1
+
+# The fields a column may not carry: the column of a Python node has a name, a type and a
+# nullability, and nothing nested.
+_NESTED_COLUMN_FIELDS: Final = ("items", "map", "properties")
 
 # Why continuo fills a property or a Python contract does not carry it, for the message that
 # refuses the property.
@@ -473,38 +481,31 @@ def _refused_fields(contract: _Contract) -> Iterator[Issue]:
             yield _issue(field, "refused_field", why)
 
 
-def _below(level: str, key: str) -> str:
-    """Return the level of the objects under `key` of an object on `level`: `schema` objects sit
-    under the contract, a quality rule sits under any object, and everything else is `other`."""
-    if key == "quality":
-        return "quality"
-    if key == "schema" and level == "root":
-        return "schema"
-    return "other"
-
-
 def _custom_property_lists(
-    node: object, path: str, level: str
+    node: object, path: str, shape: str
 ) -> Iterator[tuple[str, str, list[Any]]]:
-    """Yield the path, the level and the items of every `customProperties` list under `node`.
+    """Yield the path, the level and the items of every `customProperties` list under `node`, an
+    object or a list of objects of the ODCS type `shape`.
 
     The level says which object the list belongs to: `root` (the contract), `schema` (a schema
-    object), `quality` (a quality rule) or `other`. The items of a `customProperties` list are
-    not walked into, and neither is a free-form value.
+    object), `quality` (a quality rule) or `other`. The object types and their free-form values
+    are those of the canonical form in `contract`, so both read the same keys as data. The items
+    of a `customProperties` list are not walked into, and neither is a free-form value.
     """
     if isinstance(node, list):
         for index, item in enumerate(node):
-            yield from _custom_property_lists(item, f"{path}[{index}]", level)
+            yield from _custom_property_lists(item, f"{path}[{index}]", shape)
     elif isinstance(node, Mapping):
+        spec = _SHAPES[shape]
         for key, child in node.items():
-            if key in _FREE_FORM:
+            if key in spec.free_form:
                 continue
             child_path = f"{path}.{key}" if path else key
             if key == "customProperties":
                 if isinstance(child, list):
-                    yield child_path, level, child
+                    yield child_path, _LEVELS.get(shape, "other"), child
             else:
-                yield from _custom_property_lists(child, child_path, _below(level, key))
+                yield from _custom_property_lists(child, child_path, spec.child(key))
 
 
 def _placement_fault(name: str, level: str) -> tuple[str, str] | None:
@@ -773,12 +774,19 @@ def _column_type_issue(raw: object, path: str) -> Issue | None:
     detail = ""
     if isinstance(raw, str):
         try:
-            canonical_sql_type(raw)
+            canonical = canonical_sql_type(raw)
         except ProjectionError as error:
             # A refusal for a range says the range, and any other refusal is the plain sentence.
             detail = f": {error}" if "out of range" in str(error) else ""
         else:
-            return None
+            length = re.fullmatch(r"(?:VARCHAR|CHAR)\((\d+)\)", canonical)
+            # A number of more than 16 digits is above the limit, and checking the length first
+            # keeps a very long digit string from reaching `int`, which refuses it.
+            if length is None or (
+                len(length.group(1)) <= 16 and int(length.group(1)) <= _MAX_LENGTH
+            ):
+                return None
+            detail = f": the length is at most {_MAX_LENGTH}"
     return _issue(path, "column_type", f"{_shown(raw)} is not a type continuo accepts{detail}")
 
 
@@ -832,6 +840,21 @@ def _columns(contract: _Contract) -> Iterator[Issue]:
             issue = _column_type_issue(column["physicalType"], f"{where}.physicalType")
             if issue is not None:
                 yield issue
+        for field in _NESTED_COLUMN_FIELDS:
+            if field in column:
+                yield _issue(
+                    f"{where}.{field}",
+                    "refused_field",
+                    f"column {shown} must not carry `{field}`, the column of a Python node has "
+                    "a name, type and nullability and nothing nested",
+                )
+        if "logicalTypeOptions" in column:
+            yield _issue(
+                f"{where}.logicalTypeOptions",
+                "refused_field",
+                f"column {shown} must not carry `logicalTypeOptions`, continuo derives the logical "
+                "type and its options from physicalType",
+            )
         if "physicalName" in column and column["physicalName"] != name:
             yield _issue(
                 f"{where}.physicalName",
@@ -854,6 +877,32 @@ def _columns(contract: _Contract) -> Iterator[Issue]:
                 f"the partitionKeyPosition of column {shown} must be -1 or left out, the table "
                 "of a Python node is not partitioned",
             )
+
+
+def _quality_implementations(contract: _Contract) -> Iterator[Issue]:
+    obj = contract.table_object
+    if obj is None:
+        return
+    places = [("schema[0]", obj)] + [
+        (f"schema[0].properties[{index}]", column)
+        for index, column in enumerate(contract.columns)
+        if isinstance(column, Mapping)
+    ]
+    for where, owner in places:
+        rules = owner.get("quality")
+        if not isinstance(rules, list):
+            continue
+        for index, rule in enumerate(rules):
+            if not isinstance(rule, Mapping) or "implementation" not in rule:
+                continue
+            implementation = rule["implementation"]
+            if implementation == "" or implementation == {}:
+                yield _issue(
+                    f"{where}.quality[{index}].implementation",
+                    "value",
+                    "the implementation of a custom quality rule must not be empty, it is the "
+                    "check that the engine runs",
+                )
 
 
 def _upsert_key(contract: _Contract) -> Iterator[Issue]:
@@ -928,6 +977,7 @@ _RULES: Final[tuple[_Rule, ...]] = (
     _property_values,
     _kind_rules,
     _columns,
+    _quality_implementations,
     _upsert_key,
 )
 
@@ -953,8 +1003,10 @@ def rule_issues(doc: Mapping[str, Any], *, path: str, service: str | None) -> li
     `csvSource`, `secretRef` and `assets` the contract must write, may write or may not write,
     and a python-csv node replaces its table. A kind that is not a Python kind gives one issue
     and skips these per-kind rules. The table lists at least one column, each with a name that is
-    used once and a `physicalType` that `canonical_sql_type` accepts, and no column has a
-    `physicalName` other than its name or is partitioned. The key of an `upsert` node is the
+    used once and a `physicalType` that `canonical_sql_type` accepts with a length of at most
+    2**53 - 1, and no column has a `physicalName` other than its name, is partitioned, nests
+    `properties`, `items` or a `map`, or writes `logicalTypeOptions`. A custom quality rule has an
+    `implementation` that is not empty. The key of an `upsert` node is the
     columns with `primaryKey: true`: there is one, each is `required: true` and not
     `DOUBLE PRECISION`, and each column of a key of several has its own whole-number
     `primaryKeyPosition` from 1. A python-csv node is not checked for its key.

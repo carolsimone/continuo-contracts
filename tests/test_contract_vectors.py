@@ -41,8 +41,26 @@ def _run(case):
     return {"stored": stored, "contract_hash": contract_hash(stored)}
 
 
-def test_the_file_holds_the_six_valid_and_four_invalid_cases():
-    assert sorted(case["name"] for case in VALID) == sorted(FIXTURE_OF)
+# The case that writes the full python-api contract in every spelling the canonical form removes.
+MESSY = "messy_python_api"
+# What its text writes, each something the stored form of the clean contract does not hold.
+MESSY_SPELLINGS = [
+    "\ufeff",
+    "\r\n",
+    "tags: [rates, api, rates]",
+    "severity: ERROR",
+    "type: library",
+    "logicalType: object",
+    "primaryKey: false",
+    "physicalName: currency",
+    'valueExt: ""',
+    '"  Exchange rates',
+    "{vendor: atlan, property: glossaryTerm, value: Exchange rate}",
+]
+
+
+def test_the_file_holds_the_seven_valid_and_four_invalid_cases():
+    assert sorted(case["name"] for case in VALID) == sorted([*FIXTURE_OF, MESSY])
     assert len(INVALID) == 4
     assert len({case["name"] for case in CASES}) == len(CASES)
 
@@ -84,6 +102,33 @@ def test_no_invalid_case_is_refused_by_the_json_schema():
     reasons = {issue["reason"] for case in INVALID for issue in case["issues"]}
     assert "odcs_schema" not in reasons
     assert reasons == {"column_type", "refused_field", "file_name", "strict_yaml"}
+
+
+def _case(name):
+    return next(case for case in CASES if case["name"] == name)
+
+
+def test_the_messy_case_writes_every_spelling_it_is_there_for():
+    text = _case(MESSY)["text"]
+    assert text.startswith("\ufeff")
+    assert "\n" not in text.replace("\r\n", "")
+    for spelling in MESSY_SPELLINGS:
+        assert spelling in text, spelling
+    atlan = "{vendor: atlan, property: glossaryTerm, value: Exchange rate}"
+    assert text.count(atlan) == 2
+    assert _case(MESSY)["path"].endswith("/analytics.python_api.odcs.yaml")
+
+
+def test_the_messy_case_stores_and_hashes_like_the_clean_contract():
+    messy, clean = _case(MESSY), _case("full_python_api")
+    assert messy["text"] != clean["text"]
+    assert messy["stored"] == clean["stored"]
+    assert messy["contract_hash"] == clean["contract_hash"]
+
+
+def test_the_clean_api_contract_has_a_lower_case_severity():
+    column = _case("full_python_api")["stored"]["schema"][0]["properties"][0]
+    assert column["quality"][0]["severity"] == "error"
 
 
 def test_the_demo_node_is_stored_with_its_reads():

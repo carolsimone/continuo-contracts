@@ -52,7 +52,13 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   dropped, whole-number floats stored as integers and the set-like lists sorted, with free-form
   values kept as written. `contract_hash()` hashes the stored form without `apiVersion`, `kind`,
   `status` and `version`. The new vector file `vectors/contracts.json` pins the stored form and
-  the `contract_hash` of six contracts and the issues of four refused ones.
+  the `contract_hash` of seven contracts, one of them a messy spelling of another that stores
+  alike, and the issues of four refused ones.
+- `continuo_contracts.validate` refuses a Python column that nests `properties`, `items` or a
+  `map` or writes `logicalTypeOptions` (`refused_field`), a `VARCHAR(n)` or `CHAR(n)` longer than
+  2**53 - 1 (`column_type`), and a custom quality rule with an empty `implementation` (`value`).
+  It finds `customProperties` lists through the object types and free-form values of
+  `continuo_contracts.contract`, so a `mustBe` value is data and the `value` of a `map` is walked.
 
 ## [0.1.0] - 2026-11-11
 

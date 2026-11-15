@@ -325,6 +325,10 @@ EMPTY_OR_DEFAULT = {
         d, 0, partitionKeyPosition=-1
     ),
     "column_critical_data_element_false": lambda d: _with_column(d, 0, criticalDataElement=False),
+    "column_primary_key_false": lambda d: _with_column(d, 0, primaryKey=False),
+    "column_physical_name_equal_to_name": lambda d: _with_column(d, 0, physicalName="day"),
+    "schema_object_logical_type_object": lambda d: d["schema"][0].update(logicalType="object")
+    or d,
     "column_classification_empty": lambda d: _with_column(d, 0, classification=""),
     "extra_columns_raise": lambda d: _with_property(d, _custom("extraColumns", "raise")),
     "other_vendor_value_null": lambda d: _with_property(d, _custom("glossaryTerm", None, "atlan")),
@@ -529,15 +533,41 @@ def test_logical_type_gives_a_new_dict_each_time():
 
 
 def test_an_authored_logical_type_is_replaced():
-    doc = _with_column(_kpis(), 1, logicalType="string", logicalTypeOptions={"maxLength": 5})
+    doc = _with_column(_kpis(), 1, logicalType="string")
     stored = _stored(doc, reads=KPIS_READS)
     assert stored == KPIS_STORED
 
 
-def test_an_authored_logical_type_options_is_replaced_by_the_derived_one():
+def test_an_authored_logical_type_options_is_refused_by_the_contract_check():
     doc = _with_column(_csv(), 1, logicalType="string", logicalTypeOptions={"minLength": 1})
-    stored = _stored(doc, "demo_orders_csv")
-    assert stored["schema"][0]["properties"][1]["logicalTypeOptions"] == {"maxLength": 64}
+    issues = validate_python_contract(doc, path="contracts/demo_orders_csv.odcs.yaml", service=None)
+    assert [(issue.path, issue.reason) for issue in issues] == [
+        ("schema[0].properties[1].logicalTypeOptions", "refused_field")
+    ]
+
+
+def test_a_service_level_value_ext_that_is_null_or_empty_is_dropped():
+    plain = _stored(_with_root(_kpis(), slaProperties=[{"property": "retention", "value": 3}]))
+    for empty in (None, ""):
+        sla = [{"property": "retention", "value": 3, "valueExt": empty}]
+        assert normalise_python(
+            _with_root(_kpis(), slaProperties=sla), service="service-py", reads=[]
+        ) == plain
+
+
+def test_a_service_level_value_is_kept_even_when_empty():
+    stored = _stored(_with_root(_kpis(), slaProperties=[{"property": "retention", "value": ""}]))
+    assert stored["slaProperties"] == [{"property": "retention", "value": ""}]
+
+
+def test_the_schema_object_keeps_its_physical_name_and_a_column_physical_name_other_than_its_name():
+    doc = _kpis()
+    doc["schema"][0]["physicalName"] = "py_daily_kpis"
+    stored = normalise_python(
+        _with_column(doc, 0, physicalName="other"), service="service-py", reads=[]
+    )
+    assert stored["schema"][0]["physicalName"] == "py_daily_kpis"
+    assert stored["schema"][0]["properties"][0]["physicalName"] == "other"
 
 
 # reads
@@ -565,7 +595,19 @@ def test_no_reads_write_no_reads_property():
     assert "customProperties" not in stored["schema"][0]
 
 
-@pytest.mark.parametrize("entry", ["daily_transactions", "", 7])
+def test_the_reads_are_lower_cased_in_ascii_only():
+    stored = normalise_python(
+        _kpis(), service="service-py", reads=["Analytics.\u00c4rger_TX", "analytics.\u00c4rger_tx"]
+    )
+    assert stored["schema"][0]["customProperties"][0]["value"] == [
+        "analytics.\u00c4rger_tx",
+    ]
+
+
+@pytest.mark.parametrize(
+    "entry",
+    ["daily_transactions", "", 7, ".", "a.", ".b", "a..b", " a.b", "a.b ", "a.b\n", "\ta.b"],
+)
 def test_a_reads_entry_that_is_not_a_schema_and_a_table_is_refused(entry):
     with pytest.raises(HashInputError, match="reads"):
         normalise_python(_kpis(), service="service-py", reads=["analytics.t", entry])
@@ -673,6 +715,29 @@ def test_a_comparison_value_of_a_quality_rule_is_kept_even_when_empty():
 
 
 # descriptions and severity
+
+
+def test_severity_is_lower_cased_in_ascii_only():
+    stored = _stored(_with_quality(_kpis(), severity="\u00c9RROR Level"), reads=KPIS_READS)
+    assert stored["schema"][0]["properties"][0]["quality"][0]["severity"] == "\u00c9rror level"
+
+
+def test_exact_duplicates_in_a_set_like_list_are_stored_once():
+    doc = _with_root(_kpis(), tags=["b", "a", "b", "a"])
+    doc = _with_property(doc, _custom("term", "x", "atlan"))
+    doc = _with_property(doc, _custom("term", "x", "atlan"))
+    doc = _with_property(doc, _custom("term", "y", "atlan"))
+    doc = _with_column(doc, 0, tags=["x", "x"])
+    stored = _stored(doc, reads=KPIS_READS)
+    assert stored["tags"] == ["a", "b"]
+    assert stored["schema"][0]["properties"][0]["tags"] == ["x"]
+    atlan = [p for p in stored["customProperties"] if p["vendor"] == "atlan"]
+    assert atlan == [_custom("term", "x", "atlan"), _custom("term", "y", "atlan")]
+    once = _with_root(_kpis(), tags=["a", "b"])
+    once = _with_property(once, _custom("term", "y", "atlan"))
+    once = _with_property(once, _custom("term", "x", "atlan"))
+    once = _with_column(once, 0, tags=["x"])
+    assert contract_hash(stored) == contract_hash(_stored(once, reads=KPIS_READS))
 
 
 def test_descriptions_are_stripped_and_severity_lower_cased():

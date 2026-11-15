@@ -12,31 +12,37 @@ object it
 
 - strips the description text: a `description` string, and each string of the contract's
   `description` object, has CRLF and CR turned into LF and its outer ASCII whitespace removed;
-- lower-cases the `severity` of a quality rule;
+- lower-cases the ASCII letters of the `severity` of a quality rule;
 - drops a value that is null, an empty string, an empty list or an empty object, and a value
   that equals the ODCS default of its object type: `deprecated: false` on a schema object or a
-  column, `required: false`, `unique: false`, `primaryKeyPosition: -1`, `partitioned: false`,
-  `partitionKeyPosition: -1`, `criticalDataElement: false` and `semanticType: column` on a
-  column, `type: library` on a quality rule and `type: foreignKey` on a relationship;
+  column, `logicalType: object` (the only logical type ODCS allows there) on a schema object,
+  `required: false`, `unique: false`, `primaryKey: false`, `primaryKeyPosition: -1`,
+  `partitioned: false`, `partitionKeyPosition: -1`, `criticalDataElement: false` and
+  `semanticType: column` on a column, `type: library` on a quality rule and `type: foreignKey`
+  on a relationship;
+- drops the `physicalName` of a column when it equals the column's `name`;
 - drops a custom property whose value is null or empty, and a `continuo` property that says
   continuo's default: `modeType: replace` or `extraColumns: raise`;
 - sorts the set-like lists `customProperties`, `tags`, `roles`, `quality`, `relationships` and
-  `authoritativeDefinitions` by the canonical JSON of each item, and keeps every other list,
-  such as the columns in `properties`, in file order.
+  `authoritativeDefinitions` by the canonical JSON of each item and keeps an item that equals an
+  earlier one once, and keeps every other list, such as the columns in `properties`, in file
+  order.
 
 A free-form value keeps its content as written: the `value` of a custom property, the
-`examples` of a column, the `implementation` and `arguments` of a quality rule, the `mustBe` and
-`mustNotBe` of a quality rule, the `value` and `valueExt` of a service level and the `value` of
-an enum entry. A free-form `examples`, `implementation` or `arguments` that is empty as a whole
-is dropped, and the other free-form values are kept even when null or empty, because there the
-null or the empty value is what the author compares with. Everywhere, free-form values
-included, a float that is a whole number within -(2**53 - 1) to 2**53 - 1 becomes an integer.
+`examples` of a column, the `implementation`, `arguments`, `mustBe` and `mustNotBe` of a quality
+rule, the `value` and `valueExt` of a service level and the `value` of an enum entry. A free-form
+value that is null or empty as a whole is dropped, except the `mustBe` and `mustNotBe` of a
+quality rule and the `value` of a service level or an enum entry, where the null or the empty
+value is what the author compares with. `validate` reads the same object types and free-form
+values, so both treat the same keys as data. Everywhere, free-form values included, a float that
+is a whole number within -(2**53 - 1) to 2**53 - 1 becomes an integer.
 
 `contract_hash` is `"sha256:"` and the lowercase hex SHA-256 of the RFC 8785 canonical JSON of
 the stored form without its root keys `apiVersion`, `kind`, `status` and `version`, which every
 stored form holds with the same values.
 """
 
+import string
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from types import MappingProxyType
@@ -81,9 +87,14 @@ _SET_LIKE: Final = frozenset(
 # The `continuo` properties whose value is continuo's default, which the stored form leaves out.
 _CONTINUO_DEFAULTS: Final = MappingProxyType({"modeType": "replace", "extraColumns": "raise"})
 
+# The ASCII letters in upper case, each with its lower case. Lower-casing changes nothing else,
+# so the result is the same on every Python version.
+_ASCII_LOWER: Final = str.maketrans(string.ascii_uppercase, string.ascii_lowercase)
+
 _COLUMN_DEFAULTS: Final = MappingProxyType(
     {
         "deprecated": False,
+        "primaryKey": False,
         "primaryKeyPosition": -1,
         "required": False,
         "unique": False,
@@ -99,12 +110,14 @@ _COLUMN_DEFAULTS: Final = MappingProxyType(
 class _Shape:
     """What the canonical form knows about one ODCS object type.
 
-    `children` names the object type of the value under a key (of each item, for a list), and a
-    key it does not name holds a plain object. `defaults` are the ODCS defaults of the type.
-    `free_form` are the keys whose value keeps its content as written, and `kept_empty` are the
-    free-form keys that stay when their value is null or empty. `text_values` says that every
-    string of the object is description text, and `lower_case` names the keys whose string is
-    lower-cased.
+    `children` names the object type of the value under a key (of each item, for a list), and a key
+    it does not name holds a plain object. `defaults` are the ODCS defaults of the type. `free_form`
+    are the keys whose value keeps its content as written, and `kept_empty` are the free-form keys
+    that stay when their value is null or empty. `validate` reads `children` and `free_form` too, to
+    find the `customProperties` lists of a contract. `text_values` says that every string of the
+    object is description text, `lower_case` names the keys whose string is lower-cased, and
+    `own_physical_name` says that a `physicalName` equal to the object's `name` says nothing and is
+    dropped.
     """
 
     children: Mapping[str, str] = field(default_factory=dict)
@@ -113,6 +126,7 @@ class _Shape:
     kept_empty: frozenset[str] = frozenset()
     text_values: bool = False
     lower_case: frozenset[str] = frozenset()
+    own_physical_name: bool = False
 
     def child(self, key: str) -> str:
         if key in self.children:
@@ -145,13 +159,15 @@ _SHAPES: Final = MappingProxyType(
                 "quality": "quality",
                 "relationships": "relationship",
             },
-            defaults={"deprecated": False},
+            # `object` is the only logical type ODCS allows on a schema object.
+            defaults={"deprecated": False, "logicalType": "object"},
         ),
         # A column, a nested property and the item of an array or a map share one type.
         "property": _Shape(
             children=_PROPERTY_CHILDREN,
             defaults=_COLUMN_DEFAULTS,
             free_form=frozenset({"examples"}),
+            own_physical_name=True,
         ),
         "map": _Shape(children={"key": "property", "value": "property"}),
         "quality": _Shape(
@@ -163,8 +179,7 @@ _SHAPES: Final = MappingProxyType(
         "relationship": _Shape(defaults={"type": "foreignKey"}),
         "custom_property": _Shape(free_form=frozenset({"value"}), kept_empty=frozenset({"value"})),
         "service_level": _Shape(
-            free_form=frozenset({"value", "valueExt"}),
-            kept_empty=frozenset({"value", "valueExt"}),
+            free_form=frozenset({"value", "valueExt"}), kept_empty=frozenset({"value"})
         ),
         "enum_value": _Shape(free_form=frozenset({"value"}), kept_empty=frozenset({"value"})),
         "object": _Shape(),
@@ -208,13 +223,14 @@ def normalise_python(
     when `doc` writes none) and `service` always written, and on each column the `logicalType`
     and `logicalTypeOptions` that `logical_type` gives for its `physicalType`, in place of any
     written ones (both are removed when it gives none). When `reads` is not empty, the schema
-    object gets the `continuo` property `reads` with the tables in lower case, sorted by code
-    point and listed once. The result is then written in the canonical form that the module
+    object gets the `continuo` property `reads` with the tables' ASCII letters in lower case, sorted
+    by code point and listed once. The result is then written in the canonical form that the module
     describes.
 
-    Raises `HashInputError` when `reads` is a string or lists a table that is not a string with
-    a dot, and `CanonicalJsonError` when an item of a set-like list holds a value that canonical
-    JSON cannot write, which a document that `yaml_strict.load` read never holds.
+    Raises `HashInputError` when `reads` is a string or lists a table that is not a string of at
+    least two non-empty parts joined by dots, or that has whitespace at either end, and
+    `CanonicalJsonError` when an item of a set-like list holds a value that canonical JSON cannot
+    write, which a document that `yaml_strict.load` read never holds.
     """
     tables = _reads(reads)
     stored: dict[str, Any] = _as_written(doc)
@@ -255,14 +271,23 @@ def contract_hash(stored: Mapping[str, Any]) -> str:
 
 
 def _reads(reads: Sequence[str]) -> list[str]:
-    """Return the tables of `reads` in lower case, sorted by code point and listed once."""
+    """Return the tables of `reads` with their ASCII letters in lower case, sorted by code point
+    and listed once."""
     if isinstance(reads, str):
         raise HashInputError(f"reads {reads!r}: reads is a list of tables, not one string")
     tables = set()
     for entry in reads:
-        if not isinstance(entry, str) or "." not in entry:
-            raise HashInputError(f"reads entry {entry!r}: a table is written <schema>.<table>")
-        tables.add(entry.lower())
+        if (
+            not isinstance(entry, str)
+            or entry != entry.strip()
+            or len(parts := entry.split(".")) < 2
+            or not all(parts)
+        ):
+            raise HashInputError(
+                f"reads entry {entry!r}: a table is written <schema>.<table>, with no empty part "
+                "and no whitespace around it"
+            )
+        tables.add(entry.translate(_ASCII_LOWER))
     return sorted(tables)
 
 
@@ -347,10 +372,23 @@ def _clean_object(obj: Mapping[str, Any], shape: _Shape) -> dict[str, Any]:
             if key == "description" or shape.text_values:
                 item = normalise_text(item)
             if key in shape.lower_case:
-                item = item.lower()
+                item = item.translate(_ASCII_LOWER)
         if _is_empty(item) or (key in shape.defaults and _is_default(item, shape.defaults[key])):
             continue
         if key in _SET_LIKE and isinstance(item, list):
-            item = sorted(item, key=canonical_json)
+            item = _sorted_once(item)
         cleaned[key] = item
+    if (
+        shape.own_physical_name
+        and "physicalName" in cleaned
+        and _is_default(cleaned["physicalName"], cleaned.get("name"))
+    ):
+        del cleaned["physicalName"]
     return cleaned
+
+
+def _sorted_once(items: list[Any]) -> list[Any]:
+    """Return `items` sorted by the canonical JSON of each, with an item that equals an earlier
+    one left out."""
+    by_bytes = {canonical_json(item): item for item in items}
+    return [by_bytes[key] for key in sorted(by_bytes)]

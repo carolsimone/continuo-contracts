@@ -61,6 +61,7 @@ schema:
         quality:
           - metric: nullValues
             mustBe: 0
+            severity: error
             customProperties:
               - {vendor: continuo, property: where, value: "currency is not null"}
               - {vendor: continuo, property: warnIf, value: ">= 1"}

@@ -521,13 +521,13 @@ rules read a document of the shape the schema describes. The module logs nothing
   | `file_name` | the base name of the file is neither `<table>.odcs.yaml` nor `<schema>.<table>.odcs.yaml` |
   | `service` | a `service` property names another service than the release's |
   | `missing_field` | `team.name`, `schedule`, `criticality`, the columns or the `physicalType` of a column is missing |
-  | `refused_field` | the contract writes `servers`, `tenant` or `contractCreatedTs`, or a column has a `physicalName` other than its name, is partitioned or has a partition key position |
+  | `refused_field` | the contract writes `servers`, `tenant` or `contractCreatedTs`, or a column has a `physicalName` other than its name, is partitioned, has a partition key position, nests `properties`, `items` or a `map`, or writes `logicalTypeOptions` |
   | `unknown_property` | a `continuo` property is not in `vocabulary.PROPERTIES` |
   | `refused_property` | a `continuo` property is one that continuo fills or no Python contract carries, or it sits on the wrong object |
   | `kind_rule` | a node misses a property its kind needs, writes one its kind refuses, or a python-csv node does not replace its table |
-  | `column_type` | the `physicalType` of a column is not a type continuo accepts (`canonical_sql_type` refuses it) |
+  | `column_type` | the `physicalType` of a column is not a type continuo accepts (`canonical_sql_type` refuses it, or its length is above 2**53 - 1) |
   | `primary_key` | an `upsert` node has no key, a key column is not `required: true` or is `DOUBLE PRECISION`, or the columns of a key of several do not each have their own whole-number `primaryKeyPosition` from 1 |
-  | `value` | a `continuo` property is written twice in one list, or has a value outside what it allows, the `kind` is not a Python kind, or two columns have one name |
+  | `value` | a `continuo` property is written twice in one list, or has a value outside what it allows, the `kind` is not a Python kind, two columns have one name, or a custom quality rule has an empty `implementation` |
 
   `strict_yaml` is for a caller that reports a `yaml_strict.StrictYamlError` as an issue, and this
   module never gives it.
@@ -557,8 +557,12 @@ rules read a document of the shape the schema describes. The module logs nothing
     `refused_property`, and so is a property in the list of another object than the one it
     belongs to: the contract, the schema object or a quality rule, so a property in the list of a
     column, of the description or of the team is on the wrong object. A property of another vendor
-    is never looked at, whatever its name, and a `customProperties` key inside a free-form value
-    (`value`, `examples`, `arguments`, `implementation`) is data. A property that sits where it may
+    is never looked at, whatever its name, and a `customProperties` key inside a free-form value is
+    data. The free-form values are those of the canonical form in [contract](#contract), by object
+    type: the `value` of a custom property, the `examples` of a column, the `implementation`,
+    `arguments`, `mustBe` and `mustNotBe` of a quality rule, the `value` and `valueExt` of a
+    service level and the `value` of an enum entry. The `value` of a column's `map` is a property
+    and is walked. A property that sits where it may
     is then checked for a repeat, which is a `value` issue at each later copy that names the place of
     the first, and a `service` property must be the release's service. Every refusal says why, such
     as that continuo fills `reads` from the tables the read queries name, or that a dbt property
@@ -588,9 +592,15 @@ rules read a document of the shape the schema describes. The module logs nothing
     checked for its value.
   - The table lists at least one column (`missing_field` at `schema[0].properties`). Each column
     has a name with text, used once, and a `physicalType` (a `missing_field` when it is left out)
-    that `canonical_sql_type` accepts, a `column_type` issue at `physicalType` otherwise. A column
-    does not write a `physicalName` other than its name, `partitioned: true` or a
-    `partitionKeyPosition` other than -1. `unique` is not checked.
+    that `canonical_sql_type` accepts with a length of at most 2**53 - 1 (the largest integer
+    canonical JSON writes), a `column_type` issue at `physicalType` otherwise. A column does not
+    write a `physicalName` other than its name, `partitioned: true` or a `partitionKeyPosition`
+    other than -1, and it nests no `properties`, `items` or `map`, because the column of a Python
+    node has a name, a type and a nullability. It writes no `logicalTypeOptions`, which continuo
+    derives from `physicalType`; a written `logicalType` is accepted and replaced. `unique` is not
+    checked.
+  - The `implementation` of a custom quality rule, on the schema object or a column, is not `""`
+    or `{}` (`value`).
   - On an `upsert` node the key is the columns with `primaryKey: true`. There is at least one
     (`primary_key` at `schema[0].properties`), and each is `required: true` and not
     `DOUBLE PRECISION`. When there are several, each has its own whole-number `primaryKeyPosition`
@@ -645,38 +655,45 @@ hash, whatever their line endings, byte order mark, key order or quoting. The mo
   - on each column, the `logicalType` and `logicalTypeOptions` that `logical_type` gives for its
     `physicalType`, in place of any written ones, and neither when it gives none;
   - when `reads` is not empty, `{vendor: continuo, property: reads, value: [...]}` on the schema
-    object, with the tables in lower case, sorted by code point and listed once.
+    object, with the tables in lower case (ASCII letters only), sorted by code point and listed
+    once.
 
   It then writes the document in the canonical form, which walks the ODCS structure and, on each
   object:
   - strips description text: a `description` string, and each string of the contract's
     `description` object, gets LF line endings and loses its outer ASCII whitespace
     (`canonical.normalise_text`); a description is never removed for its content;
-  - lower-cases the `severity` of a quality rule;
+  - lower-cases the ASCII letters of the `severity` of a quality rule, so the result is the same
+    on every Python version;
   - drops a value that is null, an empty string, an empty list or an empty object, and a value
     equal to the ODCS default of its object type: `deprecated: false` on a schema object or a
-    column; `required: false`, `unique: false`, `primaryKeyPosition: -1`, `partitioned: false`,
-    `partitionKeyPosition: -1`, `criticalDataElement: false` and `semanticType: column` on a
-    column; `type: library` on a quality rule; `type: foreignKey` on a relationship;
+    column; `logicalType: object`, the only logical type ODCS allows there, on a schema object;
+    `required: false`, `unique: false`, `primaryKey: false`, `primaryKeyPosition: -1`,
+    `partitioned: false`, `partitionKeyPosition: -1`, `criticalDataElement: false` and
+    `semanticType: column` on a column; `type: library` on a quality rule; `type: foreignKey` on
+    a relationship;
+  - drops the `physicalName` of a column when it equals the column's `name`;
   - drops a custom property whose value is null or empty, and the `continuo` properties that
     say continuo's default, `modeType: replace` and `extraColumns: raise`;
   - sorts `customProperties`, `tags`, `roles`, `quality`, `relationships` and
-    `authoritativeDefinitions` by the canonical JSON of each item, and keeps every other list,
-    the columns in `properties` among them, in file order.
+    `authoritativeDefinitions` by the canonical JSON of each item and keeps an item that equals
+    an earlier one once, and keeps every other list, the columns in `properties` among them, in
+    file order.
 
-  A free-form value keeps its content as written: the `value` of a custom property, the
-  `examples` of a column, the `implementation`, `arguments`, `mustBe` and `mustNotBe` of a
-  quality rule, the `value` and `valueExt` of a service level and the `value` of an enum entry.
-  Nothing inside one is stripped, dropped or sorted, so a `tags` list inside a `config` keeps
-  its order. A free-form `examples`, `implementation` or `arguments` that is empty as a whole is
-  dropped; the others stay even when null or empty, because there the author compares with that
-  value. Everywhere, free-form values included, a float that is a whole number within
-  -(2**53 - 1) to 2**53 - 1 becomes an integer, so `batch_size: 10.0` is stored as `10`.
-  `physicalType` is stored as written.
+  A free-form value keeps its content as written: the `value` of a custom property, the `examples`
+  of a column, the `implementation`, `arguments`, `mustBe` and `mustNotBe` of a quality rule, the
+  `value` and `valueExt` of a service level and the `value` of an enum entry. Nothing inside one is
+  stripped, dropped or sorted, so a `tags` list inside a `config` keeps its order. A free-form value
+  that is null or empty as a whole is dropped, except `mustBe`, `mustNotBe` and the `value` of a
+  service level or an enum entry, which stay, because there the author compares with that value.
+  `validate` reads the same keys as data. Everywhere, free-form values included, a float that is a
+  whole number within -(2**53 - 1) to 2**53 - 1 becomes an integer, so `batch_size: 10.0` is stored
+  as `10`. `physicalType` is stored as written.
 
-  Raises `HashInputError` when `reads` is one string, or lists a table that is not a string with
-  a dot, and `CanonicalJsonError` when an item of a set-like list holds a value that canonical
-  JSON cannot write, which a document that `yaml_strict.load` read never holds.
+  Raises `HashInputError` when `reads` is one string, or lists a table that is not a string of at
+  least two non-empty parts joined by dots (`"."`, `"a."` and `".b"` are refused) or that has
+  whitespace at either end, and `CanonicalJsonError` when an item of a set-like list holds a value
+  that canonical JSON cannot write, which a document that `yaml_strict.load` read never holds.
 - `contract_hash(stored: Mapping[str, Any]) -> str` returns `"sha256:"` and the lowercase hex
   SHA-256 of the RFC 8785 canonical JSON of the stored form without its root keys `apiVersion`,
   `kind`, `status` and `version`, 71 characters in all. Every stored form holds those four with
@@ -787,14 +804,18 @@ every case of every file.
   "contract_hash"}`. `text` is a whole Python contract file, `path` its repository path, `service`
   the service of the release and `reads` the tables its read queries name. Read `text` with
   `yaml_strict.load`, check it with `validate.validate_python_contract(doc, path=path,
-  service=service)`, and pass it to `contract.normalise_python(doc, service=service,
-  reads=reads)`: the result is `stored`, and `contract.contract_hash(stored)` is `contract_hash`.
-  A case `{"name", "path", "service", "reads", "text", "issues"}` is refused, and `issues` lists
-  the `{"path", "reason"}` of each issue in order; a text that `yaml_strict.load` refuses gives
-  the one issue `{"path": "$", "reason": "strict_yaml"}`. The valid cases are the three demo
-  contracts of service-py and three contracts that write every field a Python contract may carry,
-  one per kind. The refused ones are a `NUMERIC(12)` column, a contract that names its
-  `servers`, a file name that does not match the table and a repeated key. The file is ASCII.
+  service=service)`, and pass it to `contract.normalise_python(doc, service=service, reads=reads)`:
+  the result is `stored`, and `contract.contract_hash(stored)` is `contract_hash`. A case `{"name",
+  "path", "service", "reads", "text", "issues"}` is refused, and `issues` lists the `{"path",
+  "reason"}` of each issue in order; a text that `yaml_strict.load` refuses gives the one issue
+  `{"path": "$", "reason": "strict_yaml"}`. The valid cases are the three demo contracts of
+  service-py, three contracts that write every field a Python contract may carry, one per kind, and
+  the python-api one again in every spelling the canonical form removes (a byte order mark and CRLF,
+  lists out of order with a repeat, descriptions with outer whitespace, an upper-case severity,
+  `type: library`, `logicalType: object`, `primaryKey: false`, a column `physicalName` equal to its
+  name and an empty `valueExt`), whose `stored` and `contract_hash` are those of the clean file. The
+  refused ones are a `NUMERIC(12)` column, a contract that names its `servers`, a file name that
+  does not match the table and a repeated key. The file is ASCII.
 
 ## Pinning
 

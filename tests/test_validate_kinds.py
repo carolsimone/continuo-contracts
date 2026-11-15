@@ -1115,3 +1115,87 @@ def test_every_issue_of_these_rules_has_one_of_the_reasons():
     issues = _upsert_check(doc)
     assert len(issues) >= 6
     assert all(issue.reason in REASONS for issue in issues)
+
+
+# what a Python column may not carry besides its name, type and nullability
+
+
+@pytest.mark.parametrize(
+    ("field", "fields"),
+    [
+        ("properties", {"logicalType": "object", "properties": [{"name": "inner"}]}),
+        ("items", {"logicalType": "array", "items": {"logicalType": "string"}}),
+        (
+            "map",
+            {
+                "logicalType": "map",
+                "map": {"key": {"logicalType": "string"}, "value": {"logicalType": "string"}},
+            },
+        ),
+    ],
+)
+def test_a_column_with_nested_properties_items_or_a_map_is_refused(field, fields):
+    doc = _kpis()
+    _columns(doc)[0].update(fields)
+    issue = _only(_check(doc))
+    assert (issue.path, issue.reason) == (f"schema[0].properties[0].{field}", "refused_field")
+    assert "name, type and nullability" in issue.message
+
+
+def test_an_authored_logical_type_options_is_refused():
+    doc = _kpis()
+    _columns(doc)[0].update(logicalType="date", logicalTypeOptions={"format": "yyyy-MM-dd"})
+    issue = _only(_check(doc))
+    assert (issue.path, issue.reason) == (
+        "schema[0].properties[0].logicalTypeOptions",
+        "refused_field",
+    )
+    assert "physicalType" in issue.message
+
+
+def test_an_authored_logical_type_is_accepted_because_continuo_replaces_it():
+    doc = _kpis()
+    _columns(doc)[1]["logicalType"] = "string"
+    assert _check(doc) == []
+
+
+@pytest.mark.parametrize(
+    "raw",
+    ["VARCHAR(9007199254740992)", "char(99999999999999999999)", "VARCHAR(0009007199254740992)"],
+)
+def test_a_length_above_the_safe_integer_range_is_refused_once(raw):
+    doc = _kpis()
+    _columns(doc)[0]["physicalType"] = raw
+    issue = _only(_check(doc))
+    assert (issue.path, issue.reason) == ("schema[0].properties[0].physicalType", "column_type")
+    assert "9007199254740991" in issue.message
+
+
+def test_the_largest_safe_length_is_accepted():
+    doc = _kpis()
+    _columns(doc)[0]["physicalType"] = "VARCHAR(9007199254740991)"
+    assert _check(doc) == []
+
+
+@pytest.mark.parametrize("implementation", ["", {}])
+@pytest.mark.parametrize(
+    ("where", "path"),
+    [
+        (lambda doc: doc["schema"][0], "schema[0].quality[0].implementation"),
+        (lambda doc: _columns(doc)[1], "schema[0].properties[1].quality[0].implementation"),
+    ],
+)
+def test_an_empty_implementation_of_a_custom_quality_rule_is_refused(implementation, where, path):
+    doc = _kpis()
+    where(doc)["quality"] = [{"type": "custom", "engine": "soda", "implementation": implementation}]
+    issue = _only(_check(doc))
+    assert (issue.path, issue.reason) == (path, "value")
+
+
+@pytest.mark.parametrize("implementation", ["checks: []", {"checks": []}, " "])
+def test_a_custom_quality_rule_with_an_implementation_is_accepted(implementation):
+    doc = _kpis()
+    _columns(doc)[1]["quality"] = [
+        {"type": "custom", "engine": "soda", "implementation": implementation}
+    ]
+    assert _check(doc) == []

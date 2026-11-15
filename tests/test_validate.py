@@ -917,3 +917,28 @@ def test_validate_python_contract_gives_the_rule_issues_otherwise():
     assert validate_python_contract(doc, path=KPIS_PATH, service=SERVICE) == rule_issues(
         doc, path=KPIS_PATH, service=SERVICE
     )
+
+
+def test_a_comparison_value_of_a_quality_rule_is_data_and_not_walked():
+    doc = _kpis()
+    nested = {"customProperties": [_continuo("entity", "x")]}
+    doc["schema"][0]["quality"] = [
+        {"metric": "rowCount", "mustBe": nested},
+        {"metric": "rowCount", "mustNotBe": [nested]},
+    ]
+    assert _check(doc) == []
+
+
+def test_the_value_of_a_map_is_a_property_and_is_walked():
+    doc = _kpis()
+    doc["schema"][0]["properties"][0].update(
+        logicalType="map",
+        map={
+            "key": {"logicalType": "string"},
+            "value": {"logicalType": "string", "customProperties": [_continuo("entity", "x")]},
+        },
+    )
+    assert _found(_check(doc)) == [
+        ("schema[0].properties[0].map", "refused_field"),
+        ("schema[0].properties[0].map.value.customProperties[0]", "unknown_property"),
+    ]

@@ -86,14 +86,14 @@ not a service, and layers would add indirection without a second implementation.
 - `contract`: the stored form of a Python node's ODCS contract, in the canonical form, and its
   `contract_hash`.
 
-`errors` and `vocabulary` import nothing from the package. `canonical`, `hashing`, `fingerprints` and
-`schema` import only `errors` (`fingerprints` also PyYAML), `yaml_strict` imports `canonical`,
+`errors` and `vocabulary` import nothing from the package. `canonical`, `hashing`, `fingerprints`
+and `schema` import only `errors` (`fingerprints` also PyYAML), `yaml_strict` imports `canonical`,
 `errors` and PyYAML, `python` imports `canonical`, `errors`, `hashing`, `fingerprints` and
-`vocabulary`, `validate` imports `errors`, `python`, `schema`, `vocabulary` and jsonschema,
-`contract` imports `canonical`, `errors`, `hashing`, `python` and `vocabulary`, and nothing imports
-`scripts` or `tests`. The only files the package reads are the packaged `fingerprints.yaml`, in
-`fingerprints.load()`, and the packaged ODCS schema, in `schema.load()`. A split into layers is
-proposed only when a module gets a second reason to change.
+`vocabulary`, `validate` imports `contract`, `errors`, `python`, `schema`, `vocabulary` and
+jsonschema, `contract` imports `canonical`, `errors`, `hashing`, `python` and `vocabulary`, and
+nothing imports `scripts` or `tests`. The only files the package reads are the packaged
+`fingerprints.yaml`, in `fingerprints.load()`, and the packaged ODCS schema, in `schema.load()`. A
+split into layers is proposed only when a module gets a second reason to change.
 
 ## Releasing
 
