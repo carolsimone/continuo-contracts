@@ -9,7 +9,6 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - `continuo_contracts.schema`: the ODCS v3.2.0 JSON schema ships in the wheel, and `load()` returns
   it after it checks that the file has the pinned SHA-256 (`SchemaFileError` otherwise).
-- `jsonschema>=4.26` is a runtime dependency, next to PyYAML.
 - `continuo_contracts.yaml_strict`: `load()` reads a contract file as YAML 1.2 core, so `on`,
   `yes`, `NO`, `2026-11-14`, `1:20` and `1_000` are strings. It refuses aliases, merge keys,
   repeated keys, keys that are not strings, tags other than the core ones, more than one
@@ -22,60 +21,74 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the values of the `continuo` items of a `customProperties` list (a name written twice keeps its
   last value), `VENDOR` is `continuo`, and `ContinuoProperty` is the row type.
 - `continuo_contracts.validate`: `validate_python_contract()` checks the ODCS contract of a Python
-  node against the JSON schema and continuo's envelope, identity, file name, team and refusal
-  rules, and returns every problem as an `Issue` (a path, a reason from the closed `REASONS` and a
-  message) in path order. `schema_issues()` runs the JSON schema alone and `rule_issues()` runs the
-  rules alone on a document the schema accepted, so a caller can cache the first. The rules refuse
-  `servers`, `tenant`, `contractCreatedTs`, a `continuo` property that is unknown, filled by
-  continuo, not carried by a Python contract or on the wrong object, and a `continuo` property
-  written twice.
-- `continuo_contracts.validate` also checks what depends on the kind of the node: `schedule` and
-  `criticality` are written, each property has a value of its kind (`timeoutMinutes` is 1 to
-  10080, `secretRef` is a `continuo-api-` Secret name of at most 253 characters, `csvSource` is
-  `s3://<bucket>/<key>` or `https://<host>`, `readQueries` and `assets` are well formed), and a
-  python-node, python-csv or python-api writes the properties its kind needs and none that it
-  refuses (`kind_rule`). It also checks the columns (a name used once, a `physicalType` that
-  `canonical_sql_type` accepts as `column_type`, no `physicalName`, partition or partition key
-  position) and the key of an `upsert` node (`primary_key`: one exists, each key column is
-  `required` and not `DOUBLE PRECISION`, and each column of a key of several has its own
-  whole-number `primaryKeyPosition` from 1). The name of the table may not be blank, have outer
-  whitespace or hold a dot, and the schema part of the id may not hold a dot.
+  node and returns every problem as an `Issue` (a path, a reason from the closed `REASONS` and a
+  message) in path order. `schema_issues()` runs the JSON schema alone and `rule_issues()` runs
+  continuo's rules alone on a document the schema accepted, so a caller can cache the first.
+- The rules of `continuo_contracts.validate` check the envelope, the identity (the id, `name` and
+  `physicalName` agree with the table, the name of the table is not blank, has no outer
+  whitespace and no dot, and the file is named `<table>.odcs.yaml` or `<schema>.<table>.odcs.yaml`),
+  `team.name`, `schedule` and `criticality`, and the `service` property against the service of the
+  release when one is given. They refuse `servers`, `tenant`, `contractCreatedTs`, and a `continuo`
+  property that is unknown, filled by continuo, not carried by a Python contract, on the wrong
+  object or written twice.
+- The rules also check what depends on the kind of the node (`kind_rule`): each property has a
+  value of its kind (`timeoutMinutes` is 1 to 10080, `secretRef` is a `continuo-api-` Secret name
+  of at most 253 characters, `csvSource` is `s3://<bucket>/<key>` or `https://<host>`,
+  `readQueries` and `assets` are well formed), and a python-node, python-csv or python-api writes
+  the properties its kind needs and none that it refuses.
+- The rules check the columns and the key. A column has a name used once and a `physicalType` that
+  `canonical_sql_type` accepts (`column_type`, with a `VARCHAR(n)` or `CHAR(n)` of at most
+  2**53 - 1), and no `physicalName`, partition, partition key position, nested `properties`,
+  `items` or `map`, or `logicalTypeOptions` (`refused_field`). The key of an `upsert` node
+  (`primary_key`) exists, each key column is `required` and not `DOUBLE PRECISION`, and each
+  column of a key of several has its own whole-number `primaryKeyPosition` from 1. A custom
+  quality rule has a non-empty `implementation`.
 - `continuo_contracts.python.node_from_odcs()` returns the `PythonNode` that a Python node's ODCS
   contract declares, so its `code_projection()` and `projection_hash()` are those of the same node
-  written as a wire entry. The three demo nodes of service-py are checked in as ODCS contracts
-  next to the old entries they replace, and a test holds their projections to the old ones.
+  written as a wire entry.
 - `continuo_contracts.contract`: `normalise_python()` builds the stored form of a Python contract
   (`version: "0"`, `status: active`, the table's names, the `kind` and `service` properties, the
   `reads` tables in lower case, sorted and listed once, and a `logicalType` per column from
   `logical_type()`), written in the canonical form: description text stripped, quality severity
   lower-cased, empty values, ODCS defaults and continuo's default `modeType` and `extraColumns`
   dropped, whole-number floats stored as integers and the set-like lists sorted, with free-form
-  values kept as written. `contract_hash()` hashes the stored form without `apiVersion`, `kind`,
-  `status` and `version`. The new vector file `vectors/contracts.json` pins the stored form and
-  the `contract_hash` of seven contracts, one of them a messy spelling of another that stores
-  alike, and the issues of four refused ones.
-- `continuo_contracts.validate` refuses a Python column that nests `properties`, `items` or a
-  `map` or writes `logicalTypeOptions` (`refused_field`), a `VARCHAR(n)` or `CHAR(n)` longer than
-  2**53 - 1 (`column_type`), and a custom quality rule with an empty `implementation` (`value`).
-  It finds `customProperties` lists through the object types and free-form values of
-  `continuo_contracts.contract`, so a `mustBe` value is data and the `value` of a `map` is walked.
+  values kept as written. Two files that mean the same thing, whatever their line endings, byte
+  order mark, key order or quoting, store the same form. `contract_hash()` hashes the stored form
+  without `apiVersion`, `kind`, `status` and `version`. The new vector file `vectors/contracts.json`
+  pins the stored form and the `contract_hash` of seven contracts, one of them a messy spelling of
+  another that stores alike, and the issues of four refused ones.
+- `normalise_python()` raises `HashInputError` for a `service` that is empty or blank, as it does
+  for a `reads` entry that is not `<schema>.<table>`.
 - `fingerprints.yaml` classifies every field of a Python contract's stored form for `python-node`,
   `python-csv` and `python-api`, in the new input pattern `odcs.<path>` (`odcs.team.name`,
   `odcs.schema.properties.logicalType`, `odcs.custom.timeoutMinutes`, `odcs.schema.custom.reads`),
   and the new rule `standard_field` classifies every standard ODCS field no entry names as
-  `contract`; a `continuo` custom property that no entry names stays unclassified. A new list,
-  `lists.contract_hash_exclusions`, holds the root keys that `contract_hash` leaves out
-  (`apiVersion`, `kind`, `status`, `version`): `fingerprints.contract_hash_exclusions()` and
-  `Fingerprints.contract_hash_exclusions` return it, `contract.contract_hash` reads it, and
-  `parse_fingerprints()` refuses a file without the list. The guard test walks the stored form of
-  the demo, full and messy contracts and fails for a field no entry classifies.
+  `contract`; a `continuo` custom property that no entry names stays unclassified. The list
+  `lists.contract_hash_exclusions` holds the root keys that `contract_hash` leaves out
+  (`apiVersion`, `kind`, `status`, `version`), and `fingerprints.contract_hash_exclusions()` and
+  `Fingerprints.contract_hash_exclusions` return it. The guard test walks the stored form of the
+  demo, full and messy contracts and fails for a field no entry classifies.
 - `continuo_contracts.cli` and the console script `continuo-contracts`. `validate PATH...` checks
   `*.odcs.yaml` files (a folder is read for them, without the folders below it) and logs every
   issue at ERROR as `<file>: <path>: <message>`. `hash FILE --service SERVICE [--read TABLE]...`
   checks one file and prints its `contract_hash`. With `--json`, stdout is one JSON document
   (`validate`: `valid` and the `issues` of each file, `hash`: `contract_hash` and the `stored`
   form), and the log goes to stderr in either mode. Exit status 0 is valid, 1 is an issue and 2 is
-  a usage error, a path that names no contract file or a file that cannot be read.
+  a usage error (a `--service` that is empty or blank among them), a path that names no contract
+  file or a file that cannot be read.
+- `errors.SchemaFileError` and `errors.StrictYamlError`, each a `ContractsError`.
+
+### Changed
+
+- `jsonschema>=4.26` is a runtime dependency, next to PyYAML. The wheel stays pure Python.
+- `fingerprints.yaml` has the list `lists.contract_hash_exclusions`, and `parse_fingerprints()`
+  refuses a file without it. A `rule` entry is either `outside_denylist` (a dbt family) or
+  `standard_field` (a Python family).
+- `errors.HashInputError` is also the error of `contract.normalise_python`.
+- The README says in Stability that a newer version accepts every contract an older one accepted,
+  with the same stored form and `contract_hash`, and in Pinning that topology-controller refuses a
+  producer bundle written by a newer version than the one it runs.
+- Every hash of 0.1.0 is unchanged: the four vector files of 0.1.0 keep their bytes.
 
 ## [0.1.0] - 2026-11-11
 

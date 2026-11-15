@@ -713,10 +713,11 @@ hash, whatever their line endings, byte order mark, key order or quoting. The mo
   whole number within -(2**53 - 1) to 2**53 - 1 becomes an integer, so `batch_size: 10.0` is stored
   as `10`. `physicalType` is stored as written.
 
-  Raises `HashInputError` when `reads` is one string, or lists a table that is not a string of at
-  least two non-empty parts joined by dots (`"."`, `"a."` and `".b"` are refused) or that has
-  whitespace at either end, and `CanonicalJsonError` when an item of a set-like list holds a value
-  that canonical JSON cannot write, which a document that `yaml_strict.load` read never holds.
+  Raises `HashInputError` when `service` is empty or blank, when `reads` is one string, or lists a
+  table that is not a string of at least two non-empty parts joined by dots (`"."`, `"a."` and
+  `".b"` are refused) or that has whitespace at either end, and `CanonicalJsonError` when an item
+  of a set-like list holds a value that canonical JSON cannot write, which a document that
+  `yaml_strict.load` read never holds.
 - `contract_hash(stored: Mapping[str, Any]) -> str` returns `"sha256:"` and the lowercase hex
   SHA-256 of the RFC 8785 canonical JSON of the stored form without its root keys `apiVersion`,
   `kind`, `status` and `version`, 71 characters in all. Those keys are the list
@@ -769,10 +770,10 @@ with `validate.validate_python_contract`, so they find what topology-controller 
   `*.odcs.yaml` files in name order, without the folders below it. Every issue is logged at ERROR
   as `<file>: <path>: <message>`, and a last INFO line counts the files checked and the files with
   an issue. `--service` is the service of the release, and a `service` property that names
-  another one is an issue; without `--service` that check is skipped. A text that
-  `yaml_strict.load` refuses is the one issue `strict_yaml` at `$`, with the line and the column
-  in its message. With `--json`, stdout is one document, and a file with no issue is listed with
-  an empty `issues`:
+  another one is an issue; without `--service` that check is skipped. A `--service` that is empty
+  or blank is a usage error. A text that `yaml_strict.load` refuses is the one issue
+  `strict_yaml` at `$`, with the line and the column in its message. With `--json`, stdout is one
+  document, and a file with no issue is listed with an empty `issues`:
 
   ```json
   {"valid": false,
@@ -783,10 +784,10 @@ with `validate.validate_python_contract`, so they find what topology-controller 
 - `hash FILE --service SERVICE` checks one file and prints its `contract_hash` alone on stdout.
   With `--json`, stdout is `{"contract_hash": "sha256:...", "stored": {...}}`, where `stored` is
   the stored form that the hash is of. `--service` is required, because it is part of the stored
-  form. `--read TABLE` names one table that the node's read queries name, written
-  `<schema>.<table>`, and may be repeated. topology-controller passes these at release time and
-  the hash covers them, so pass the same tables to get the hash it stores. A file with an issue
-  logs each issue at ERROR, prints nothing on stdout and exits 1.
+  form, and it may not be empty or blank. `--read TABLE` names one table that the node's read
+  queries name, written `<schema>.<table>`, and may be repeated. topology-controller passes these
+  at release time and the hash covers them, so pass the same tables to get the hash it stores. A
+  file with an issue logs each issue at ERROR, prints nothing on stdout and exits 1.
 
 The human text goes through `logging` to stderr. Stdout holds only the result, so
 `continuo-contracts hash ... > hash.txt` and `continuo-contracts validate ... --json | jq` read
@@ -796,7 +797,7 @@ it whole. When the command cannot run, stdout is empty.
 |---|---|
 | 0 | every contract is valid, or `hash` printed its hash |
 | 1 | a contract has an issue |
-| 2 | a usage error of the arguments, a path that names no contract file (a folder with no `*.odcs.yaml` file, a path that does not exist, a file not named `*.odcs.yaml`), a file that is not UTF-8 text or cannot be read, or a `--read` value that is not a table |
+| 2 | a usage error of the arguments (a `--service` that is empty or blank among them), a path that names no contract file (a folder with no `*.odcs.yaml` file, a path that does not exist, a file not named `*.odcs.yaml`), a file that is not UTF-8 text or cannot be read, or a `--read` value that is not a table |
 
 Nothing is checked when one path of the command is refused with status 2.
 
@@ -837,8 +838,9 @@ surrogate, and an argument of the wrong type can raise `TypeError` or `Attribute
 - `CanonicalJsonError`: `canonical_json` refuses a value that canonical JSON cannot represent, and
   the message starts with the JSON path of that value.
 - `HashInputError`: `shared_fold` and `shared_hash` refuse a unit key or a digest that is in a
-  form they do not accept, and the message names the key. `contract.normalise_python` refuses a
-  `reads` entry that is not `<schema>.<table>`, and the message names the entry.
+  form they do not accept, and the message names the key. `contract.normalise_python` refuses an
+  empty or blank `service` and a `reads` entry that is not `<schema>.<table>`, and the message
+  names the service or the entry.
 - `ProjectionError`: `canonical_sql_type`, `PythonNode.from_mapping`, `code_projection` and
   `projection_hash` refuse an SQL type or a Python node.
 - `FingerprintsFileError`: `parse_fingerprints` and `load` refuse a fingerprints file that is not
@@ -915,6 +917,13 @@ Pin an exact version (`continuo-contracts==X.Y.Z`), because a hash is only compa
 processes that run the same code. A dbt producer uses the version its continuo release
 documents. `continuo_contracts.__version__` is the version of the installed distribution.
 
+A producer bundle names the version of this package that wrote it. topology-controller refuses a
+bundle written by a newer version than the one it runs, because a newer version may accept a
+contract that its own refuses or read one differently, and it takes a bundle written by an older
+version, because every contract an older version accepted is accepted by a newer one (see
+[Stability](#stability)). A producer therefore pins a version that is not newer than the one its
+continuo release runs.
+
 ## Stability
 
 A hash that this package computes is a contract. A change that moves any hash pinned in
@@ -925,6 +934,12 @@ code and validates and reloads nothing.
 
 A `contract_hash` pinned in `vectors/contracts.json` is a contract in the same way: a change that
 moves one gives every Python node of every install a new contract version.
+
+The contract check only widens. A newer version accepts every contract that an older version
+accepted, and gives it the same stored form and the same `contract_hash`: the vocabulary of a
+contract (its kinds, custom properties and values) grows, and a rule that would refuse a contract
+an earlier version accepted is not added. A producer that upgrades the package does not have to
+edit a contract file for the check to pass.
 
 ## Contributing
 
