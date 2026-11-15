@@ -59,9 +59,33 @@ MESSY_SPELLINGS = [
 ]
 
 
-def test_the_file_holds_the_seven_valid_and_four_invalid_cases():
+# The refused cases, each with the reasons of its issues.
+REFUSED = {
+    "numeric_without_a_scale": ["column_type"],
+    "servers_are_refused": ["refused_field"],
+    "file_name_does_not_match": ["file_name"],
+    "duplicate_key": ["strict_yaml"],
+    "id_schema_part_is_blank": ["identity"],
+    "id_schema_part_has_whitespace": ["identity"],
+    "id_schema_part_has_a_slash": ["identity"],
+    "table_name_has_whitespace": ["identity"],
+    "table_name_has_a_control_character": ["identity"],
+    "column_name_has_outer_whitespace": ["value"],
+    "column_name_has_a_control_character": ["value"],
+    "read_query_name_has_outer_whitespace": ["value"],
+    "schedule_has_outer_whitespace": ["value"],
+    "schedule_is_longer_than_fifty_characters": ["value"],
+    "script_has_outer_whitespace": ["value"],
+    "script_is_not_a_normalised_path": ["value"],
+    "assets_are_not_normalised_paths": ["value"] * 6,
+    "varchar_of_length_zero": ["column_type"],
+    "service_property_is_blank": ["value"],
+}
+
+
+def test_the_file_holds_the_valid_and_the_refused_cases():
     assert sorted(case["name"] for case in VALID) == sorted([*FIXTURE_OF, MESSY])
-    assert len(INVALID) == 4
+    assert {case["name"]: [i["reason"] for i in case["issues"]] for case in INVALID} == REFUSED
     assert len({case["name"] for case in CASES}) == len(CASES)
 
 
@@ -101,7 +125,9 @@ def test_the_text_of_a_case_is_its_fixture(name):
 def test_no_invalid_case_is_refused_by_the_json_schema():
     reasons = {issue["reason"] for case in INVALID for issue in case["issues"]}
     assert "odcs_schema" not in reasons
-    assert reasons == {"column_type", "refused_field", "file_name", "strict_yaml"}
+    assert reasons == {
+        "column_type", "refused_field", "file_name", "strict_yaml", "identity", "value"
+    }
 
 
 def _case(name):

@@ -6,6 +6,7 @@ Scheme) defines, so two processes that hold the same value write the same bytes.
 """
 
 import math
+import string
 from collections.abc import Mapping, Sequence
 from typing import Final
 
@@ -41,6 +42,9 @@ _STRING_ESCAPES: Final = {
 # Space, tab, line feed, carriage return, vertical tab and form feed.
 _ASCII_WHITESPACE: Final = " \t\n\r\x0b\x0c"
 
+# The ASCII letters in upper case, each with its lower case.
+_ASCII_LOWER: Final = str.maketrans(string.ascii_uppercase, string.ascii_lowercase)
+
 
 def canonical_json(value: object) -> bytes:
     """Return `value` as RFC 8785 canonical JSON, UTF-8 encoded.
@@ -63,6 +67,16 @@ def normalise_text(text: str) -> str:
     the Unicode tables of the Python that runs it. Nothing else changes.
     """
     return text.replace("\r\n", "\n").replace("\r", "\n").strip(_ASCII_WHITESPACE)
+
+
+def _ascii_lower(text: str) -> str:
+    """Return `text` with its ASCII letters in lower case and every other character as it is.
+
+    `str.lower` follows the Unicode tables of the running Python, which differ between versions
+    (U+A7CB has a lower case from Unicode 16, which Python 3.14 has and 3.12 has not), so every
+    lower-casing that decides what continuo accepts or hashes goes through this function instead.
+    """
+    return text.translate(_ASCII_LOWER)
 
 
 def _fail(path: str, reason: str) -> CanonicalJsonError:

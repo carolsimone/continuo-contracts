@@ -228,8 +228,38 @@ def test_a_mode_type_that_is_refused_for_its_value_does_not_also_start_the_key_r
     assert _found(_check(doc, path=_path_of("python_node"))) == [(_at(doc, "modeType"), "value")]
 
 
-@pytest.mark.parametrize("value", ["", "  ", 5, None, ["a.py"], {"a": "b"}])
-def test_a_script_that_is_not_a_string_with_text_is_refused(value):
+# Paths that are not a normalised POSIX path inside the project, each refused as a script and as
+# an asset.
+NOT_A_PROJECT_PATH = [
+    "",
+    "  ",
+    " scripts/x.py ",
+    " scripts/x.py",
+    "scripts/x.py ",
+    "./x.py",
+    ".",
+    "..",
+    "../x.py",
+    "a/../b.py",
+    "a/..",
+    "a/./b.py",
+    "a//b.py",
+    "scripts/",
+    "/abs.py",
+    "~/x.py",
+    "~x.py",
+    "C:/x.py",
+    "c:x.py",
+    "a\\b.py",
+    "a\\..\\..\\etc",
+    "x\x00.py",
+    "x\x1f.py",
+    "x\x85.py",
+]
+
+
+@pytest.mark.parametrize("value", [5, None, ["a.py"], {"a": "b"}, *NOT_A_PROJECT_PATH])
+def test_a_script_that_is_not_a_path_inside_the_project_is_refused(value):
     doc = _kpis()
     _set(doc, "script", value)
     issue = _only(_check(doc))
@@ -237,13 +267,50 @@ def test_a_script_that_is_not_a_string_with_text_is_refused(value):
     assert "`script`" in issue.message
 
 
-@pytest.mark.parametrize("value", ["", "  ", 5, None, ["daily"]])
-def test_a_schedule_that_is_not_a_string_with_text_is_refused(value):
+@pytest.mark.parametrize(
+    "value",
+    [
+        "",
+        "  ",
+        5,
+        None,
+        ["daily"],
+        " daily",
+        "daily ",
+        "da ily",
+        "da\tily",
+        "\u00a0daily",
+        "da\x00ily",
+        "da\x7fily",
+        "d" * 51,
+    ],
+)
+def test_a_schedule_that_is_not_a_name_of_at_most_fifty_characters_is_refused(value):
     doc = _kpis()
     _set(doc, "schedule", value)
     issue = _only(_check(doc))
     assert (issue.path, issue.reason) == (_at(doc, "schedule"), "value")
     assert "`schedule`" in issue.message
+
+
+@pytest.mark.parametrize("value", ["daily", "d" * 50, "every-hour_2", "t\u00e4glich"])
+def test_a_schedule_name_of_at_most_fifty_characters_is_accepted(value):
+    doc = _kpis()
+    _set(doc, "schedule", value)
+    assert _check(doc) == []
+
+
+def test_the_schedule_message_says_the_longest_name():
+    doc = _kpis()
+    _set(doc, "schedule", "d" * 51)
+    assert "50 characters" in _only(_check(doc)).message
+
+
+def test_a_script_path_inside_the_project_is_accepted():
+    for value in ("x.py", "scripts/x.py", "a b/c d.py", "a..b/c.py", "scripts/.hidden.py"):
+        doc = _kpis()
+        _set(doc, "script", value)
+        assert _check(doc) == [], value
 
 
 @pytest.mark.parametrize("value", [[], "a=b", 5, None])
@@ -620,6 +687,11 @@ def test_a_kind_rule_message_says_why():
         {"orders": ["select 1"]},
         {"": "select 1"},
         {"  ": "select 1"},
+        {" daily ": "select 1"},
+        {" daily": "select 1"},
+        {"daily\n": "select 1"},
+        {"da\x00ily": "select 1"},
+        {"da\x9fily": "select 1"},
         {"orders": "select 1", "rates": ""},
     ],
 )
@@ -642,7 +714,7 @@ def test_each_empty_query_gets_its_own_issue_and_names_the_query():
 
 def test_read_queries_with_text_are_accepted():
     doc = _kpis()
-    _set(doc, "readQueries", {"a": "select 1", "b": "select\n  2 from t"})
+    _set(doc, "readQueries", {"a": "select 1", "b": "select\n  2 from t", "c d": "select 3"})
     assert _check(doc) == []
 
 
@@ -668,6 +740,16 @@ def test_read_queries_on_a_kind_that_refuses_them_give_one_issue_whatever_they_h
         ["assets/ok.csv", "../x"],
         [""],
         ["  "],
+        [" a.json"],
+        ["./a.json"],
+        ["./a.csv"],
+        ["a//b"],
+        ["a\\..\\..\\etc"],
+        ["C:/x"],
+        ["~/x"],
+        ["a/"],
+        ["a/./b"],
+        ["a\x00b"],
         [5],
         [None],
         "assets/a.csv",
@@ -693,12 +775,28 @@ def test_an_asset_listed_twice_is_refused_because_the_projection_refuses_it():
 
 @pytest.mark.parametrize(
     "assets",
-    [[], ["a.csv"], ["assets/a.csv", "assets/b/c.json"], ["a..b/c"], ["./a.csv"], ["a b.csv"]],
+    [[], ["a.csv"], ["assets/a.csv", "assets/b/c.json"], ["a..b/c"], ["a b.csv"], [".a.csv"]],
 )
 def test_assets_inside_the_project_are_accepted(assets):
     doc = _full("python_api")
     _set(doc, "assets", assets)
     assert _check(doc, path=_path_of("python_api")) == []
+
+
+@pytest.mark.parametrize("asset", NOT_A_PROJECT_PATH)
+def test_every_path_refused_as_a_script_is_refused_as_an_asset(asset):
+    doc = _full("python_api")
+    _set(doc, "assets", ["assets/a.csv", asset])
+    issue = _only(_check(doc, path=_path_of("python_api")))
+    assert (issue.path, issue.reason) == (_at(doc, "assets"), "value")
+
+
+def test_a_refused_asset_listed_twice_gets_its_path_issues_and_no_repeat_issue():
+    doc = _full("python_api")
+    _set(doc, "assets", ["./a.csv", "./a.csv"])
+    issues = _check(doc, path=_path_of("python_api"))
+    assert _found(issues) == [(_at(doc, "assets"), "value")] * 2
+    assert not any("twice" in issue.message for issue in issues)
 
 
 def test_a_long_list_of_assets_is_checked_in_linear_time():
@@ -742,8 +840,10 @@ def test_column_names_that_differ_only_in_case_are_two_columns():
     assert _check(doc) == []
 
 
-@pytest.mark.parametrize("name", ["", " ", "\t"])
-def test_a_column_with_a_blank_name_is_refused(name):
+@pytest.mark.parametrize(
+    "name", ["", " ", "\t", " day", "day ", "\u00a0day", "day\n", "d\x00ay", "d\x7fay"]
+)
+def test_a_column_name_that_is_blank_has_outer_whitespace_or_a_control_character_is_refused(name):
     doc = _kpis()
     _columns(doc)[0]["name"] = name
     issue = _only(_check(doc))
@@ -758,6 +858,21 @@ def test_a_column_type_continuo_does_not_accept_is_refused(raw):
     _columns(doc)[2]["physicalType"] = raw
     issue = _only(_check(doc))
     assert (issue.path, issue.reason) == ("schema[0].properties[2].physicalType", "column_type")
+
+
+def test_a_column_name_with_inner_whitespace_is_accepted():
+    doc = _kpis()
+    _columns(doc)[0]["name"] = "the day"
+    assert _check(doc) == []
+
+
+@pytest.mark.parametrize("raw", ["VARCHAR(0)", "CHAR(0)", "varchar(000)", " char(0) "])
+def test_a_string_type_of_length_zero_is_refused(raw):
+    doc = _kpis()
+    _columns(doc)[2]["physicalType"] = raw
+    issue = _only(_check(doc))
+    assert (issue.path, issue.reason) == ("schema[0].properties[2].physicalType", "column_type")
+    assert "1 to" in issue.message
 
 
 def test_the_column_type_message_names_the_type():

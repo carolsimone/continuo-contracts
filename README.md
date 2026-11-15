@@ -129,8 +129,9 @@ bytes. The projection is the node's `raw_code` in continuo's code bundle, and `p
   replaces. Only a `python-api` node has a `secret_ref`, and it reads nothing.
 - `projection_hash(node)` returns the hash of that projection.
 - `node_from_odcs(doc)` returns the `PythonNode` that a Python node's ODCS contract declares, for a
-  document that `validate.validate_python_contract` accepted. `schema` is the id without
-  `.<table>`, `table` is the name of the schema object, `kind` is the `kind` property (a
+  document that `validate.validate_python_contract` accepted. `schema` is the id without the
+  `.<table>` that ends it, as the validator reads it (the table with its ASCII letters in lower
+  case), `table` is the name of the schema object, `kind` is the `kind` property (a
   `python-model` is `python-node`, and a contract that writes none is a `python-node`) and
   `script`, `extraColumns`, `config`, `secretRef`, `modeType` and `assets` are the properties of
   those names, each with the default of `PythonNode`. `reads` is `readQueries`, or
@@ -540,7 +541,7 @@ rules read a document of the shape the schema describes. The module logs nothing
   |---|---|
   | `odcs_schema` | the document does not fit the ODCS JSON schema |
   | `api_version` | `apiVersion` is not `v3.2.0` |
-  | `identity` | the id, `name` or `physicalName` does not agree with the table, the id is not in lower case or has a dot in its schema part, the name of the table is blank, has outer whitespace or has a dot, or the contract does not hold exactly one schema object that is a table |
+  | `identity` | the id, `name` or `physicalName` does not agree with the table, the id is not in lower case, the name of the table or the schema part of the id is not a name (blank, whitespace, a dot, a slash or a control character), or the contract does not hold exactly one schema object that is a table |
   | `file_name` | the base name of the file is neither `<table>.odcs.yaml` nor `<schema>.<table>.odcs.yaml` |
   | `service` | a `service` property names another service than the release's |
   | `missing_field` | `team.name`, `schedule`, `criticality`, the columns or the `physicalType` of a column is missing |
@@ -548,9 +549,9 @@ rules read a document of the shape the schema describes. The module logs nothing
   | `unknown_property` | a `continuo` property is not in `vocabulary.PROPERTIES` |
   | `refused_property` | a `continuo` property is one that continuo fills or no Python contract carries, or it sits on the wrong object |
   | `kind_rule` | a node misses a property its kind needs, writes one its kind refuses, or a python-csv node does not replace its table |
-  | `column_type` | the `physicalType` of a column is not a type continuo accepts (`canonical_sql_type` refuses it, or its length is above 2**53 - 1) |
+  | `column_type` | the `physicalType` of a column is not a type continuo accepts (`canonical_sql_type` refuses it, or its length is not from 1 to 2**53 - 1) |
   | `primary_key` | an `upsert` node has no key, a key column is not `required: true` or is `DOUBLE PRECISION`, or the columns of a key of several do not each have their own whole-number `primaryKeyPosition` from 1 |
-  | `value` | a `continuo` property is written twice in one list, or has a value outside what it allows, the `kind` is not a Python kind, two columns have one name, or a custom quality rule has an empty `implementation` |
+  | `value` | a `continuo` property is written twice in one list, or has a value outside what it allows (a `service` that is not a string with text among them), the `kind` is not a Python kind, the name of a column is not a name or is the name of an earlier column, or a custom quality rule has an empty `implementation` |
 
   `strict_yaml` is for a caller that reports a `yaml_strict.StrictYamlError` as an issue, and this
   module never gives it.
@@ -567,9 +568,11 @@ rules read a document of the shape the schema describes. The module logs nothing
   check. The rules are these:
   - `apiVersion` is `v3.2.0`.
   - The contract holds one schema object, and its `physicalType` is `table`. Its `name` is the
-    table. The `id` is in lower case and ends in `.<table>` in lower case after a schema name that
-    has no dot. The root `name` and the `physicalName` of the schema object, when written,
-    equal the table.
+    table. The `id` is in lower case and ends in `.<table>` in lower case after its schema part.
+    Lower case here means the ASCII letters only: `A` to `Z` are compared as `a` to `z` and every
+    other character as written, so `analytics.k\u00c4se` is the id of the table `K\u00c4SE` on
+    every Python, whatever its Unicode tables. The root `name` and the `physicalName` of the schema
+    object, when written, equal the table.
   - The base name of the file is `<table>.odcs.yaml`, with the table as written, or
     `<schema>.<table>.odcs.yaml`, with the schema part of the id. The issue is at `$`.
   - `team.name` is a string with text in it. A `team` written as a list has no name.
@@ -585,24 +588,32 @@ rules read a document of the shape the schema describes. The module logs nothing
     type: the `value` of a custom property, the `examples` of a column, the `implementation`,
     `arguments`, `mustBe` and `mustNotBe` of a quality rule, the `value` and `valueExt` of a
     service level and the `value` of an enum entry. The `value` of a column's `map` is a property
-    and is walked. A property that sits where it may
-    is then checked for a repeat, which is a `value` issue at each later copy that names the place of
-    the first, and a `service` property must be the release's service. Every refusal says why, such
-    as that continuo fills `reads` from the tables the read queries name, or that a dbt property
-    says nothing about a Python node.
-  - The name of the table is not blank, has no whitespace at either end and has no dot, and the
-    schema part of the id has no dot. A table name that fails is compared with nothing else, so it
-    gives one issue.
+    and is walked. A property that sits where it may is then checked for a repeat, which is a
+    `value` issue at each later copy that names the place of the first. A `service` property is a
+    string with text (a `value` issue otherwise, even when the service is not known) and names the
+    release's service (a `service` issue). Every refusal says why, such as that continuo fills
+    `reads` from the tables the read queries name, or that a dbt property says nothing about a
+    Python node.
+  - A name, wherever this list asks for one, is a string that is not blank and has no whitespace
+    at either end and no control character (U+0000 to U+001F and U+007F to U+009F). Whitespace is
+    what `str.isspace` reads as whitespace, the same 29 code points on every supported Python.
+  - The name of the table and the schema part of the id are names with no whitespace, dot or slash
+    anywhere. A table name that fails is compared with nothing else, so it gives one issue.
   - The contract writes `schedule` and `criticality`, as customProperties of the contract: a
-    missing one is a `missing_field` at `customProperties`. `schedule` and `script` are strings
-    with text in them. `criticality` is `REGULATORY`, `CORE` or `SECONDARY`. `timeoutMinutes` is an
+    missing one is a `missing_field` at `customProperties`. `schedule` is a name with no whitespace
+    anywhere, at most 50 characters long, the longest schedule name continuo stores for a run.
+    `script` is the path of a file inside the project, as `assets` describes it below.
+    `criticality` is `REGULATORY`, `CORE` or `SECONDARY`. `timeoutMinutes` is an
     integer from 1 to 10080 (a bool or a float is not). `extraColumns` is `raise` or `warn`.
     `modeType` is `replace`, `append` or `upsert`. `config` is a mapping. `secretRef` is the name
     of a Kubernetes Secret, `continuo-api-` and then lowercase letters, digits and `-`, ending
     with a letter or a digit, at most 253 characters. `csvSource` is `s3://<bucket>/<key>` or
-    `https://<host>[/...]`, each part with text. `readQueries` is a mapping of names with text to
-    queries with text, at least one. `assets` is a list of paths with text, none absolute, none
-    with a `..` segment and none listed twice. A bad value is a `value` issue at the item of the
+    `https://<host>[/...]`, each part with text. `readQueries` is a mapping of names to queries
+    with text, at least one. `assets` is a list of paths of files inside the project, none listed
+    twice. Such a path is a name, relative and POSIX, written in its normalised form: its parts are
+    separated by `/` and not `\`, it does not start with `/`, `~` or a drive letter such as `C:`,
+    and no part is empty, `.` or `..`, so `./a.json`, `a//b` and `a/../b` are refused and two
+    paths that name one file are written alike. A bad value is a `value` issue at the item of the
     property.
   - The `kind` is `python-node` when the contract writes none, `python-model` is read as
     `python-node`, and any other word that is not `python-csv` or `python-api` is one `value`
@@ -614,9 +625,10 @@ rules read a document of the shape the schema describes. The module logs nothing
     `customProperties`, and one that is refused is a `kind_rule` issue at its item and is not
     checked for its value.
   - The table lists at least one column (`missing_field` at `schema[0].properties`). Each column
-    has a name with text, used once, and a `physicalType` (a `missing_field` when it is left out)
-    that `canonical_sql_type` accepts with a length of at most 2**53 - 1 (the largest integer
-    canonical JSON writes), a `column_type` issue at `physicalType` otherwise. A column does not
+    has a name, used once, and a `physicalType` (a `missing_field` when it is left out) that
+    `canonical_sql_type` accepts, with a length from 1 to 2**53 - 1 (the largest integer canonical
+    JSON writes) for a `VARCHAR(n)` or `CHAR(n)`, a `column_type` issue at `physicalType`
+    otherwise. A column does not
     write a `physicalName` other than its name, `partitioned: true` or a `partitionKeyPosition`
     other than -1, and it nests no `properties`, `items` or `map`, because the column of a Python
     node has a name, a type and a nullability. It writes no `logicalTypeOptions`, which continuo
@@ -909,7 +921,12 @@ every case of every file.
   `type: library`, `logicalType: object`, `primaryKey: false`, a column `physicalName` equal to its
   name and an empty `valueExt`), whose `stored` and `contract_hash` are those of the clean file. The
   refused ones are a `NUMERIC(12)` column, a contract that names its `servers`, a file name that
-  does not match the table and a repeated key. The file is ASCII.
+  does not match the table, a repeated key, and one case for each name and path rule: a schema
+  part of the id that is blank, has whitespace or has a slash, a table name with whitespace or a
+  control character, a column name with outer whitespace or a control character, a read query
+  name with outer whitespace, a `schedule` with outer whitespace or longer than 50 characters, a
+  `script` with outer whitespace or that is not a normalised path, six `assets` that are not
+  normalised paths, a `VARCHAR(0)` column and a blank `service` property. The file is ASCII.
 
 ## Pinning
 

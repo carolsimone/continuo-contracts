@@ -278,10 +278,23 @@ def test_the_service_issue_names_both_services():
     assert SERVICE in issue.message
 
 
-def test_a_service_value_that_is_not_the_release_service_is_refused_whatever_its_type():
+@pytest.mark.parametrize("value", [5, None, "", " ", "\t", ["service-py"], {"a": "b"}])
+@pytest.mark.parametrize("service", [SERVICE, None])
+def test_a_service_value_that_is_not_text_is_refused_whether_or_not_the_service_is_known(
+    value, service
+):
     doc = _kpis()
-    doc["customProperties"].append(_continuo("service", 5))
+    doc["customProperties"].append(_continuo("service", value))
+    (issue,) = _check(doc, service=service)
+    assert (issue.path, issue.reason) == ("customProperties[4]", "value")
+    assert "`service`" in issue.message
+
+
+def test_a_service_string_other_than_the_release_service_is_a_service_issue():
+    doc = _kpis()
+    doc["customProperties"].append(_continuo("service", "other"))
     assert _found(_check(doc)) == [("customProperties[4]", "service")]
+    assert _check(doc, service=None) == []
 
 
 # the envelope
@@ -354,9 +367,32 @@ def _rename_table(doc, name):
 
 @pytest.mark.parametrize(
     "name",
-    [" ", "\t", " \n ", " kpis", "kpis ", "\tkpis", "kpis\n", "a.b", "kpis.", ".kpis", "a..b"],
+    [
+        " ",
+        "\t",
+        " \n ",
+        " kpis",
+        "kpis ",
+        "\tkpis",
+        "kpis\n",
+        "a.b",
+        "kpis.",
+        ".kpis",
+        "a..b",
+        "kpis kpis",
+        "kpis\tkpis",
+        "kpis\u00a0kpis",
+        "a/b",
+        "/kpis",
+        "k\x00pis",
+        "k\x1fpis",
+        "k\x7fpis",
+        "k\x9fpis",
+    ],
 )
-def test_a_table_name_that_is_blank_has_outer_whitespace_or_has_a_dot_is_refused(name):
+def test_a_table_name_that_is_blank_has_whitespace_a_dot_a_slash_or_a_control_character_is_refused(
+    name,
+):
     doc = _kpis()
     _rename_table(doc, name)
     assert _found(_check(doc, path=f"contracts/{name}.odcs.yaml")) == [
@@ -384,12 +420,51 @@ def test_each_table_name_fault_says_what_is_wrong():
     assert "dot" in messages["a.b"]
 
 
-@pytest.mark.parametrize("name", ["kpis_2", "Kpis", "k-pis", "kpis kpis", "k\u00e4se"])
+@pytest.mark.parametrize(
+    "name, word",
+    [("kpis kpis", "whitespace"), ("a/b", "slash"), ("k\x00pis", "control character")],
+)
+def test_a_table_name_with_inner_whitespace_a_slash_or_a_control_character_says_so(name, word):
+    doc = _kpis()
+    doc["schema"][0]["name"] = name
+    (issue,) = _check(doc)
+    assert (issue.path, issue.reason) == ("schema[0].name", "identity")
+    assert word in issue.message
+
+
+@pytest.mark.parametrize("name", ["kpis_2", "Kpis", "k-pis", "k\u00e4se", "k\u00c4se"])
 def test_a_table_name_with_inner_characters_is_not_refused_by_the_name_rule(name):
     doc = _kpis()
     _rename_table(doc, name)
-    doc["id"] = f"analytics.{name.lower()}"
+    doc["id"] = f"analytics.{name.replace('K', 'k')}"
     assert _check(doc, path=f"contracts/{name}.odcs.yaml") == []
+
+
+def test_the_id_lower_cases_only_the_ascii_letters_of_the_table():
+    doc = _kpis()
+    _rename_table(doc, "K\u00c4SE")
+    doc["id"] = "analytics.k\u00c4se"
+    assert _check(doc, path="contracts/K\u00c4SE.odcs.yaml") == []
+    doc["id"] = "analytics.k\u00e4se"
+    assert _found(_check(doc, path="contracts/K\u00c4SE.odcs.yaml")) == [("id", "identity")]
+
+
+@pytest.mark.parametrize("letter", ["\u00c4", "\u0130", "\ua7cb", "\u1e9e"])
+def test_a_capital_letter_outside_ascii_is_kept_in_the_id_on_every_python(letter):
+    # U+A7CB has a lower case only from Unicode 16, which Python 3.14 has and 3.12 has not, so a
+    # rule that lower-cases beyond ASCII would accept this id on one Python and refuse it on the
+    # other.
+    doc = _kpis()
+    doc["id"] = f"analytics{letter}.py_daily_kpis"
+    assert _check(doc) == []
+
+
+def test_the_lower_case_id_message_lower_cases_only_ascii_letters():
+    doc = _kpis()
+    doc["id"] = "Analytics\u00c4.py_daily_kpis"
+    (issue,) = _check(doc)
+    assert (issue.path, issue.reason) == ("id", "identity")
+    assert "'analytics\u00c4.py_daily_kpis'" in issue.message
 
 
 @pytest.mark.parametrize(
@@ -406,7 +481,28 @@ def test_the_schema_part_of_the_id_has_no_dot(bad_id):
     doc["id"] = bad_id
     (issue,) = _check(doc)
     assert (issue.path, issue.reason) == ("id", "identity")
-    assert "without a dot" in issue.message
+    assert "must not contain a dot" in issue.message
+
+
+@pytest.mark.parametrize(
+    "bad_id",
+    [
+        " .py_daily_kpis",
+        "\t.py_daily_kpis",
+        " analytics.py_daily_kpis",
+        "analytics .py_daily_kpis",
+        "my schema.py_daily_kpis",
+        "my\u00a0schema.py_daily_kpis",
+        "a/b.py_daily_kpis",
+        "/analytics.py_daily_kpis",
+        "ana\x00lytics.py_daily_kpis",
+        "ana\x85lytics.py_daily_kpis",
+    ],
+)
+def test_the_schema_part_of_the_id_has_no_whitespace_slash_or_control_character(bad_id):
+    doc = _kpis()
+    doc["id"] = bad_id
+    assert _found(_check(doc)) == [("id", "identity")]
 
 
 def test_a_file_named_after_an_id_whose_schema_has_a_dot_is_refused_too():

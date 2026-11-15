@@ -249,6 +249,20 @@ def test_the_schema_is_the_id_without_the_table():
     assert (node.schema, node.table) == ("raw_data", "Orders")
 
 
+def test_the_id_lower_cases_only_the_ascii_letters_of_the_table():
+    node = node_from_odcs(_contract(id="raw.k\u00c4se", table="K\u00c4SE", columns=[_column("x")]))
+    assert (node.schema, node.table) == ("raw", "K\u00c4SE")
+    with pytest.raises(ProjectionError):
+        node_from_odcs(_contract(id="raw.k\u00e4se", table="K\u00c4SE", columns=[_column("x")]))
+
+
+def test_node_from_odcs_and_the_validator_read_the_same_schema_from_the_id():
+    doc = _demo("py_daily_kpis")
+    doc["id"] = "analytics\ua7cb.py_daily_kpis"
+    assert _issues(doc) == []
+    assert node_from_odcs(doc).schema == "analytics\ua7cb"
+
+
 def test_the_reads_of_the_node_are_a_copy_of_the_document():
     doc = _full("python_node")
     before = copy.deepcopy(doc)

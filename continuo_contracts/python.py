@@ -28,7 +28,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, fields
 from typing import Any, Final, Self
 
-from continuo_contracts.canonical import MAX_DEPTH, canonical_json, normalise_text
+from continuo_contracts.canonical import MAX_DEPTH, _ascii_lower, canonical_json, normalise_text
 from continuo_contracts.errors import CanonicalJsonError, ProjectionError
 from continuo_contracts.fingerprints import projection_keys
 from continuo_contracts.hashing import sha256_hex
@@ -209,7 +209,9 @@ def node_from_odcs(doc: Mapping[str, Any]) -> PythonNode:
     that is outside its set or of the wrong scalar kind, such as a `modeType` that is not one of
     `MODE_TYPES`, is refused later by `code_projection`.
 
-    - `schema` is the id without `.<table>`, and `table` is the name of the schema object.
+    - `schema` is the id without the `.<table>` that ends it, where the id and the table are
+      compared with their ASCII letters in lower case, as the validator compares them, and
+      `table` is the name of the schema object.
     - `kind` is the `kind` property, read through `KIND_ALIASES` and `python-node` when the
       contract writes none.
     - `script`, `extraColumns`, `config`, `secretRef`, `modeType` and `assets` are the properties
@@ -286,12 +288,30 @@ def _table_name(table_object: Mapping[str, Any]) -> str:
     return name
 
 
-def _schema_name(identifier: object, table: str) -> str:
-    """Return the id `identifier` without the `.<table>` that ends it, the table in lower case."""
-    tail = "." + table.lower()
-    if not isinstance(identifier, str) or not identifier.endswith(tail) or identifier == tail:
-        raise ProjectionError(f"the id {identifier!r} is not <schema>{tail}")
+def _id_schema(identifier: object, table: str) -> str | None:
+    """Return the schema part of the id `identifier`: the id without the `.<table>` that ends it,
+    as written, or `None` when the id is not a string that ends in a dot and the table after a
+    schema part that is not empty.
+
+    The id and the table are compared with their ASCII letters in lower case and every other
+    character as written, so the id `analytics.k\u00c4se` names the table `K\u00c4SE`. The
+    validator reads the schema part of an id through this function, so that it and
+    `node_from_odcs` split an id the same way.
+    """
+    if not isinstance(identifier, str):
+        return None
+    tail = "." + _ascii_lower(table)
+    if len(identifier) <= len(tail) or not _ascii_lower(identifier).endswith(tail):
+        return None
     return identifier[: -len(tail)]
+
+
+def _schema_name(identifier: object, table: str) -> str:
+    """Return the schema part of the id `identifier`, which names the table `table`."""
+    schema = _id_schema(identifier, table)
+    if schema is None:
+        raise ProjectionError(f"the id {identifier!r} is not <schema>.{_ascii_lower(table)}")
+    return schema
 
 
 def _properties(table_object: Mapping[str, Any]) -> list[Mapping[str, Any]]:

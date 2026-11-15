@@ -26,13 +26,15 @@ from jsonschema import Draft201909Validator
 from jsonschema.exceptions import ValidationError
 
 from continuo_contracts import schema
-from continuo_contracts.contract import _SHAPES
+from continuo_contracts.canonical import _ascii_lower
+from continuo_contracts.contract import _MAX_LENGTH, _SHAPES, _STRING_TYPES, _length
 from continuo_contracts.errors import ProjectionError
 from continuo_contracts.python import (
     EXTRA_COLUMNS_POLICIES,
     KIND_ALIASES,
     MODE_TYPES,
     PYTHON_KINDS,
+    _id_schema,
     _key_position,
     canonical_sql_type,
 )
@@ -70,9 +72,6 @@ _REFUSED_FIELDS: Final = {
 # `contract` walks: the contract, its schema object, a quality rule, or any other object.
 _LEVELS: Final = {"root": "root", "schema_object": "schema", "quality": "quality"}
 
-# The longest length of a `VARCHAR(n)` or `CHAR(n)`: canonical JSON writes no larger integer.
-_MAX_LENGTH: Final = 2**53 - 1
-
 # The fields a column may not carry: the column of a Python node has a name, a type and a
 # nullability, and nothing nested.
 _NESTED_COLUMN_FIELDS: Final = ("items", "map", "properties")
@@ -95,6 +94,12 @@ _WHY_REFUSED: Final = {
 }
 
 _CRITICALITIES: Final = ("REGULATORY", "CORE", "SECONDARY")
+# The longest schedule name: the width of the schedule name of a run in continuo's run store.
+_SCHEDULE_MAX: Final = 50
+# The control characters, C0, DEL and C1, which no name or path holds.
+_CONTROL: Final = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+# A Windows drive letter at the start of a path, as in `C:/x` or `c:x`.
+_DRIVE: Final = re.compile(r"[A-Za-z]:")
 _TIMEOUT_MAX_MINUTES: Final = 10080
 _SECRET_REF_MAX: Final = 253
 _SECRET_REF_PREFIX: Final = "continuo-api-"
@@ -280,14 +285,61 @@ class _Prop:
     value: Any
 
 
-def _table_name_fault(name: object) -> str | None:
-    """Return what is wrong with `name` as the name of the table, or `None` when it is fine."""
-    if not isinstance(name, str) or not name.strip():
-        return "the name of the table must not be blank"
-    if name != name.strip():
-        return "the name of the table must not start or end with whitespace"
-    if "." in name:
-        return "the name of the table must not contain a dot, the id carries the schema before it"
+def _name_fault(
+    value: object, *, inner_whitespace: bool = True, separators: bool = True
+) -> str | None:
+    """Return what is wrong with `value` as a name, or `None` when it is fine.
+
+    The fault is the end of a sentence that starts with what the name is of, such as `must not be
+    blank`. Every name is a string that is not blank and has no whitespace at either end and no
+    control character (U+0000 to U+001F and U+007F to U+009F). `inner_whitespace=False` also
+    refuses whitespace anywhere in it, and `separators=False` refuses a `.` and a `/`, which
+    separate the parts of an id or a path. Whitespace is what `str.isspace` and `str.strip` read
+    as whitespace, the same 29 code points on every supported Python.
+    """
+    if not isinstance(value, str):
+        return "must be a string"
+    if not value.strip():
+        return "must not be blank"
+    if value != value.strip():
+        return "must not start or end with whitespace"
+    if not inner_whitespace and any(character.isspace() for character in value):
+        return "must not contain whitespace"
+    if _CONTROL.search(value):
+        return "must not contain a control character"
+    if not separators and "." in value:
+        return "must not contain a dot, which separates the schema from the table in the id"
+    if not separators and "/" in value:
+        return "must not contain a slash"
+    return None
+
+
+def _identifier_fault(value: object) -> str | None:
+    """Return what is wrong with `value` as the name of a table or a schema, or `None`: it is a
+    name with no whitespace, dot or slash anywhere."""
+    return _name_fault(value, inner_whitespace=False, separators=False)
+
+
+def _path_fault(value: object) -> str | None:
+    """Return what is wrong with `value` as the path of a file inside the project, or `None`.
+
+    The path is a name, POSIX and relative, written in its normalised form: its parts are
+    separated by `/` and not `\\`, it does not start with `/`, `~` or a drive letter such as
+    `C:`, and no part is empty, `.` or `..`. Two paths that name one file are then written alike.
+    """
+    fault = _name_fault(value)
+    if fault is not None or not isinstance(value, str):
+        return fault
+    if "\\" in value:
+        return "must separate its parts with / and not \\"
+    if value.startswith("/"):
+        return "must be relative, not start with /"
+    if value.startswith("~"):
+        return "must not start with ~, which names a home folder"
+    if _DRIVE.match(value):
+        return "must not start with a drive letter"
+    if any(part in ("", ".", "..") for part in value.split("/")):
+        return "must not have an empty, . or .. part"
     return None
 
 
@@ -320,22 +372,21 @@ class _Contract:
         that object has no name that a table can have, so that nothing is compared with it."""
         obj = self.table_object
         name = obj.get("name") if obj is not None else None
-        return name if isinstance(name, str) and _table_name_fault(name) is None else None
+        return name if isinstance(name, str) and _identifier_fault(name) is None else None
+
+    @property
+    def id_parts(self) -> str | None:
+        """The schema part of the id as `python._id_schema` reads it, whatever it holds, or
+        `None` when there is no table or the id does not end in a dot and the table."""
+        table = self.table
+        return None if table is None else _id_schema(self.doc.get("id"), table)
 
     @property
     def id_schema(self) -> str | None:
-        """The schema part of the id, in lower case, or `None` when the id is not a schema name
-        without a dot, a dot and the table."""
-        identifier = self.doc.get("id")
-        table = self.table
-        if table is None or not isinstance(identifier, str):
-            return None
-        lowered = identifier.lower()
-        tail = "." + table.lower()
-        if lowered.endswith(tail) and len(lowered) > len(tail):
-            id_schema = lowered[: -len(tail)]
-            return None if "." in id_schema else id_schema
-        return None
+        """The schema part of the id, or `None` when the id does not end in a dot and the table
+        or its schema part is not a name that a schema can have."""
+        part = self.id_parts
+        return part if part is not None and _identifier_fault(part) is None else None
 
     @cached_property
     def properties(self) -> Mapping[str, _Prop]:
@@ -406,8 +457,10 @@ def _envelope(contract: _Contract) -> Iterator[Issue]:
 def _identity(contract: _Contract) -> Iterator[Issue]:
     doc = contract.doc
     identifier = doc.get("id")
-    if isinstance(identifier, str) and identifier != identifier.lower():
-        yield _issue("id", "identity", f"the id must be in lower case, as {identifier.lower()!r}")
+    if isinstance(identifier, str) and identifier != _ascii_lower(identifier):
+        yield _issue(
+            "id", "identity", f"the id must be in lower case, as {_ascii_lower(identifier)!r}"
+        )
     obj = contract.table_object
     if obj is None:
         yield _issue(
@@ -424,18 +477,20 @@ def _identity(contract: _Contract) -> Iterator[Issue]:
             "identity",
             f"the physicalType of the schema object of a Python contract must be table{found}",
         )
-    fault = _table_name_fault(obj.get("name"))
+    fault = _identifier_fault(obj.get("name"))
     if fault is not None:
-        yield _issue("schema[0].name", "identity", fault)
+        yield _issue("schema[0].name", "identity", f"the name of the table {fault}")
     table = contract.table
     if table is None:
         return
     if isinstance(identifier, str) and contract.id_schema is None:
+        part = contract.id_parts
+        why = "" if part is None else f": its schema part {_shown(part)} {_identifier_fault(part)}"
         yield _issue(
             "id",
             "identity",
-            f"the id must be a schema name without a dot, a dot and the table, in lower case, "
-            f"as in 'analytics.{table.lower()}'",
+            f"the id must be a schema name, a dot and the table, in lower case, as in "
+            f"'analytics.{_ascii_lower(table)}'{why}",
         )
     if "name" in doc and doc["name"] != table:
         yield _issue(
@@ -557,17 +612,26 @@ def _custom_properties(contract: _Contract) -> Iterator[Issue]:
                 )
             else:
                 first[name] = index
-            if (
-                name == "service"
-                and contract.service is not None
-                and item.get("value") != contract.service
-            ):
-                yield _issue(
-                    where,
-                    "service",
-                    f"`service` is {item.get('value')!r}, the service of the release is "
-                    f"{contract.service!r}",
-                )
+            if name == "service":
+                yield from _service_issues(item.get("value"), where, contract.service)
+
+
+def _service_issues(value: object, where: str, service: str | None) -> Iterator[Issue]:
+    """Yield the issue of the `service` property at `where`, whose value is `value`, when the
+    release's service is `service`: a `value` issue when it is not a string with text, whether or
+    not the service is known, and a `service` issue when it names another service."""
+    if not _is_text(value):
+        yield _issue(
+            where,
+            "value",
+            f"`service` is {_shown(value)}, it must be the name of a service, a string with text",
+        )
+    elif service is not None and value != service:
+        yield _issue(
+            where,
+            "service",
+            f"`service` is {_shown(value)}, the service of the release is {service!r}",
+        )
 
 
 def _shown(value: object) -> str:
@@ -615,13 +679,17 @@ def _one_of(words: Sequence[str]) -> str:
 
 
 def _check_schedule(value: object) -> Iterator[str]:
-    if not _is_text(value):
-        yield f"`schedule` is {_shown(value)}, it must be the name of a schedule, a string"
+    fault = _name_fault(value, inner_whitespace=False)
+    if fault is None and isinstance(value, str) and len(value) > _SCHEDULE_MAX:
+        fault = f"must be at most {_SCHEDULE_MAX} characters long"
+    if fault is not None:
+        yield f"`schedule` is {_shown(value)}, the name of a schedule {fault}"
 
 
 def _check_script(value: object) -> Iterator[str]:
-    if not _is_text(value):
-        yield f"`script` is {_shown(value)}, it must be the path of the script, a string"
+    fault = _path_fault(value)
+    if fault is not None:
+        yield f"`script` is {_shown(value)}, the path of the script inside the project {fault}"
 
 
 def _check_config(value: object) -> Iterator[str]:
@@ -662,8 +730,9 @@ def _check_read_queries(value: object) -> Iterator[str]:
         )
         return
     for name, query in value.items():
-        if not _is_text(name):
-            yield f"`readQueries` has a query named {_shown(name)}, a name must have text"
+        fault = _name_fault(name)
+        if fault is not None:
+            yield f"`readQueries` has a query named {_shown(name)}, the name of a query {fault}"
         if not _is_text(query):
             yield (
                 f"`readQueries` has the query {_shown(name)} that is {_shown(query)}, a query "
@@ -671,25 +740,19 @@ def _check_read_queries(value: object) -> Iterator[str]:
             )
 
 
-def _asset_fault(asset: object) -> str | None:
-    if not isinstance(asset, str) or not asset.strip():
-        return f"{_shown(asset)} is not a path"
-    if asset.startswith("/"):
-        return f"{_shown(asset)} is an absolute path"
-    if ".." in asset.split("/"):
-        return f"{_shown(asset)} leaves the project with `..`"
-    return None
-
-
 def _check_assets(value: object) -> Iterator[str]:
     if not isinstance(value, list):
         yield f"`assets` is {_shown(value)}, it must be a list of paths inside the project"
         return
+    paths = []
     for asset in value:
-        fault = _asset_fault(asset)
-        if fault is not None:
-            yield f"`assets` lists a path that is not inside the project: {fault}"
-    counts = Counter(asset for asset in value if isinstance(asset, str))
+        fault = _path_fault(asset)
+        if fault is None:
+            paths.append(asset)
+        else:
+            yield f"`assets` lists {_shown(asset)}, the path of a file inside the project {fault}"
+    # A path that passed is written in its normalised form, so two that name one file are equal.
+    counts = Counter(paths)
     for asset in sorted(asset for asset, count in counts.items() if count > 1):
         yield f"`assets` lists {_shown(asset)} twice, a path is listed once"
 
@@ -779,14 +842,9 @@ def _column_type_issue(raw: object, path: str) -> Issue | None:
             # A refusal for a range says the range, and any other refusal is the plain sentence.
             detail = f": {error}" if "out of range" in str(error) else ""
         else:
-            length = re.fullmatch(r"(?:VARCHAR|CHAR)\((\d+)\)", canonical)
-            # A number of more than 16 digits is above the limit, and checking the length first
-            # keeps a very long digit string from reaching `int`, which refuses it.
-            if length is None or (
-                len(length.group(1)) <= 16 and int(length.group(1)) <= _MAX_LENGTH
-            ):
+            if canonical.partition("(")[0] not in _STRING_TYPES or _length(canonical) is not None:
                 return None
-            detail = f": the length is at most {_MAX_LENGTH}"
+            detail = f": the length is 1 to {_MAX_LENGTH}"
     return _issue(path, "column_type", f"{_shown(raw)} is not a type continuo accepts{detail}")
 
 
@@ -819,8 +877,9 @@ def _columns(contract: _Contract) -> Iterator[Issue]:
         where = f"schema[0].properties[{index}]"
         name = column.get("name")
         shown = _shown(name)
-        if isinstance(name, str) and not name.strip():
-            yield _issue(f"{where}.name", "value", "the name of a column must not be blank")
+        fault = _name_fault(name) if isinstance(name, str) else None
+        if fault is not None:
+            yield _issue(f"{where}.name", "value", f"the name of a column {fault}")
         elif isinstance(name, str) and name in first:
             yield _issue(
                 f"{where}.name",
@@ -990,20 +1049,25 @@ def rule_issues(doc: Mapping[str, Any], *, path: str, service: str | None) -> li
     carries the contract, or `None` when it is not known, which skips the check of the `service`
     property. The issues come in path order, then in message order.
 
-    The rules are the envelope (`apiVersion` is `v3.2.0`), the identity of the table (one schema
-    object, a table whose name is not blank, has no outer whitespace and no dot, with the id, the
-    name and the physical name agreeing with it), the file name, `team.name`, the root fields a
+    A name, wherever the rules ask for one, is a string that is not blank and has no whitespace at
+    either end and no control character. The rules are the envelope (`apiVersion` is `v3.2.0`),
+    the identity of the table (one schema object, a table and a schema part of the id that are
+    names with no whitespace, dot or slash, with the id in ASCII lower case and the id, the name
+    and the physical name agreeing with the table), the file name, `team.name`, the root fields a
     Python contract may not carry, and the custom properties of the `continuo` vendor: each must
     be a property that the vocabulary knows, that a Python contract carries and that sits where
-    it is written, and it may be written once in a list.
+    it is written, and it may be written once in a list. A `service` property is a string with
+    text and, when `service` is given, names it.
 
     The rules of the node come after them. The contract writes `schedule` and `criticality`, and
-    each property it writes has a value of its own kind. The `kind` (a python-node when it is not
-    written, `python-model` read as python-node) decides which of `script`, `readQueries`,
+    each property it writes has a value of its own kind: `schedule` is a name with no whitespace,
+    at most 50 characters long, the names of `readQueries` are names, and `script` and each entry
+    of `assets` are normalised POSIX paths inside the project. The `kind` (a python-node when it
+    is not written, `python-model` read as python-node) decides which of `script`, `readQueries`,
     `csvSource`, `secretRef` and `assets` the contract must write, may write or may not write,
     and a python-csv node replaces its table. A kind that is not a Python kind gives one issue
     and skips these per-kind rules. The table lists at least one column, each with a name that is
-    used once and a `physicalType` that `canonical_sql_type` accepts with a length of at most
+    used once and a `physicalType` that `canonical_sql_type` accepts with a length from 1 to
     2**53 - 1, and no column has a `physicalName` other than its name, is partitioned, nests
     `properties`, `items` or a `map`, or writes `logicalTypeOptions`. A custom quality rule has an
     `implementation` that is not empty. The key of an `upsert` node is the

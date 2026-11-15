@@ -25,19 +25,30 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   message) in path order. `schema_issues()` runs the JSON schema alone and `rule_issues()` runs
   continuo's rules alone on a document the schema accepted, so a caller can cache the first.
 - The rules of `continuo_contracts.validate` check the envelope, the identity (the id, `name` and
-  `physicalName` agree with the table, the name of the table is not blank, has no outer
-  whitespace and no dot, and the file is named `<table>.odcs.yaml` or `<schema>.<table>.odcs.yaml`),
-  `team.name`, `schedule` and `criticality`, and the `service` property against the service of the
-  release when one is given. They refuse `servers`, `tenant`, `contractCreatedTs`, and a `continuo`
-  property that is unknown, filled by continuo, not carried by a Python contract, on the wrong
-  object or written twice.
+  `physicalName` agree with the table, the id is in lower case, and the file is named
+  `<table>.odcs.yaml` or `<schema>.<table>.odcs.yaml`), `team.name`, `schedule` and
+  `criticality`, and the `service` property, a string with text that names the service of the
+  release when one is given. They refuse `servers`, `tenant`, `contractCreatedTs`, and a
+  `continuo` property that is unknown, filled by continuo, not carried by a Python contract, on
+  the wrong object or written twice.
+- A name in a Python contract is not blank and has no whitespace at either end and no control
+  character: the name of the table and the schema part of the id (`identity`, which also refuses
+  whitespace, a dot or a slash anywhere in them), the name of a column and of a read query, and
+  the `schedule` (`value`, which also refuses whitespace anywhere in it and a name longer than 50
+  characters). `script` and each entry of `assets` are normalised POSIX paths inside the project
+  (`value`): no empty, `.` or `..` part, no `\`, and no `/`, `~` or drive letter at the start, so
+  `./a.json`, `a//b`, `a\..\etc` and `C:/x` are refused.
+- The id and the table are compared with their ASCII letters in lower case and every other
+  character as written, so a Python contract is accepted or refused alike on Python 3.12, 3.13
+  and 3.14, whose Unicode tables lower-case different letters.
 - The rules also check what depends on the kind of the node (`kind_rule`): each property has a
   value of its kind (`timeoutMinutes` is 1 to 10080, `secretRef` is a `continuo-api-` Secret name
   of at most 253 characters, `csvSource` is `s3://<bucket>/<key>` or `https://<host>`,
-  `readQueries` and `assets` are well formed), and a python-node, python-csv or python-api writes
+  `readQueries` maps names to queries with text, and `assets` lists each path once), and a
+  python-node, python-csv or python-api writes
   the properties its kind needs and none that it refuses.
 - The rules check the columns and the key. A column has a name used once and a `physicalType` that
-  `canonical_sql_type` accepts (`column_type`, with a `VARCHAR(n)` or `CHAR(n)` of at most
+  `canonical_sql_type` accepts (`column_type`, with a `VARCHAR(n)` or `CHAR(n)` of length 1 to
   2**53 - 1), and no `physicalName`, partition, partition key position, nested `properties`,
   `items` or `map`, or `logicalTypeOptions` (`refused_field`). The key of an `upsert` node
   (`primary_key`) exists, each key column is `required` and not `DOUBLE PRECISION`, and each
@@ -56,7 +67,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   order mark, key order or quoting, store the same form. `contract_hash()` hashes the stored form
   without `apiVersion`, `kind`, `status` and `version`. The new vector file `vectors/contracts.json`
   pins the stored form and the `contract_hash` of seven contracts, one of them a messy spelling of
-  another that stores alike, and the issues of four refused ones.
+  another that stores alike, and the issues of nineteen refused ones, among them one for each
+  name and path rule.
 - `normalise_python()` raises `HashInputError` for a `service` that is empty or blank, as it does
   for a `reads` entry that is not `<schema>.<table>`.
 - `fingerprints.yaml` classifies every field of a Python contract's stored form for `python-node`,

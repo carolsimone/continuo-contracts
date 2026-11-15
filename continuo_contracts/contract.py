@@ -43,14 +43,14 @@ the stored form without the root keys that `fingerprints.yaml` lists as
 holds with the same values.
 """
 
-import string
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any, Final
 
 from continuo_contracts import fingerprints
-from continuo_contracts.canonical import canonical_json, normalise_text
+from continuo_contracts.canonical import _ascii_lower, canonical_json, normalise_text
 from continuo_contracts.errors import HashInputError, ProjectionError
 from continuo_contracts.hashing import sha256_hex
 from continuo_contracts.python import KIND_ALIASES, canonical_sql_type
@@ -77,6 +77,9 @@ _LOGICAL_TYPES: Final = MappingProxyType(
     }
 )
 _STRING_TYPES: Final = ("VARCHAR", "CHAR")
+_STRING_TYPE: Final = re.compile(r"(?:VARCHAR|CHAR)\((\d+)\)", re.ASCII)
+# The longest length of a `VARCHAR(n)` or `CHAR(n)`: canonical JSON writes no larger integer.
+_MAX_LENGTH: Final = 2**53 - 1
 
 # The lists whose order says nothing: they are sorted by the canonical JSON of each item.
 _SET_LIKE: Final = frozenset(
@@ -85,10 +88,6 @@ _SET_LIKE: Final = frozenset(
 
 # The `continuo` properties whose value is continuo's default, which the stored form leaves out.
 _CONTINUO_DEFAULTS: Final = MappingProxyType({"modeType": "replace", "extraColumns": "raise"})
-
-# The ASCII letters in upper case, each with its lower case. Lower-casing changes nothing else,
-# so the result is the same on every Python version.
-_ASCII_LOWER: Final = str.maketrans(string.ascii_uppercase, string.ascii_lowercase)
 
 _COLUMN_DEFAULTS: Final = MappingProxyType(
     {
@@ -207,6 +206,20 @@ def logical_type(physical_type: str) -> dict[str, Any] | None:
     return {"logicalType": logical} if logical is not None else None
 
 
+def _length(canonical: str) -> int | None:
+    """Return the length `n` of the canonical type `VARCHAR(n)` or `CHAR(n)` when it is from 1 to
+    2**53 - 1, or `None` for a length outside that range and for any other type.
+
+    A length of more than 16 digits is above the range, and checking the number of digits first
+    keeps a very long digit string from reaching `int`, which refuses it.
+    """
+    match = _STRING_TYPE.fullmatch(canonical)
+    if match is None or len(digits := match.group(1)) > 16:
+        return None
+    length = int(digits)
+    return length if 1 <= length <= _MAX_LENGTH else None
+
+
 def normalise_python(
     doc: Mapping[str, Any], *, service: str, reads: Sequence[str]
 ) -> dict[str, Any]:
@@ -291,7 +304,7 @@ def _reads(reads: Sequence[str]) -> list[str]:
                 f"reads entry {entry!r}: a table is written <schema>.<table>, with no empty part "
                 "and no whitespace around it"
             )
-        tables.add(entry.translate(_ASCII_LOWER))
+        tables.add(_ascii_lower(entry))
     return sorted(tables)
 
 
@@ -376,7 +389,7 @@ def _clean_object(obj: Mapping[str, Any], shape: _Shape) -> dict[str, Any]:
             if key == "description" or shape.text_values:
                 item = normalise_text(item)
             if key in shape.lower_case:
-                item = item.translate(_ASCII_LOWER)
+                item = _ascii_lower(item)
         if _is_empty(item) or (key in shape.defaults and _is_default(item, shape.defaults[key])):
             continue
         if key in _SET_LIKE and isinstance(item, list):
