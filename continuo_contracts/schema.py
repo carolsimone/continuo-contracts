@@ -10,7 +10,9 @@ from typing import Any, Final
 from continuo_contracts.errors import SchemaFileError
 
 SCHEMA_FILE: Final = "odcs-json-schema-v3.2.0.json"
-SCHEMA_SHA256: Final = "edb41f33ec46e84780e99872ab2bd67f074959d2bf3e9c9fc54e61f8982b0d93"
+SCHEMA_SHA256: Final = (
+    "edb41f33ec46e84780e99872ab2bd67f074959d2bf3e9c9fc54e61f8982b0d93"
+)
 
 
 def _read_bytes() -> bytes:
@@ -28,6 +30,8 @@ def load() -> Mapping[str, Any]:
     data = _read_bytes()
     got = hashlib.sha256(data).hexdigest()
     if got != SCHEMA_SHA256:
-        raise SchemaFileError(f"{SCHEMA_FILE}: SHA-256 {got} is not the pinned {SCHEMA_SHA256}")
+        raise SchemaFileError(
+            f"{SCHEMA_FILE}: SHA-256 {got} is not the pinned {SCHEMA_SHA256}"
+        )
     schema: Mapping[str, Any] = json.loads(data)
     return schema

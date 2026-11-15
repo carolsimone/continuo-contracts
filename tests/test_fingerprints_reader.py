@@ -66,34 +66,61 @@ fingerprint: "contract", why: "hashed as written", inputs: ["odcs.*"], rule: "st
 FP = parse_fingerprints(MINIMAL)
 
 
-@pytest.mark.parametrize(("family", "name", "expected"), [
-    ("dbt-model", "raw_code", "raw_code"),
-    ("dbt-model", "release.image_tag", "image_tag"),        # the family before `every`
-    ("dbt-seed", "release.image_tag", "provenance"),        # `every` for the rest
-    ("dbt-model", "config.persist_docs", "other_config"),   # the rule
-    ("dbt-model", "config.metadata", "other_config"),       # only starts like a denylisted key
-    ("dbt-model", "config.contract.enforced", "other_config"),
-    ("dbt-model", "config.tags", "tags"),
-    ("dbt-model", "config.meta", "meta_other"),
-    ("dbt-model", "config.meta.owner", None),               # a denylisted key never takes the rule
-    ("dbt-seed", "config.persist_docs", None),              # no rule entry in that family
-    ("python-node", "config.persist_docs", None),           # the rule is for dbt only
-    ("python-node", "projection.assets", "assets"),
-    ("dbt-model", "nothing.here", None),
-    ("python-node", "odcs.team.name", "team"),
-    ("python-node", "odcs.custom.schedule", "team"),
-    ("python-node", "odcs.custom.filePath", "refused_property"),
-    ("python-node", "odcs.description.usage", "standard_field"),    # the rule
-    ("python-node", "odcs.schema.properties.businessName", "standard_field"),
-    ("python-node", "odcs.customProperties", "standard_field"),     # another vendor's property
-    ("python-node", "odcs.custom.madeUp", None),                    # a continuo property
-    ("python-node", "odcs.schema.custom.madeUp", None),
-    ("python-node", "odcs.schema.properties.quality.custom.where", None),
-    ("python-node", "odcs.custom", None),
-    ("python-csv", "odcs.description.usage", None),                 # no rule entry in that family
-    ("dbt-model", "odcs.description.usage", None),                  # the rule is for Python only
-    ("dbt-model", "odcs.team.name", None),
-])
+@pytest.mark.parametrize(
+    ("family", "name", "expected"),
+    [
+        ("dbt-model", "raw_code", "raw_code"),
+        (
+            "dbt-model",
+            "release.image_tag",
+            "image_tag",
+        ),  # the family before `every`
+        ("dbt-seed", "release.image_tag", "provenance"),  # `every` for the rest
+        ("dbt-model", "config.persist_docs", "other_config"),  # the rule
+        (
+            "dbt-model",
+            "config.metadata",
+            "other_config",
+        ),  # only starts like a denylisted key
+        ("dbt-model", "config.contract.enforced", "other_config"),
+        ("dbt-model", "config.tags", "tags"),
+        ("dbt-model", "config.meta", "meta_other"),
+        (
+            "dbt-model",
+            "config.meta.owner",
+            None,
+        ),  # a denylisted key never takes the rule
+        ("dbt-seed", "config.persist_docs", None),  # no rule entry in that family
+        ("python-node", "config.persist_docs", None),  # the rule is for dbt only
+        ("python-node", "projection.assets", "assets"),
+        ("dbt-model", "nothing.here", None),
+        ("python-node", "odcs.team.name", "team"),
+        ("python-node", "odcs.custom.schedule", "team"),
+        ("python-node", "odcs.custom.filePath", "refused_property"),
+        ("python-node", "odcs.description.usage", "standard_field"),  # the rule
+        ("python-node", "odcs.schema.properties.businessName", "standard_field"),
+        (
+            "python-node",
+            "odcs.customProperties",
+            "standard_field",
+        ),  # another vendor's property
+        ("python-node", "odcs.custom.madeUp", None),  # a continuo property
+        ("python-node", "odcs.schema.custom.madeUp", None),
+        ("python-node", "odcs.schema.properties.quality.custom.where", None),
+        ("python-node", "odcs.custom", None),
+        (
+            "python-csv",
+            "odcs.description.usage",
+            None,
+        ),  # no rule entry in that family
+        (
+            "dbt-model",
+            "odcs.description.usage",
+            None,
+        ),  # the rule is for Python only
+        ("dbt-model", "odcs.team.name", None),
+    ],
+)
 def test_classify(family, name, expected):
     entry = FP.classify(family, name)
     assert (entry.id if entry else None) == expected
@@ -115,41 +142,96 @@ def test_moves_reads_the_parts_and_the_widening():
 
 
 def _e(family, fingerprint, parts=(), when=None):
-    return Entry(family=family, id="x", field="f", source="s", fingerprint=fingerprint, parts=parts,
-                 why="w", inputs=(), when=when, rule=None)
+    return Entry(
+        family=family,
+        id="x",
+        field="f",
+        source="s",
+        fingerprint=fingerprint,
+        parts=parts,
+        why="w",
+        inputs=(),
+        when=when,
+        rule=None,
+    )
 
 
-@pytest.mark.parametrize(("entry", "cell"), [
-    (_e("dbt-model", "content", ("source",)), "content (source)"),
-    (_e("python-node", "both", ("config", "shared")), "both (config, shared)"),
-    (_e("dbt-model", "contract"), "contract"),
-    (_e("dbt-model", "neither"), "neither"),
-    (_e("dbt-model", "contract", when=When("sql_reads", "both", ("compiled",))),
-     "contract; both (compiled) while SQL reads it"),
-    (_e("dbt-model", "neither", when=When("enforced", "content", ("config",))),
-     "neither; content (config) under an enforced dbt contract"),
-    (_e("python-node", "contract", when=When("upsert", "both", ("config",))),
-     "contract; both (config) on an `upsert` node"),
-    (_e("dbt-test", "both", ("config",)), "content (test node: config), contract (tested node)"),
-    (_e("dbt-test", "content", ("identity",)), "content (test node: identity)"),
-    (_e("dbt-test", "contract"), "contract (tested node)"),
-    (_e("dbt-test", "neither", when=When("sql_reads", "content", ("source",))),
-     "neither; content (test node: source) while SQL reads it"),
-])
+@pytest.mark.parametrize(
+    ("entry", "cell"),
+    [
+        (_e("dbt-model", "content", ("source",)), "content (source)"),
+        (
+            _e("python-node", "both", ("config", "shared")),
+            "both (config, shared)",
+        ),
+        (_e("dbt-model", "contract"), "contract"),
+        (_e("dbt-model", "neither"), "neither"),
+        (
+            _e(
+                "dbt-model",
+                "contract",
+                when=When("sql_reads", "both", ("compiled",)),
+            ),
+            "contract; both (compiled) while SQL reads it",
+        ),
+        (
+            _e(
+                "dbt-model",
+                "neither",
+                when=When("enforced", "content", ("config",)),
+            ),
+            "neither; content (config) under an enforced dbt contract",
+        ),
+        (
+            _e(
+                "python-node",
+                "contract",
+                when=When("upsert", "both", ("config",)),
+            ),
+            "contract; both (config) on an `upsert` node",
+        ),
+        (
+            _e("dbt-test", "both", ("config",)),
+            "content (test node: config), contract (tested node)",
+        ),
+        (
+            _e("dbt-test", "content", ("identity",)),
+            "content (test node: identity)",
+        ),
+        (_e("dbt-test", "contract"), "contract (tested node)"),
+        (
+            _e(
+                "dbt-test",
+                "neither",
+                when=When("sql_reads", "content", ("source",)),
+            ),
+            "neither; content (test node: source) while SQL reads it",
+        ),
+    ],
+)
 def test_render_in(entry, cell):
     assert render_in(entry) == cell
 
 
 def test_render_markdown():
     md = render_markdown(FP)
-    assert md.index("## Every family") < md.index("## dbt model") < md.index("## python-api")
-    assert "| SQL \\| text | `raw_code` | content (source) | source part | `raw_code` |" in md
+    assert (
+        md.index("## Every family")
+        < md.index("## dbt model")
+        < md.index("## python-api")
+    )
+    assert (
+        "| SQL \\| text | `raw_code` | content (source) | source part | `raw_code` |"
+        in md
+    )
     assert md.endswith("|\n")
     assert "The *Part, or why neither* column names the part" in md
     assert "`contract_hash`, the fingerprint of a node's contract" in md
     assert "`ci.source_hash` (the digest of the node's script bytes" in md
-    assert "- `contract_hash_exclusions`: the root keys of the stored form that `contract_hash` " \
-           "leaves out: `kind`, `version`." in md
+    assert (
+        "- `contract_hash_exclusions`: the root keys of the stored form that `contract_hash` "
+        "leaves out: `kind`, `version`." in md
+    )
     assert "`odcs.<path>`" in md and "`odcs.*`" in md
     assert "| `odcs.team.name`, `odcs.custom.schedule` |" in md
 
@@ -168,19 +250,33 @@ REFUSALS = [
     ("version", lambda d: d.update(version=2)),
     ("unknown", lambda d: d.update(extra=1)),
     ("families", lambda d: d["families"].pop("dbt-test")),
-    ("duplicate id", lambda d: d["families"]["dbt-model"].append(
-        {**_model(0)(d), "inputs": ["x"]})),
-    ("duplicate input", lambda d: d["families"]["dbt-model"].append(
-        {**_model(0)(d), "id": "raw_code_2"})),
+    (
+        "duplicate id",
+        lambda d: d["families"]["dbt-model"].append(
+            {**_model(0)(d), "inputs": ["x"]}
+        ),
+    ),
+    (
+        "duplicate input",
+        lambda d: d["families"]["dbt-model"].append(
+            {**_model(0)(d), "id": "raw_code_2"}
+        ),
+    ),
     ("parts", lambda d: _model(0)(d).pop("parts")),
     ("parts", lambda d: _model(2)(d).update(parts=["config"])),
     ("part", lambda d: _model(0)(d).update(parts=["compile"])),
     ("fingerprint", lambda d: _model(0)(d).update(fingerprint="code")),
     ("condition", lambda d: _model(3)(d)["when"].update(condition="always")),
     ("when", lambda d: _model(3)(d)["when"].update(fingerprint="both")),
-    ("rule", lambda d: d["families"]["python-node"][0].update(rule="outside_denylist")),
+    (
+        "rule",
+        lambda d: d["families"]["python-node"][0].update(rule="outside_denylist"),
+    ),
     ("input", lambda d: _model(0)(d).update(inputs=["Raw Code"])),
-    ("config.*", lambda d: d["families"]["python-node"][0].update(inputs=["config.*"])),
+    (
+        "config.*",
+        lambda d: d["families"]["python-node"][0].update(inputs=["config.*"]),
+    ),
     ("duplicate", lambda d: d["lists"]["hashed_config_denylist"].append("meta")),
 ]
 
@@ -192,18 +288,42 @@ def test_a_malformed_file_is_refused(needle, mutate):
 
 
 def test_the_packaged_file_holds_the_three_lists():
-    assert contract_hash_exclusions() == frozenset({"apiVersion", "kind", "status", "version"})
+    assert contract_hash_exclusions() == frozenset(
+        {"apiVersion", "kind", "status", "version"}
+    )
     assert load().contract_hash_exclusions == contract_hash_exclusions()
     assert hashed_config_denylist() == frozenset(
-        {"meta", "docs", "description", "grants", "tags", "access", "group", "freshness"})
-    assert projection_keys() == ("schema", "table", "kind", "script", "reads", "output_columns",
-                                 "extra_columns", "config", "secret_ref", "mode_type",
-                                 "primary_key", "assets")
+        {
+            "meta",
+            "docs",
+            "description",
+            "grants",
+            "tags",
+            "access",
+            "group",
+            "freshness",
+        }
+    )
+    assert projection_keys() == (
+        "schema",
+        "table",
+        "kind",
+        "script",
+        "reads",
+        "output_columns",
+        "extra_columns",
+        "config",
+        "secret_ref",
+        "mode_type",
+        "primary_key",
+        "assets",
+    )
 
 
 def _second_rule(d):
     d["families"]["dbt-model"].append(
-        {**_model(1)(d), "id": "other_config_2", "inputs": ["config.*"]})
+        {**_model(1)(d), "id": "other_config_2", "inputs": ["config.*"]}
+    )
 
 
 MORE_REFUSALS = [
@@ -232,19 +352,31 @@ def _python(i):
 
 def _second_standard_field(d):
     d["families"]["python-node"].append(
-        {**_python(3)(d), "id": "standard_field_2", "inputs": ["odcs.*"]})
+        {**_python(3)(d), "id": "standard_field_2", "inputs": ["odcs.*"]}
+    )
 
 
 ODCS_REFUSALS = [
     ("rule", lambda d: _model(0)(d).update(rule="standard_field")),
     ("rule", lambda d: d["families"]["every"][0].update(rule="standard_field")),
     ("rule", lambda d: _python(3)(d).update(fingerprint="neither")),
-    ("rule", lambda d: _python(3)(d).update(fingerprint="both", parts=["config"])),
+    (
+        "rule",
+        lambda d: _python(3)(d).update(fingerprint="both", parts=["config"]),
+    ),
     ("rule", lambda d: _python(3)(d).update(inputs=["odcs.*", "odcs.team.name"])),
     ("rule", lambda d: _python(3)(d).update(inputs=["odcs.team.name"])),
     ("rule", lambda d: _python(3)(d).update(inputs=["config.*"])),
-    ("rule", lambda d: _python(3)(d).update(
-        when={"condition": "upsert", "fingerprint": "both", "parts": ["config"]})),
+    (
+        "rule",
+        lambda d: _python(3)(d).update(
+            when={
+                "condition": "upsert",
+                "fingerprint": "both",
+                "parts": ["config"],
+            }
+        ),
+    ),
     ("rule", _second_standard_field),
     ("rule", lambda d: _python(3)(d).update(rule="outside_standard_field")),
     ("odcs.*", lambda d: _python(1)(d).update(inputs=["odcs.*"])),
@@ -259,16 +391,37 @@ ODCS_REFUSALS = [
     ("input name", lambda d: _python(1)(d).update(inputs=["odcs.schema.*"])),
     ("input name", lambda d: _python(1)(d).update(inputs=["odcs.*.name"])),
     ("input name", lambda d: _model(0)(d).update(inputs=["config.Foo"])),
-    ("duplicate input", lambda d: _python(1)(d).update(
-        inputs=["odcs.team.name", "odcs.team.name"])),
-    ("duplicate input", lambda d: _python(2)(d).update(inputs=["odcs.team.name"])),
-    ("missing key 'contract_hash_exclusions'",
-     lambda d: d["lists"].pop("contract_hash_exclusions")),
-    ("contract_hash_exclusions", lambda d: d["lists"].update(contract_hash_exclusions=[])),
-    ("contract_hash_exclusions", lambda d: d["lists"].update(contract_hash_exclusions="kind")),
-    ("duplicate name", lambda d: d["lists"]["contract_hash_exclusions"].append("kind")),
+    (
+        "duplicate input",
+        lambda d: _python(1)(d).update(
+            inputs=["odcs.team.name", "odcs.team.name"]
+        ),
+    ),
+    (
+        "duplicate input",
+        lambda d: _python(2)(d).update(inputs=["odcs.team.name"]),
+    ),
+    (
+        "missing key 'contract_hash_exclusions'",
+        lambda d: d["lists"].pop("contract_hash_exclusions"),
+    ),
+    (
+        "contract_hash_exclusions",
+        lambda d: d["lists"].update(contract_hash_exclusions=[]),
+    ),
+    (
+        "contract_hash_exclusions",
+        lambda d: d["lists"].update(contract_hash_exclusions="kind"),
+    ),
+    (
+        "duplicate name",
+        lambda d: d["lists"]["contract_hash_exclusions"].append("kind"),
+    ),
     ("key name", lambda d: d["lists"]["contract_hash_exclusions"].append("a.b")),
-    ("key name", lambda d: d["lists"]["contract_hash_exclusions"].append(" version")),
+    (
+        "key name",
+        lambda d: d["lists"]["contract_hash_exclusions"].append(" version"),
+    ),
     ("key name", lambda d: d["lists"]["contract_hash_exclusions"].append(7)),
 ]
 
@@ -282,12 +435,21 @@ def test_a_malformed_odcs_input_rule_or_list_is_refused(needle, mutate):
 def test_an_odcs_input_may_name_a_segment_in_camel_case():
     def mutate(d):
         _python(1)(d).update(
-            inputs=["odcs.custom.timeoutMinutes", "odcs.schema.properties.logicalTypeOptions"])
+            inputs=[
+                "odcs.custom.timeoutMinutes",
+                "odcs.schema.properties.logicalTypeOptions",
+            ]
+        )
+
     fp = parse_fingerprints(_with(mutate))
     assert fp.classify("python-node", "odcs.custom.timeoutMinutes").id == "team"
-    assert fp.classify("python-node", "odcs.schema.properties.logicalTypeOptions").id == "team"
-    assert fp.classify("python-node", "odcs.schema.properties.logicaltypeoptions").id == (
-        "standard_field")
+    assert (
+        fp.classify("python-node", "odcs.schema.properties.logicalTypeOptions").id
+        == "team"
+    )
+    assert fp.classify(
+        "python-node", "odcs.schema.properties.logicaltypeoptions"
+    ).id == ("standard_field")
 
 
 @pytest.mark.parametrize("text", ["", "- a\n- b\n", "version: [1\n"])
@@ -310,31 +472,53 @@ def _repeat(old, new):
 
 
 def _line_of(text, needle):
-    return next(i for i, line in enumerate(text.splitlines(), 1) if needle in line)
+    return next(
+        i for i, line in enumerate(text.splitlines(), 1) if needle in line
+    )
 
 
 REPEATED_KEYS = [
-    ("an entry in flow style", "fingerprint",
-     _repeat('parts: ["source"], why: "source part"',
-             'parts: ["source"], fingerprint: "neither", why: "source part"'),
-     'id: "raw_code"'),
-    ("a section under families", "dbt-seed",
-     _repeat("  dbt-snapshot: []\n", "  dbt-snapshot: []\n  dbt-seed: []\n"),
-     "  dbt-seed: []"),
-    ("a key under lists", "hashed_config_denylist",
-     _repeat('  hashed_config_denylist: ["meta", "tags"]\n',
-             '  hashed_config_denylist: ["meta", "tags"]\n  hashed_config_denylist: ["x"]\n'),
-     "  hashed_config_denylist:"),
+    (
+        "an entry in flow style",
+        "fingerprint",
+        _repeat(
+            'parts: ["source"], why: "source part"',
+            'parts: ["source"], fingerprint: "neither", why: "source part"',
+        ),
+        'id: "raw_code"',
+    ),
+    (
+        "a section under families",
+        "dbt-seed",
+        _repeat("  dbt-snapshot: []\n", "  dbt-snapshot: []\n  dbt-seed: []\n"),
+        "  dbt-seed: []",
+    ),
+    (
+        "a key under lists",
+        "hashed_config_denylist",
+        _repeat(
+            '  hashed_config_denylist: ["meta", "tags"]\n',
+            '  hashed_config_denylist: ["meta", "tags"]\n  hashed_config_denylist: ["x"]\n',
+        ),
+        "  hashed_config_denylist:",
+    ),
     ("a top-level key", "version", MINIMAL + "version: 1\n", "version: 1"),
 ]
 
 
-@pytest.mark.parametrize(("where", "key", "text", "first"), REPEATED_KEYS,
-                         ids=[case[0] for case in REPEATED_KEYS])
-def test_a_repeated_key_is_refused_with_its_name_and_line(where, key, text, first):
+@pytest.mark.parametrize(
+    ("where", "key", "text", "first"),
+    REPEATED_KEYS,
+    ids=[case[0] for case in REPEATED_KEYS],
+)
+def test_a_repeated_key_is_refused_with_its_name_and_line(
+    where, key, text, first
+):
     first_line = _line_of(text, first)
     repeated_line = len(text.splitlines()) if where == "a top-level key" else None
-    with pytest.raises(FingerprintsFileError, match=re.escape(f"duplicate key {key!r}")) as caught:
+    with pytest.raises(
+        FingerprintsFileError, match=re.escape(f"duplicate key {key!r}")
+    ) as caught:
         parse_fingerprints(text)
     message = str(caught.value)
     assert f"first written at line {first_line}" in message
@@ -348,23 +532,36 @@ def test_a_repeated_key_in_a_block_entry_is_refused_at_its_line():
     text = block.replace(line, line + "    fingerprint: neither\n", 1)
     assert text != block
     repeated = text[: text.index(line)].count("\n") + 2
-    with pytest.raises(FingerprintsFileError, match="duplicate key 'fingerprint'") as caught:
+    with pytest.raises(
+        FingerprintsFileError, match="duplicate key 'fingerprint'"
+    ) as caught:
         parse_fingerprints(text)
     assert f"first written at line {repeated - 1}" in str(caught.value)
     assert f"line {repeated}, column 5" in str(caught.value)
 
 
 def test_a_second_fingerprint_in_a_packaged_entry_is_refused():
-    shipped = importlib.resources.files("continuo_contracts").joinpath("fingerprints.yaml")
+    shipped = importlib.resources.files("continuo_contracts").joinpath(
+        "fingerprints.yaml"
+    )
     text = shipped.read_text(encoding="utf-8")
     lines = text.splitlines(keepends=True)
     seed = lines.index("  dbt-seed:\n")
-    grants = next(i for i in range(seed, len(lines)) if lines[i] == '    - id: "grants"\n')
-    fingerprint = next(i for i in range(grants, len(lines))
-                       if lines[i].lstrip().startswith("fingerprint:"))
-    lines.insert(fingerprint + 1, lines[fingerprint].replace('"contract"', '"neither"'))
+    grants = next(
+        i for i in range(seed, len(lines)) if lines[i] == '    - id: "grants"\n'
+    )
+    fingerprint = next(
+        i
+        for i in range(grants, len(lines))
+        if lines[i].lstrip().startswith("fingerprint:")
+    )
+    lines.insert(
+        fingerprint + 1, lines[fingerprint].replace('"contract"', '"neither"')
+    )
     assert lines[fingerprint + 1] != lines[fingerprint]
-    with pytest.raises(FingerprintsFileError, match="duplicate key 'fingerprint'"):
+    with pytest.raises(
+        FingerprintsFileError, match="duplicate key 'fingerprint'"
+    ):
         parse_fingerprints("".join(lines))
 
 
@@ -377,31 +574,63 @@ def test_a_key_that_a_merge_brings_in_counts_as_written():
 # Each case is a name, a text that brings the key `k` in twice, and the lines of the `<<` keys
 # that bring it in.
 MERGED_KEYS = [
-    ("a list of aliases in flow style",
-     "a: &a {k: 1}\nb: &b {k: 2}\nz: {<<: [*a, *b]}\n", [3]),
-    ("a list of aliases in block style",
-     "a: &a {k: 1}\nb: &b {k: 2}\nz:\n  <<: [*a, *b]\n", [4]),
-    ("a merge and then the key", "base: &base {k: 1}\nentry: {<<: *base, k: 2}\n", [2]),
-    ("the key and then a merge", "base: &base {k: 1}\nentry:\n  k: 2\n  <<: *base\n", [4]),
-    ("two merges", "a: &a {k: 1}\nb: &b {k: 2}\nz:\n  <<: *a\n  <<: *b\n", [4, 5]),
-    ("a merged mapping that merges",
-     "a: &a {k: 1}\nb: &b\n  <<: *a\nz:\n  <<: *b\n  k: 3\n", [5]),
+    (
+        "a list of aliases in flow style",
+        "a: &a {k: 1}\nb: &b {k: 2}\nz: {<<: [*a, *b]}\n",
+        [3],
+    ),
+    (
+        "a list of aliases in block style",
+        "a: &a {k: 1}\nb: &b {k: 2}\nz:\n  <<: [*a, *b]\n",
+        [4],
+    ),
+    (
+        "a merge and then the key",
+        "base: &base {k: 1}\nentry: {<<: *base, k: 2}\n",
+        [2],
+    ),
+    (
+        "the key and then a merge",
+        "base: &base {k: 1}\nentry:\n  k: 2\n  <<: *base\n",
+        [4],
+    ),
+    (
+        "two merges",
+        "a: &a {k: 1}\nb: &b {k: 2}\nz:\n  <<: *a\n  <<: *b\n",
+        [4, 5],
+    ),
+    (
+        "a merged mapping that merges",
+        "a: &a {k: 1}\nb: &b\n  <<: *a\nz:\n  <<: *b\n  k: 3\n",
+        [5],
+    ),
 ]
 
 
-@pytest.mark.parametrize(("text", "merge_lines"), [case[1:] for case in MERGED_KEYS],
-                         ids=[case[0] for case in MERGED_KEYS])
-def test_a_duplicate_key_through_a_merge_is_reported_at_the_line_of_the_merge(text, merge_lines):
+@pytest.mark.parametrize(
+    ("text", "merge_lines"),
+    [case[1:] for case in MERGED_KEYS],
+    ids=[case[0] for case in MERGED_KEYS],
+)
+def test_a_duplicate_key_through_a_merge_is_reported_at_the_line_of_the_merge(
+    text, merge_lines
+):
     for line in merge_lines:
         assert "<<" in text.splitlines()[line - 1]
-    with pytest.raises(FingerprintsFileError, match="duplicate key 'k'") as caught:
+    with pytest.raises(
+        FingerprintsFileError, match="duplicate key 'k'"
+    ) as caught:
         parse_fingerprints(text)
     message = str(caught.value)
-    reported = message[message.index("duplicate key"):]
+    reported = message[message.index("duplicate key") :]
     assert "first written" not in reported
-    assert [int(n) for n in re.findall(r"\d+", reported.splitlines()[0])] == merge_lines
+    assert [
+        int(n) for n in re.findall(r"\d+", reported.splitlines()[0])
+    ] == merge_lines
     assert f"line {merge_lines[0]}, column" in reported
-    assert {int(n) for n in re.findall(r"\bline (\d+)", reported)} == {merge_lines[0]}
+    assert {int(n) for n in re.findall(r"\bline (\d+)", reported)} == {
+        merge_lines[0]
+    }
 
 
 @pytest.mark.parametrize("text", ["? [a]\n: 1\n", "x: !!map 1\n"])
@@ -411,7 +640,9 @@ def test_a_key_or_tag_pyyaml_refuses_is_still_a_file_error(text):
 
 
 def test_the_packaged_file_loads_under_the_strict_loader():
-    shipped = importlib.resources.files("continuo_contracts").joinpath("fingerprints.yaml")
+    shipped = importlib.resources.files("continuo_contracts").joinpath(
+        "fingerprints.yaml"
+    )
     text = shipped.read_text(encoding="utf-8")
     assert yaml.load(text, Loader=_StrictLoader) == yaml.safe_load(text)
     assert parse_fingerprints(text) == load()

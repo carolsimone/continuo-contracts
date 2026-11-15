@@ -42,7 +42,7 @@ packages = ["continuo_contracts"]
 
 [tool.ruff]
 target-version = "py314"
-line-length = 100
+line-length = 82
 
 [tool.ruff.lint]
 select = ["E4", "E501", "E7", "E9", "F", "I", "B", "UP"]

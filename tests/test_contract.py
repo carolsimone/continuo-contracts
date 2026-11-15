@@ -7,7 +7,11 @@ import pytest
 
 from continuo_contracts import fingerprints, yaml_strict
 from continuo_contracts.canonical import canonical_json
-from continuo_contracts.contract import contract_hash, logical_type, normalise_python
+from continuo_contracts.contract import (
+    contract_hash,
+    logical_type,
+    normalise_python,
+)
 from continuo_contracts.errors import CanonicalJsonError, HashInputError
 from continuo_contracts.python import node_from_odcs, projection_hash
 from continuo_contracts.validate import validate_python_contract
@@ -18,9 +22,7 @@ FULL = FIXTURES / "full"
 FULL_NAMES = ["python_node", "python_csv", "python_api"]
 LABELS = ("apiVersion", "kind", "status", "version")
 
-PURPOSE = (
-    "Daily transaction count and total amount in EUR, rolled up from analytics.daily_transactions."
-)
+PURPOSE = "Daily transaction count and total amount in EUR, rolled up from analytics.daily_transactions."
 DAILY = "select created_at, amount_eur from analytics.daily_transactions"
 
 KPIS_STORED = {
@@ -35,9 +37,17 @@ KPIS_STORED = {
     "customProperties": [
         {"property": "criticality", "value": "SECONDARY", "vendor": "continuo"},
         {"property": "kind", "value": "python-node", "vendor": "continuo"},
-        {"property": "readQueries", "value": {"daily": DAILY}, "vendor": "continuo"},
+        {
+            "property": "readQueries",
+            "value": {"daily": DAILY},
+            "vendor": "continuo",
+        },
         {"property": "schedule", "value": "daily", "vendor": "continuo"},
-        {"property": "script", "value": "scripts/py_daily_kpis.py", "vendor": "continuo"},
+        {
+            "property": "script",
+            "value": "scripts/py_daily_kpis.py",
+            "vendor": "continuo",
+        },
         {"property": "service", "value": "service-py", "vendor": "continuo"},
     ],
     "schema": [
@@ -53,7 +63,12 @@ KPIS_STORED = {
                 }
             ],
             "properties": [
-                {"name": "day", "physicalType": "DATE", "logicalType": "date", "required": True},
+                {
+                    "name": "day",
+                    "physicalType": "DATE",
+                    "logicalType": "date",
+                    "required": True,
+                },
                 {
                     "name": "tx_count",
                     "physicalType": "INTEGER",
@@ -100,7 +115,9 @@ def _valid(doc, table):
 
 
 def _stored(doc, table="py_daily_kpis", reads=()):
-    return normalise_python(_valid(doc, table), service="service-py", reads=list(reads))
+    return normalise_python(
+        _valid(doc, table), service="service-py", reads=list(reads)
+    )
 
 
 def _full_stored(name):
@@ -116,7 +133,9 @@ def _custom(name, value, vendor="continuo"):
 
 def test_the_stored_form_of_the_demo_node():
     assert (
-        normalise_python(_kpis(), service="service-py", reads=["Analytics.Daily_Transactions"])
+        normalise_python(
+            _kpis(), service="service-py", reads=["Analytics.Daily_Transactions"]
+        )
         == KPIS_STORED
     )
 
@@ -172,12 +191,20 @@ def test_contract_hash_is_the_sha256_of_the_canonical_json_without_the_labels():
     assert contract_hash(KPIS_STORED) == expected
 
 
-def test_contract_hash_leaves_out_the_keys_that_fingerprints_yaml_lists(monkeypatch):
+def test_contract_hash_leaves_out_the_keys_that_fingerprints_yaml_lists(
+    monkeypatch,
+):
     left_out = fingerprints.contract_hash_exclusions() | {"id"}
-    monkeypatch.setattr(fingerprints, "contract_hash_exclusions", lambda: left_out)
-    assert contract_hash(KPIS_STORED) == contract_hash(dict(KPIS_STORED, id="analytics.other"))
+    monkeypatch.setattr(
+        fingerprints, "contract_hash_exclusions", lambda: left_out
+    )
+    assert contract_hash(KPIS_STORED) == contract_hash(
+        dict(KPIS_STORED, id="analytics.other")
+    )
     monkeypatch.undo()
-    assert contract_hash(KPIS_STORED) != contract_hash(dict(KPIS_STORED, id="analytics.other"))
+    assert contract_hash(KPIS_STORED) != contract_hash(
+        dict(KPIS_STORED, id="analytics.other")
+    )
 
 
 def test_contract_hash_refuses_a_value_canonical_json_cannot_write():
@@ -229,7 +256,10 @@ def test_dropping_any_stored_key_moves_the_hash(name):
     stored = _full_stored(name)
     original = contract_hash(stored)
     for key in [key for key in stored if key not in LABELS]:
-        assert contract_hash({k: v for k, v in stored.items() if k != key}) != original, key
+        assert (
+            contract_hash({k: v for k, v in stored.items() if k != key})
+            != original
+        ), key
 
 
 # spelling does not matter
@@ -294,12 +324,16 @@ def _with_column(doc, index, **fields):
 
 
 def _with_quality(doc, **fields):
-    doc["schema"][0]["properties"][0]["quality"] = [{"metric": "nullValues", "mustBe": 0, **fields}]
+    doc["schema"][0]["properties"][0]["quality"] = [
+        {"metric": "nullValues", "mustBe": 0, **fields}
+    ]
     return doc
 
 
 def _with_relationship(doc, **fields):
-    doc["schema"][0]["properties"][0]["relationships"] = [{"to": "analytics.days.day", **fields}]
+    doc["schema"][0]["properties"][0]["relationships"] = [
+        {"to": "analytics.days.day", **fields}
+    ]
     return doc
 
 
@@ -317,32 +351,61 @@ EMPTY_OR_DEFAULT = {
     "root_tags_empty": lambda d: _with_root(d, tags=[]),
     "root_roles_empty": lambda d: _with_root(d, roles=[]),
     "root_domain_empty_string": lambda d: _with_root(d, domain=""),
-    "team_members_empty": lambda d: _with_root(d, team={"name": "service-py", "members": []}),
-    "schema_object_quality_empty": lambda d: d["schema"][0].update(quality=[]) or d,
-    "schema_object_deprecated_false": lambda d: d["schema"][0].update(deprecated=False) or d,
-    "schema_object_description_blank": lambda d: d["schema"][0].update(description=" \r\n") or d,
+    "team_members_empty": lambda d: _with_root(
+        d, team={"name": "service-py", "members": []}
+    ),
+    "schema_object_quality_empty": lambda d: (
+        d["schema"][0].update(quality=[]) or d
+    ),
+    "schema_object_deprecated_false": lambda d: (
+        d["schema"][0].update(deprecated=False) or d
+    ),
+    "schema_object_description_blank": lambda d: (
+        d["schema"][0].update(description=" \r\n") or d
+    ),
     "column_quality_empty": lambda d: _with_column(d, 0, quality=[]),
     "column_tags_empty": lambda d: _with_column(d, 0, tags=[]),
     "column_examples_empty": lambda d: _with_column(d, 0, examples=[]),
     "column_unique_false": lambda d: _with_column(d, 0, unique=False),
     "column_deprecated_false": lambda d: _with_column(d, 0, deprecated=False),
-    "column_primary_key_position_minus_one": lambda d: _with_column(d, 0, primaryKeyPosition=-1),
-    "column_semantic_type_column": lambda d: _with_column(d, 0, semanticType="column"),
+    "column_primary_key_position_minus_one": lambda d: _with_column(
+        d, 0, primaryKeyPosition=-1
+    ),
+    "column_semantic_type_column": lambda d: _with_column(
+        d, 0, semanticType="column"
+    ),
     "column_partitioned_false": lambda d: _with_column(d, 0, partitioned=False),
     "column_partition_key_position_minus_one": lambda d: _with_column(
         d, 0, partitionKeyPosition=-1
     ),
-    "column_critical_data_element_false": lambda d: _with_column(d, 0, criticalDataElement=False),
+    "column_critical_data_element_false": lambda d: _with_column(
+        d, 0, criticalDataElement=False
+    ),
     "column_primary_key_false": lambda d: _with_column(d, 0, primaryKey=False),
-    "column_physical_name_equal_to_name": lambda d: _with_column(d, 0, physicalName="day"),
-    "schema_object_logical_type_object": lambda d: d["schema"][0].update(logicalType="object")
-    or d,
-    "column_classification_empty": lambda d: _with_column(d, 0, classification=""),
-    "extra_columns_raise": lambda d: _with_property(d, _custom("extraColumns", "raise")),
-    "other_vendor_value_null": lambda d: _with_property(d, _custom("glossaryTerm", None, "atlan")),
-    "other_vendor_value_empty_string": lambda d: _with_property(d, _custom("term", "", "atlan")),
-    "other_vendor_value_empty_list": lambda d: _with_property(d, _custom("terms", [], "atlan")),
-    "other_vendor_value_empty_object": lambda d: _with_property(d, _custom("map", {}, "atlan")),
+    "column_physical_name_equal_to_name": lambda d: _with_column(
+        d, 0, physicalName="day"
+    ),
+    "schema_object_logical_type_object": lambda d: (
+        d["schema"][0].update(logicalType="object") or d
+    ),
+    "column_classification_empty": lambda d: _with_column(
+        d, 0, classification=""
+    ),
+    "extra_columns_raise": lambda d: _with_property(
+        d, _custom("extraColumns", "raise")
+    ),
+    "other_vendor_value_null": lambda d: _with_property(
+        d, _custom("glossaryTerm", None, "atlan")
+    ),
+    "other_vendor_value_empty_string": lambda d: _with_property(
+        d, _custom("term", "", "atlan")
+    ),
+    "other_vendor_value_empty_list": lambda d: _with_property(
+        d, _custom("terms", [], "atlan")
+    ),
+    "other_vendor_value_empty_object": lambda d: _with_property(
+        d, _custom("map", {}, "atlan")
+    ),
     "config_empty": lambda d: _with_property(d, _custom("config", {})),
     "assets_empty": lambda d: _with_property(d, _custom("assets", [])),
 }
@@ -366,15 +429,21 @@ def test_an_empty_or_default_value_hashes_like_an_absent_one(name):
     ],
     ids=["root_description", "root_tags", "column_description", "column_unique"],
 )
-def test_a_null_odcs_field_is_refused_by_the_schema_and_dropped_by_normalise(parent, key):
+def test_a_null_odcs_field_is_refused_by_the_schema_and_dropped_by_normalise(
+    parent, key
+):
     doc = _kpis()
     parent(doc)[key] = None
-    issues = validate_python_contract(doc, path="contracts/py_daily_kpis.odcs.yaml", service=None)
+    issues = validate_python_contract(
+        doc, path="contracts/py_daily_kpis.odcs.yaml", service=None
+    )
     assert {issue.reason for issue in issues} == {"odcs_schema"}
     absent = _kpis()
     parent(absent).pop(key, None)
     expected = normalise_python(absent, service="service-py", reads=KPIS_READS)
-    assert normalise_python(doc, service="service-py", reads=KPIS_READS) == expected
+    assert (
+        normalise_python(doc, service="service-py", reads=KPIS_READS) == expected
+    )
 
 
 @pytest.mark.parametrize(
@@ -390,7 +459,9 @@ def test_an_empty_or_default_quality_field_hashes_like_an_absent_one(fields):
 
 def test_a_relationship_of_type_foreign_key_hashes_like_one_without_a_type():
     plain = _stored(_with_relationship(_kpis()), reads=KPIS_READS)
-    written = _stored(_with_relationship(_kpis(), type="foreignKey"), reads=KPIS_READS)
+    written = _stored(
+        _with_relationship(_kpis(), type="foreignKey"), reads=KPIS_READS
+    )
     assert written == plain
 
 
@@ -441,7 +512,10 @@ def test_another_vendors_property_with_a_continuo_default_is_kept():
 
 
 def test_the_kind_is_always_written_and_an_old_name_is_stored_as_its_kind():
-    assert _custom("kind", "python-node") in _stored(_kpis(), reads=KPIS_READS)["customProperties"]
+    assert (
+        _custom("kind", "python-node")
+        in _stored(_kpis(), reads=KPIS_READS)["customProperties"]
+    )
     doc = _with_property(_kpis(), _custom("kind", "python-model"))
     stored = _stored(doc, reads=KPIS_READS)
     assert stored == KPIS_STORED
@@ -473,22 +547,35 @@ def test_a_whole_number_float_is_stored_as_an_integer():
     as_float = _with_property(_kpis(), _custom("config", {"batch_size": 10.0}))
     as_int = _with_property(_kpis(), _custom("config", {"batch_size": 10}))
     stored = _stored(copy.deepcopy(as_float), reads=KPIS_READS)
-    config = next(p for p in stored["customProperties"] if p["property"] == "config")["value"]
+    config = next(
+        p for p in stored["customProperties"] if p["property"] == "config"
+    )["value"]
     assert config == {"batch_size": 10}
     assert type(config["batch_size"]) is int
-    assert contract_hash(stored) == contract_hash(_stored(as_int, reads=KPIS_READS))
-    assert projection_hash(node_from_odcs(as_float)) == projection_hash(node_from_odcs(as_int))
+    assert contract_hash(stored) == contract_hash(
+        _stored(as_int, reads=KPIS_READS)
+    )
+    assert projection_hash(node_from_odcs(as_float)) == projection_hash(
+        node_from_odcs(as_int)
+    )
 
 
 def test_whole_number_floats_become_integers_everywhere_and_fractions_stay():
     doc = _with_property(
-        _kpis(), _custom("config", {"nested": [1.0, {"x": -3.0}], "rate": 0.5, "flag": True})
+        _kpis(),
+        _custom(
+            "config", {"nested": [1.0, {"x": -3.0}], "rate": 0.5, "flag": True}
+        ),
     )
     doc = _with_column(doc, 0, examples=[2.0, "2.0"])
     doc["schema"][0]["properties"][1]["primaryKeyPosition"] = -1.0
     stored = _stored(doc, reads=KPIS_READS)
     values = {p["property"]: p["value"] for p in stored["customProperties"]}
-    assert values["config"] == {"nested": [1, {"x": -3}], "rate": 0.5, "flag": True}
+    assert values["config"] == {
+        "nested": [1, {"x": -3}],
+        "rate": 0.5,
+        "flag": True,
+    }
     assert type(values["config"]["nested"][0]) is int
     assert values["config"]["flag"] is True
     assert "primaryKeyPosition" not in stored["schema"][0]["properties"][0]
@@ -496,9 +583,13 @@ def test_whole_number_floats_become_integers_everywhere_and_fractions_stay():
 
 
 def test_a_whole_number_float_outside_the_safe_integer_range_stays_a_float():
-    doc = _with_property(_kpis(), _custom("config", {"big": 1e300, "edge": 2.0**53}))
+    doc = _with_property(
+        _kpis(), _custom("config", {"big": 1e300, "edge": 2.0**53})
+    )
     stored = _stored(doc, reads=KPIS_READS)
-    config = next(p for p in stored["customProperties"] if p["property"] == "config")["value"]
+    config = next(
+        p for p in stored["customProperties"] if p["property"] == "config"
+    )["value"]
     assert type(config["big"]) is float and type(config["edge"]) is float
     contract_hash(stored)
 
@@ -516,14 +607,24 @@ def test_a_whole_number_float_outside_the_safe_integer_range_stays_a_float():
         ("decimal(5, 1)", {"logicalType": "number"}),
         ("DOUBLE PRECISION", {"logicalType": "number"}),
         ("TEXT", {"logicalType": "string"}),
-        ("VARCHAR(64)", {"logicalType": "string", "logicalTypeOptions": {"maxLength": 64}}),
-        ("char(003)", {"logicalType": "string", "logicalTypeOptions": {"maxLength": 3}}),
+        (
+            "VARCHAR(64)",
+            {"logicalType": "string", "logicalTypeOptions": {"maxLength": 64}},
+        ),
+        (
+            "char(003)",
+            {"logicalType": "string", "logicalTypeOptions": {"maxLength": 3}},
+        ),
         ("DATE", {"logicalType": "date"}),
         ("timestamp", {"logicalType": "timestamp"}),
         ("BOOLEAN", {"logicalType": "boolean"}),
-        ("VARCHAR(9007199254740991)", {
-            "logicalType": "string", "logicalTypeOptions": {"maxLength": 9007199254740991}
-        }),
+        (
+            "VARCHAR(9007199254740991)",
+            {
+                "logicalType": "string",
+                "logicalTypeOptions": {"maxLength": 9007199254740991},
+            },
+        ),
         ("NUMERIC(12)", None),
         ("JSONB", None),
         ("", None),
@@ -532,9 +633,10 @@ def test_a_whole_number_float_outside_the_safe_integer_range_stays_a_float():
         ("VARCHAR(9007199254740992)", None),
         ("CHAR(99999999999999999999)", None),
         ("VARCHAR(" + "9" * 5000 + ")", None),
-        ("VARCHAR(" + "0" * 5000 + "7)", {"logicalType": "string", "logicalTypeOptions": {
-            "maxLength": 7
-        }}),
+        (
+            "VARCHAR(" + "0" * 5000 + "7)",
+            {"logicalType": "string", "logicalTypeOptions": {"maxLength": 7}},
+        ),
     ],
     ids=lambda value: value[:30] if isinstance(value, str) else None,
 )
@@ -569,11 +671,15 @@ def test_logical_type_gives_a_new_dict_each_time():
         ("double precision", "DOUBLE PRECISION"),
     ],
 )
-def test_the_physical_type_is_stored_in_its_canonical_spelling(written, canonical):
+def test_the_physical_type_is_stored_in_its_canonical_spelling(
+    written, canonical
+):
     doc = _with_column(_kpis(), 0, physicalType=written)
     stored = _stored(doc, reads=KPIS_READS)
     assert stored["schema"][0]["properties"][0]["physicalType"] == canonical
-    clean = _stored(_with_column(_kpis(), 0, physicalType=canonical), reads=KPIS_READS)
+    clean = _stored(
+        _with_column(_kpis(), 0, physicalType=canonical), reads=KPIS_READS
+    )
     assert stored == clean
     assert contract_hash(stored) == contract_hash(clean)
 
@@ -584,7 +690,9 @@ def test_two_spellings_of_a_type_give_one_contract_hash_and_one_projection_hash(
     assert contract_hash(_stored(plain, reads=KPIS_READS)) == contract_hash(
         _stored(spelled, reads=KPIS_READS)
     )
-    assert projection_hash(node_from_odcs(plain)) == projection_hash(node_from_odcs(spelled))
+    assert projection_hash(node_from_odcs(plain)) == projection_hash(
+        node_from_odcs(spelled)
+    )
 
 
 def test_a_physical_type_that_is_not_accepted_is_stored_as_written():
@@ -613,16 +721,24 @@ def test_the_one_column_of_a_key_is_stored_without_its_position(position):
     column = stored["schema"][0]["properties"][0]
     assert column["primaryKey"] is True
     assert "primaryKeyPosition" not in column
-    assert contract_hash(stored) == contract_hash(_stored(_keyed(None), reads=KPIS_READS))
+    assert contract_hash(stored) == contract_hash(
+        _stored(_keyed(None), reads=KPIS_READS)
+    )
 
 
 def test_the_columns_of_a_key_of_several_keep_their_positions():
     doc = _with_column(_keyed(2), 1, primaryKey=True, primaryKeyPosition=1)
     stored = _stored(doc, reads=KPIS_READS)
     columns = stored["schema"][0]["properties"]
-    assert [column.get("primaryKeyPosition") for column in columns] == [2, 1, None]
+    assert [column.get("primaryKeyPosition") for column in columns] == [
+        2,
+        1,
+        None,
+    ]
     swapped = _with_column(_keyed(1), 1, primaryKey=True, primaryKeyPosition=2)
-    assert contract_hash(stored) != contract_hash(_stored(swapped, reads=KPIS_READS))
+    assert contract_hash(stored) != contract_hash(
+        _stored(swapped, reads=KPIS_READS)
+    )
 
 
 def test_the_position_of_a_column_that_is_not_in_the_key_is_kept():
@@ -639,24 +755,39 @@ def test_an_authored_logical_type_is_replaced():
 
 
 def test_an_authored_logical_type_options_is_refused_by_the_contract_check():
-    doc = _with_column(_csv(), 1, logicalType="string", logicalTypeOptions={"minLength": 1})
-    issues = validate_python_contract(doc, path="contracts/demo_orders_csv.odcs.yaml", service=None)
+    doc = _with_column(
+        _csv(), 1, logicalType="string", logicalTypeOptions={"minLength": 1}
+    )
+    issues = validate_python_contract(
+        doc, path="contracts/demo_orders_csv.odcs.yaml", service=None
+    )
     assert [(issue.path, issue.reason) for issue in issues] == [
         ("schema[0].properties[1].logicalTypeOptions", "refused_field")
     ]
 
 
 def test_a_service_level_value_ext_that_is_null_or_empty_is_dropped():
-    plain = _stored(_with_root(_kpis(), slaProperties=[{"property": "retention", "value": 3}]))
+    plain = _stored(
+        _with_root(_kpis(), slaProperties=[{"property": "retention", "value": 3}])
+    )
     for empty in (None, ""):
         sla = [{"property": "retention", "value": 3, "valueExt": empty}]
-        assert normalise_python(
-            _with_root(_kpis(), slaProperties=sla), service="service-py", reads=[]
-        ) == plain
+        assert (
+            normalise_python(
+                _with_root(_kpis(), slaProperties=sla),
+                service="service-py",
+                reads=[],
+            )
+            == plain
+        )
 
 
 def test_a_service_level_value_is_kept_even_when_empty():
-    stored = _stored(_with_root(_kpis(), slaProperties=[{"property": "retention", "value": ""}]))
+    stored = _stored(
+        _with_root(
+            _kpis(), slaProperties=[{"property": "retention", "value": ""}]
+        )
+    )
     assert stored["slaProperties"] == [{"property": "retention", "value": ""}]
 
 
@@ -677,7 +808,11 @@ def test_the_reads_list_is_lower_case_sorted_and_unique():
     stored = normalise_python(
         _kpis(),
         service="service-py",
-        reads=["core.Orders", "Analytics.Daily_Transactions", "analytics.daily_transactions"],
+        reads=[
+            "core.Orders",
+            "Analytics.Daily_Transactions",
+            "analytics.daily_transactions",
+        ],
     )
     assert stored["schema"][0]["customProperties"] == [
         _custom("reads", ["analytics.daily_transactions", "core.orders"])
@@ -686,7 +821,9 @@ def test_the_reads_list_is_lower_case_sorted_and_unique():
 
 def test_the_order_and_case_of_the_reads_do_not_move_the_hash():
     a = normalise_python(_kpis(), service="service-py", reads=["b.y", "a.x"])
-    b = normalise_python(_kpis(), service="service-py", reads=["A.X", "b.y", "a.x"])
+    b = normalise_python(
+        _kpis(), service="service-py", reads=["A.X", "b.y", "a.x"]
+    )
     assert contract_hash(a) == contract_hash(b)
 
 
@@ -697,7 +834,9 @@ def test_no_reads_write_no_reads_property():
 
 def test_the_reads_are_lower_cased_in_ascii_only():
     stored = normalise_python(
-        _kpis(), service="service-py", reads=["Analytics.\u00c4rger_TX", "analytics.\u00c4rger_tx"]
+        _kpis(),
+        service="service-py",
+        reads=["Analytics.\u00c4rger_TX", "analytics.\u00c4rger_tx"],
     )
     assert stored["schema"][0]["customProperties"][0]["value"] == [
         "analytics.\u00c4rger_tx",
@@ -730,7 +869,9 @@ def test_the_reads_are_lower_cased_in_ascii_only():
 )
 def test_a_reads_entry_that_is_not_a_schema_and_a_table_is_refused(entry):
     with pytest.raises(HashInputError, match="reads"):
-        normalise_python(_kpis(), service="service-py", reads=["analytics.t", entry])
+        normalise_python(
+            _kpis(), service="service-py", reads=["analytics.t", entry]
+        )
 
 
 def test_reads_given_as_one_string_is_refused():
@@ -751,7 +892,9 @@ def test_an_empty_or_blank_service_is_refused(service):
 def test_normalise_does_not_change_its_input(name):
     doc = _full(name)
     before = copy.deepcopy(doc)
-    stored = normalise_python(doc, service="service-py", reads=["analytics.orders"])
+    stored = normalise_python(
+        doc, service="service-py", reads=["analytics.orders"]
+    )
     assert doc == before
     stored["customProperties"].clear()
     stored["schema"][0]["properties"][0]["name"] = "changed"
@@ -807,7 +950,10 @@ def test_set_like_arrays_sort_but_properties_keep_file_order():
     columns = swapped["schema"][0]["properties"]
     columns[0], columns[1] = columns[1], columns[0]
     stored = _stored(swapped, "python_node")
-    assert [c["name"] for c in stored["schema"][0]["properties"][:2]] == ["line_no", "order_id"]
+    assert [c["name"] for c in stored["schema"][0]["properties"][:2]] == [
+        "line_no",
+        "order_id",
+    ]
     assert contract_hash(stored) != contract_hash(_full_stored("python_node"))
 
 
@@ -824,7 +970,9 @@ def test_a_free_form_value_keeps_its_content_as_written():
     doc = _with_property(_kpis(), _custom("config", copy.deepcopy(config)))
     doc = _with_column(doc, 0, examples=["", None, " b ", ["z", "a"]])
     implementation = {"tags": ["y", "x"], "e": {}}
-    doc = _with_quality(doc, type="custom", engine="soda", implementation=implementation)
+    doc = _with_quality(
+        doc, type="custom", engine="soda", implementation=implementation
+    )
     del doc["schema"][0]["properties"][0]["quality"][0]["metric"]
     del doc["schema"][0]["properties"][0]["quality"][0]["mustBe"]
     stored = _stored(doc, reads=KPIS_READS)
@@ -844,8 +992,13 @@ def test_a_comparison_value_of_a_quality_rule_is_kept_even_when_empty():
 
 
 def test_severity_is_lower_cased_in_ascii_only():
-    stored = _stored(_with_quality(_kpis(), severity="\u00c9RROR Level"), reads=KPIS_READS)
-    assert stored["schema"][0]["properties"][0]["quality"][0]["severity"] == "\u00c9rror level"
+    stored = _stored(
+        _with_quality(_kpis(), severity="\u00c9RROR Level"), reads=KPIS_READS
+    )
+    assert (
+        stored["schema"][0]["properties"][0]["quality"][0]["severity"]
+        == "\u00c9rror level"
+    )
 
 
 def test_exact_duplicates_in_a_set_like_list_are_stored_once():
@@ -868,24 +1021,43 @@ def test_exact_duplicates_in_a_set_like_list_are_stored_once():
 
 def test_descriptions_are_stripped_and_severity_lower_cased():
     doc = _kpis()
-    doc["description"] = {"purpose": "  Daily KPIs.\r\nSecond line. \n", "usage": "\tDashboards "}
+    doc["description"] = {
+        "purpose": "  Daily KPIs.\r\nSecond line. \n",
+        "usage": "\tDashboards ",
+    }
     doc["schema"][0]["description"] = "\r\n One row per day. "
     doc = _with_column(doc, 0, description=" The day.\r\n")
     doc = _with_quality(doc, severity="ERROR", description=" Never null. ")
     doc["customProperties"].append(
-        {"vendor": "atlan", "property": "term", "value": " x ", "description": " A term. "}
+        {
+            "vendor": "atlan",
+            "property": "term",
+            "value": " x ",
+            "description": " A term. ",
+        }
     )
     stored = _stored(doc, reads=KPIS_READS)
-    assert stored["description"] == {"purpose": "Daily KPIs.\nSecond line.", "usage": "Dashboards"}
+    assert stored["description"] == {
+        "purpose": "Daily KPIs.\nSecond line.",
+        "usage": "Dashboards",
+    }
     assert stored["schema"][0]["description"] == "One row per day."
     column = stored["schema"][0]["properties"][0]
     assert column["description"] == "The day."
     assert column["quality"] == [
-        {"metric": "nullValues", "mustBe": 0, "severity": "error", "description": "Never null."}
+        {
+            "metric": "nullValues",
+            "mustBe": 0,
+            "severity": "error",
+            "description": "Never null.",
+        }
     ]
-    assert {"vendor": "atlan", "property": "term", "value": " x ", "description": "A term."} in (
-        stored["customProperties"]
-    )
+    assert {
+        "vendor": "atlan",
+        "property": "term",
+        "value": " x ",
+        "description": "A term.",
+    } in (stored["customProperties"])
 
 
 def test_a_description_that_differs_only_in_outer_whitespace_hashes_alike():
@@ -900,7 +1072,9 @@ def test_a_description_that_differs_only_in_outer_whitespace_hashes_alike():
 def test_a_description_that_changes_its_text_moves_the_hash():
     b = _kpis()
     b["description"]["purpose"] = "Something else."
-    assert contract_hash(_stored(b, reads=KPIS_READS)) != contract_hash(KPIS_STORED)
+    assert contract_hash(_stored(b, reads=KPIS_READS)) != contract_hash(
+        KPIS_STORED
+    )
 
 
 def test_the_full_fixtures_store_and_hash():

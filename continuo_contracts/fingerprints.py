@@ -124,8 +124,12 @@ class _Rule:
 
 
 _RULES = {
-    _OUTSIDE_DENYLIST: _Rule(DBT_FAMILIES, "a dbt family", "content", ("config",), "config.*"),
-    _STANDARD_FIELD: _Rule(PYTHON_FAMILIES, "a Python family", "contract", (), "odcs.*"),
+    _OUTSIDE_DENYLIST: _Rule(
+        DBT_FAMILIES, "a dbt family", "content", ("config",), "config.*"
+    ),
+    _STANDARD_FIELD: _Rule(
+        PYTHON_FAMILIES, "a Python family", "contract", (), "odcs.*"
+    ),
 }
 
 
@@ -155,7 +159,9 @@ class Entry:
 
     def moves(self, part: str) -> bool:
         """Return whether the entry moves `part` of `content_hash`, also under its `when`."""
-        return part in self.parts or (self.when is not None and part in self.when.parts)
+        return part in self.parts or (
+            self.when is not None and part in self.when.parts
+        )
 
 
 @dataclass(frozen=True)
@@ -212,7 +218,9 @@ class Fingerprints:
         """
         if family not in FAMILIES:
             raise ValueError(f"unknown family {family!r}")
-        return sorted({name for name in names if self.classify(family, name) is None})
+        return sorted(
+            {name for name in names if self.classify(family, name) is None}
+        )
 
 
 # The tag PyYAML gives the `<<` key of a merge.
@@ -229,10 +237,16 @@ class _StrictLoader(yaml.SafeLoader):
     brings it in.
     """
 
-    def construct_mapping(self, node: yaml.MappingNode, deep: bool = False) -> dict[Hashable, Any]:
+    def construct_mapping(
+        self, node: yaml.MappingNode, deep: bool = False
+    ) -> dict[Hashable, Any]:
         # A scalar tagged `!!map` also arrives here, and the base class refuses it.
         if isinstance(node, yaml.MappingNode):
-            merges = [(key, merged) for key, merged in node.value if key.tag == _MERGE_TAG]
+            merges = [
+                (key, merged)
+                for key, merged in node.value
+                if key.tag == _MERGE_TAG
+            ]
             self.flatten_mapping(node)
             merged_by: dict[int, list[yaml.Node]] = {}
             for merge_key, merged in merges:
@@ -248,7 +262,10 @@ class _StrictLoader(yaml.SafeLoader):
                         key,
                         first[key],
                         key_node,
-                        [*merged_by.get(id(first[key]), ()), *merged_by.get(id(key_node), ())],
+                        [
+                            *merged_by.get(id(first[key]), ()),
+                            *merged_by.get(id(key_node), ()),
+                        ],
                     )
                 first[key] = key_node
         return super().construct_mapping(node, deep=deep)
@@ -265,7 +282,10 @@ def _merged_key_nodes(merged: yaml.Node) -> list[yaml.Node]:
 
 
 def _duplicate_key(
-    key: Hashable, first: yaml.Node, repeat: yaml.Node, merge_keys: list[yaml.Node]
+    key: Hashable,
+    first: yaml.Node,
+    repeat: yaml.Node,
+    merge_keys: list[yaml.Node],
 ) -> yaml.constructor.ConstructorError:
     """Build the error for `key` written at `first` and again at `repeat`.
 
@@ -280,12 +300,18 @@ def _duplicate_key(
             f"duplicate key {key!r}, first written at line {first.start_mark.line + 1}",
             repeat.start_mark,
         )
-    by_line = {merge_key.start_mark.line + 1: merge_key for merge_key in merge_keys}
+    by_line = {
+        merge_key.start_mark.line + 1: merge_key for merge_key in merge_keys
+    }
     lines = sorted(by_line)
     if len(lines) == 1:
         where = f"the merge at line {lines[0]}"
     else:
-        where = "the merges at lines " + ", ".join(map(str, lines[:-1])) + f" and {lines[-1]}"
+        where = (
+            "the merges at lines "
+            + ", ".join(map(str, lines[:-1]))
+            + f" and {lines[-1]}"
+        )
     return yaml.constructor.ConstructorError(
         None,
         None,
@@ -304,7 +330,9 @@ def parse_fingerprints(text: str) -> Fingerprints:
         document = yaml.load(text, Loader=_StrictLoader)
     except yaml.YAMLError as error:
         raise _fail("fingerprints file", f"is not valid YAML: {error}") from error
-    root = _mapping(document, "fingerprints file", ("version", "lists", "families"))
+    root = _mapping(
+        document, "fingerprints file", ("version", "lists", "families")
+    )
     version = root["version"]
     if type(version) is not int or version != _VERSION:
         raise _fail("version", f"must be the integer {_VERSION}, got {version!r}")
@@ -313,11 +341,17 @@ def parse_fingerprints(text: str) -> Fingerprints:
         "lists",
         ("hashed_config_denylist", "projection_keys", "contract_hash_exclusions"),
     )
-    denylist = _key_names(lists["hashed_config_denylist"], "lists.hashed_config_denylist")
+    denylist = _key_names(
+        lists["hashed_config_denylist"], "lists.hashed_config_denylist"
+    )
     projection = _key_names(lists["projection_keys"], "lists.projection_keys")
-    exclusions = _key_names(lists["contract_hash_exclusions"], "lists.contract_hash_exclusions")
+    exclusions = _key_names(
+        lists["contract_hash_exclusions"], "lists.contract_hash_exclusions"
+    )
     families = _mapping(root["families"], "families", SECTIONS)
-    sections = {section: _section(section, families[section]) for section in SECTIONS}
+    sections = {
+        section: _section(section, families[section]) for section in SECTIONS
+    }
     return Fingerprints(
         version=_VERSION,
         hashed_config_denylist=frozenset(denylist),
@@ -330,7 +364,9 @@ def parse_fingerprints(text: str) -> Fingerprints:
 @functools.cache
 def load() -> Fingerprints:
     """Return the packaged `fingerprints.yaml`, read and checked once."""
-    resource = importlib.resources.files("continuo_contracts") / "fingerprints.yaml"
+    resource = (
+        importlib.resources.files("continuo_contracts") / "fingerprints.yaml"
+    )
     return parse_fingerprints(resource.read_text(encoding="utf-8"))
 
 
@@ -444,7 +480,9 @@ def render_markdown(fp: Fingerprints) -> str:
     """Return the Markdown of `docs/fingerprints.md` for `fp`, ending with one newline."""
     denylist = ", ".join(f"`{key}`" for key in sorted(fp.hashed_config_denylist))
     projection = ", ".join(f"`{key}`" for key in fp.projection_keys)
-    exclusions = ", ".join(f"`{key}`" for key in sorted(fp.contract_hash_exclusions))
+    exclusions = ", ".join(
+        f"`{key}`" for key in sorted(fp.contract_hash_exclusions)
+    )
     lines = [
         "# Fingerprint field reference",
         "",
@@ -528,7 +566,10 @@ def _key_names(value: object, where: str) -> tuple[str, ...]:
     seen: set[str] = set()
     for index, name in enumerate(value):
         if not isinstance(name, str) or not _KEY_NAME.fullmatch(name):
-            raise _fail(f"{where}[{index}]", f"{name!r} is not a key name (no dot, no whitespace)")
+            raise _fail(
+                f"{where}[{index}]",
+                f"{name!r} is not a key name (no dot, no whitespace)",
+            )
         if name in seen:
             raise _fail(f"{where}[{index}]", f"duplicate name {name!r}")
         seen.add(name)
@@ -550,12 +591,17 @@ def _section(section: str, raw: object) -> tuple[Entry, ...]:
             raise _fail(located, f"duplicate id {entry.id!r} in {where}")
         if entry.rule is not None:
             if rule_entry is not None:
-                raise _fail(located, f"rule: {where} already has the rule entry {rule_entry.id!r}")
+                raise _fail(
+                    located,
+                    f"rule: {where} already has the rule entry {rule_entry.id!r}",
+                )
             rule_entry = entry
         for name in entry.inputs:
             if name in entry_by_input:
                 other = entry_by_input[name].id
-                raise _fail(located, f"duplicate input {name!r}, also named by {other!r}")
+                raise _fail(
+                    located, f"duplicate input {name!r}, also named by {other!r}"
+                )
         entry_by_id[entry.id] = entry
         entry_by_input.update({name: entry for name in entry.inputs})
         entries.append(entry)
@@ -578,7 +624,10 @@ def _entry(section: str, where: str, item: object) -> Entry:
             raise _fail(where, f"{key}: expected a non-empty string")
     fingerprint = data["fingerprint"]
     if fingerprint not in _FINGERPRINTS:
-        raise _fail(where, f"fingerprint: {fingerprint!r} is not one of {', '.join(_FINGERPRINTS)}")
+        raise _fail(
+            where,
+            f"fingerprint: {fingerprint!r} is not one of {', '.join(_FINGERPRINTS)}",
+        )
     parts = _entry_parts(data, fingerprint, where)
     when = _when(data["when"], fingerprint, where) if "when" in data else None
     rule = data.get("rule")
@@ -599,13 +648,19 @@ def _entry(section: str, where: str, item: object) -> Entry:
     )
 
 
-def _entry_parts(data: dict[str, Any], fingerprint: str, where: str) -> tuple[str, ...]:
+def _entry_parts(
+    data: dict[str, Any], fingerprint: str, where: str
+) -> tuple[str, ...]:
     if fingerprint in ("content", "both"):
         if "parts" not in data:
-            raise _fail(where, f"parts: required when the fingerprint is {fingerprint!r}")
+            raise _fail(
+                where, f"parts: required when the fingerprint is {fingerprint!r}"
+            )
         return _parts(data["parts"], where, "parts")
     if "parts" in data:
-        raise _fail(where, f"parts: not allowed when the fingerprint is {fingerprint!r}")
+        raise _fail(
+            where, f"parts: not allowed when the fingerprint is {fingerprint!r}"
+        )
     return ()
 
 
@@ -615,7 +670,10 @@ def _parts(value: object, where: str, label: str) -> tuple[str, ...]:
     seen: set[str] = set()
     for index, part in enumerate(value):
         if part not in _PARTS:
-            raise _fail(where, f"{label}[{index}]: {part!r} is not a part ({', '.join(_PARTS)})")
+            raise _fail(
+                where,
+                f"{label}[{index}]: {part!r} is not a part ({', '.join(_PARTS)})",
+            )
         if part in seen:
             raise _fail(where, f"{label}[{index}]: duplicate part {part!r}")
         seen.add(part)
@@ -624,11 +682,19 @@ def _parts(value: object, where: str, label: str) -> tuple[str, ...]:
 
 def _when(value: object, fingerprint: str, where: str) -> When:
     if fingerprint not in _WIDENS_TO:
-        raise _fail(where, f"when: only on a contract or neither entry, not on {fingerprint!r}")
-    data = _mapping(value, f"{where}: when", ("condition", "fingerprint", "parts"))
+        raise _fail(
+            where,
+            f"when: only on a contract or neither entry, not on {fingerprint!r}",
+        )
+    data = _mapping(
+        value, f"{where}: when", ("condition", "fingerprint", "parts")
+    )
     condition = data["condition"]
     if condition not in _CONDITIONS:
-        raise _fail(where, f"when: condition {condition!r} is not one of {', '.join(_CONDITIONS)}")
+        raise _fail(
+            where,
+            f"when: condition {condition!r} is not one of {', '.join(_CONDITIONS)}",
+        )
     widened = _WIDENS_TO[fingerprint]
     if data["fingerprint"] != widened:
         raise _fail(
@@ -651,7 +717,9 @@ def _check_rule(
     if spec is None:
         raise _fail(where, f"rule: {rule!r} is not one of {', '.join(_RULES)}")
     if section not in spec.families:
-        raise _fail(where, f"rule: {rule} is only for {spec.where}, not for {section!r}")
+        raise _fail(
+            where, f"rule: {rule} is only for {spec.where}, not for {section!r}"
+        )
     if fingerprint != spec.fingerprint or parts != spec.parts:
         shape = f"fingerprint {spec.fingerprint!r}"
         if spec.parts:
@@ -668,7 +736,9 @@ def _inputs(value: object, rule: str | None, where: str) -> tuple[str, ...]:
         raise _fail(where, "inputs: expected a list")
     seen: set[str] = set()
     for index, name in enumerate(value):
-        stands_for_all = next((r for r, spec in _RULES.items() if spec.name == name), None)
+        stands_for_all = next(
+            (r for r, spec in _RULES.items() if spec.name == name), None
+        )
         if stands_for_all is not None:
             if rule != stands_for_all:
                 raise _fail(

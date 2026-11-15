@@ -18,12 +18,17 @@ METADATA = (
     "Requires-Dist: jsonschema>=4.26\n"
     "Requires-Dist: PyYAML>=6.0\n"
 )
-ENTRY_POINTS = "[console_scripts]\ncontinuo-contracts = continuo_contracts.cli:main\n"
+ENTRY_POINTS = (
+    "[console_scripts]\ncontinuo-contracts = continuo_contracts.cli:main\n"
+)
 INFO = "continuo_contracts-0.1.0.dist-info"
 
 
 def _wheel(
-    tmp_path, name="continuo_contracts-0.1.0-py3-none-any.whl", skip=(), entry_points=ENTRY_POINTS
+    tmp_path,
+    name="continuo_contracts-0.1.0-py3-none-any.whl",
+    skip=(),
+    entry_points=ENTRY_POINTS,
 ):
     """Write a wheel with every required member. `entry_points` is the text of its
     `entry_points.txt`, or `None` for a wheel without one."""
@@ -86,21 +91,31 @@ def test_the_required_members_are_the_files_of_the_package_tree():
     package_dir = SCRIPT.parents[1] / check_wheel.PACKAGE
     listed = list(check_wheel.REQUIRED_MEMBERS)
     on_disk = _package_files(package_dir)
-    assert sorted(on_disk - set(listed)) == [], "files of the package that REQUIRED_MEMBERS omits"
-    assert sorted(set(listed) - on_disk) == [], "REQUIRED_MEMBERS entries with no file"
-    assert len(listed) == len(set(listed)), "REQUIRED_MEMBERS lists a member twice"
+    assert sorted(on_disk - set(listed)) == [], (
+        "files of the package that REQUIRED_MEMBERS omits"
+    )
+    assert sorted(set(listed) - on_disk) == [], (
+        "REQUIRED_MEMBERS entries with no file"
+    )
+    assert len(listed) == len(set(listed)), (
+        "REQUIRED_MEMBERS lists a member twice"
+    )
 
 
 def test_a_platform_wheel_is_refused(tmp_path):
     problems = check_wheel.wheel_problems(
-        _wheel(tmp_path, name="continuo_contracts-0.1.0-cp312-cp312-linux_x86_64.whl")
+        _wheel(
+            tmp_path, name="continuo_contracts-0.1.0-cp312-cp312-linux_x86_64.whl"
+        )
     )
     assert any("py3-none-any" in p for p in problems)
 
 
 def test_a_wheel_without_entry_points_is_refused(tmp_path):
     problems = check_wheel.wheel_problems(_wheel(tmp_path, entry_points=None))
-    assert any("missing member" in p and "entry_points.txt" in p for p in problems)
+    assert any(
+        "missing member" in p and "entry_points.txt" in p for p in problems
+    )
 
 
 @pytest.mark.parametrize(

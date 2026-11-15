@@ -12,7 +12,9 @@ from continuo_contracts.python import (
 )
 
 VECTORS = resources.files("continuo_contracts") / "vectors"
-PROJECTIONS = json.loads((VECTORS / "projection.json").read_text(encoding="utf-8"))
+PROJECTIONS = json.loads(
+    (VECTORS / "projection.json").read_text(encoding="utf-8")
+)
 SQL_TYPES = json.loads((VECTORS / "sql_types.json").read_text(encoding="utf-8"))
 
 
@@ -33,13 +35,20 @@ def test_projection_vector(case):
 
 
 def test_every_kind_has_a_vector():
-    assert {c["node"]["kind"] for c in PROJECTIONS} == {"python-node", "python-csv", "python-api"}
+    assert {c["node"]["kind"] for c in PROJECTIONS} == {
+        "python-node",
+        "python-csv",
+        "python-api",
+    }
 
 
 def test_spelling_only_edits_hash_like_the_demo_node():
     by_name = {c["name"]: c["projection_hash"] for c in PROJECTIONS}
-    assert by_name["spellings_canonicalised"] == by_name["demo_py_daily_kpis"] == (
-        "a01d7d6065f055bb2d87959aaf178d08f5a3f96c86912099b9876239d84f6efe")
+    assert (
+        by_name["spellings_canonicalised"]
+        == by_name["demo_py_daily_kpis"]
+        == ("a01d7d6065f055bb2d87959aaf178d08f5a3f96c86912099b9876239d84f6efe")
+    )
 
 
 def _utf16_order(texts):
@@ -68,4 +77,6 @@ def test_every_vector_file_is_ascii():
     files = [entry for entry in VECTORS.iterdir() if entry.name.endswith(".json")]
     assert len(files) >= 4
     for entry in files:
-        assert all(b == 10 or 32 <= b < 127 for b in entry.read_bytes()), entry.name
+        assert all(b == 10 or 32 <= b < 127 for b in entry.read_bytes()), (
+            entry.name
+        )

@@ -26,7 +26,9 @@ OLD = FIXTURES / "demo" / "service-py" / "old"
 NEW = FIXTURES / "demo" / "service-py" / "contracts"
 DEMO_TABLES = ["py_daily_kpis", "demo_orders_csv", "fx_eur_usd_rates"]
 VECTORS = json.loads(
-    (resources.files("continuo_contracts") / "vectors" / "projection.json").read_text("utf-8")
+    (
+        resources.files("continuo_contracts") / "vectors" / "projection.json"
+    ).read_text("utf-8")
 )
 
 
@@ -47,9 +49,12 @@ def _contract(*, id="analytics.t", table="t", columns=(), custom=()):
     return {
         "id": id,
         "customProperties": [
-            {"vendor": "continuo", "property": name, "value": value} for name, value in custom
+            {"vendor": "continuo", "property": name, "value": value}
+            for name, value in custom
         ],
-        "schema": [{"name": table, "physicalType": "table", "properties": list(columns)}],
+        "schema": [
+            {"name": table, "physicalType": "table", "properties": list(columns)}
+        ],
     }
 
 
@@ -59,7 +64,9 @@ def _column(name, **fields):
 
 def _issues(doc):
     """The issues of the demo contract `doc`, with the service left unknown."""
-    issues = validate_python_contract(doc, path="contracts/py_daily_kpis.odcs.yaml", service=None)
+    issues = validate_python_contract(
+        doc, path="contracts/py_daily_kpis.odcs.yaml", service=None
+    )
     return [str(issue) for issue in issues]
 
 
@@ -70,7 +77,9 @@ def _upsert_kpis(*keys):
     doc["customProperties"].append(
         {"vendor": "continuo", "property": "modeType", "value": "upsert"}
     )
-    columns = {column["name"]: column for column in doc["schema"][0]["properties"]}
+    columns = {
+        column["name"]: column for column in doc["schema"][0]["properties"]
+    }
     for name, position in keys:
         columns[name]["primaryKey"] = True
         if position is not None:
@@ -83,7 +92,9 @@ def _upsert_kpis(*keys):
 
 @pytest.mark.parametrize("table", DEMO_TABLES)
 def test_the_demo_projection_does_not_move(table):
-    old = yaml.safe_load((OLD / f"{table}.yml").read_text(encoding="utf-8"))["nodes"][0]
+    old = yaml.safe_load((OLD / f"{table}.yml").read_text(encoding="utf-8"))[
+        "nodes"
+    ][0]
     new = node_from_odcs(_demo(table))
     assert code_projection(new) == code_projection(PythonNode.from_mapping(old))
     assert projection_hash(new) == projection_hash(PythonNode.from_mapping(old))
@@ -156,7 +167,12 @@ def _contract_of(entry):
             written["primaryKeyPosition"] = key.index(column["name"]) + 1
         columns.append(written)
     schema, table = entry["schema"], entry["table"]
-    return _contract(id=f"{schema}.{table}".lower(), table=table, columns=columns, custom=custom)
+    return _contract(
+        id=f"{schema}.{table}".lower(),
+        table=table,
+        columns=columns,
+        custom=custom,
+    )
 
 
 @pytest.mark.parametrize("case", VECTORS, ids=lambda case: case["name"])
@@ -189,18 +205,34 @@ def test_a_contract_with_nothing_but_a_table_takes_the_defaults():
 
 def test_every_property_of_a_full_python_node_is_read():
     node = node_from_odcs(_full("python_node"))
-    assert (node.schema, node.table, node.kind) == ("analytics", "python_node", "python-node")
+    assert (node.schema, node.table, node.kind) == (
+        "analytics",
+        "python_node",
+        "python-node",
+    )
     assert node.script == "scripts/python_node.py"
     assert set(node.reads) == {"orders", "rates"}
-    assert node.reads["rates"] == "select currency, rate_to_eur from analytics.fx_rates"
+    assert (
+        node.reads["rates"]
+        == "select currency, rate_to_eur from analytics.fx_rates"
+    )
     assert node.extra_columns == "warn"
-    assert node.config == {"batch_size": 5000, "compression": "zstd", "tags": ["a", "b"]}
+    assert node.config == {
+        "batch_size": 5000,
+        "compression": "zstd",
+        "tags": ["a", "b"],
+    }
     assert node.secret_ref == ""
     assert node.mode_type == "upsert"
     assert node.primary_key == ("order_id", "line_no")
     assert list(node.assets) == ["assets/currencies.csv", "assets/rounding.json"]
     assert [column.name for column in node.output_columns] == [
-        "order_id", "line_no", "customer_email", "amount", "weight", "seen_at"
+        "order_id",
+        "line_no",
+        "customer_email",
+        "amount",
+        "weight",
+        "seen_at",
     ]
 
 
@@ -219,11 +251,15 @@ def test_the_columns_keep_their_physical_type_as_written_and_are_nullable_unless
         PythonColumn("b", "VARCHAR(64)", nullable=True),
         PythonColumn("c", "DATE", nullable=True),
     )
-    assert [column["type"] for column in code_projection(node)["output_columns"]][0] == "INTEGER"
+    assert [column["type"] for column in code_projection(node)["output_columns"]][
+        0
+    ] == "INTEGER"
 
 
 def test_the_columns_come_in_file_order():
-    node = node_from_odcs(_contract(columns=[_column(name) for name in ["z", "a", "m"]]))
+    node = node_from_odcs(
+        _contract(columns=[_column(name) for name in ["z", "a", "m"]])
+    )
     assert [column.name for column in node.output_columns] == ["z", "a", "m"]
 
 
@@ -236,7 +272,9 @@ def test_python_model_is_read_as_python_node():
 
 def test_another_vendors_property_is_not_read():
     doc = _contract(columns=[_column("x")], custom=[("script", "scripts/t.py")])
-    doc["customProperties"].append({"vendor": "lotse", "property": "script", "value": "other.py"})
+    doc["customProperties"].append(
+        {"vendor": "lotse", "property": "script", "value": "other.py"}
+    )
     doc["customProperties"].insert(
         0, {"vendor": "lotse", "property": "modeType", "value": "append"}
     )
@@ -245,15 +283,23 @@ def test_another_vendors_property_is_not_read():
 
 
 def test_the_schema_is_the_id_without_the_table():
-    node = node_from_odcs(_contract(id="raw_data.orders", table="Orders", columns=[_column("x")]))
+    node = node_from_odcs(
+        _contract(id="raw_data.orders", table="Orders", columns=[_column("x")])
+    )
     assert (node.schema, node.table) == ("raw_data", "Orders")
 
 
 def test_the_id_lower_cases_only_the_ascii_letters_of_the_table():
-    node = node_from_odcs(_contract(id="raw.k\u00c4se", table="K\u00c4SE", columns=[_column("x")]))
+    node = node_from_odcs(
+        _contract(id="raw.k\u00c4se", table="K\u00c4SE", columns=[_column("x")])
+    )
     assert (node.schema, node.table) == ("raw", "K\u00c4SE")
     with pytest.raises(ProjectionError):
-        node_from_odcs(_contract(id="raw.k\u00e4se", table="K\u00c4SE", columns=[_column("x")]))
+        node_from_odcs(
+            _contract(
+                id="raw.k\u00e4se", table="K\u00c4SE", columns=[_column("x")]
+            )
+        )
 
 
 def test_node_from_odcs_and_the_validator_read_the_same_schema_from_the_id():
@@ -326,7 +372,9 @@ def test_a_property_of_the_wrong_shape_is_refused_as_a_projection_error(custom):
         node_from_odcs(_contract(columns=[_column("x")], custom=custom))
 
 
-@pytest.mark.parametrize("column", [["x", "INTEGER"], {"name": "x"}, {"physicalType": "DATE"}])
+@pytest.mark.parametrize(
+    "column", [["x", "INTEGER"], {"name": "x"}, {"physicalType": "DATE"}]
+)
 def test_a_column_without_a_name_or_a_type_is_refused(column):
     with pytest.raises(ProjectionError):
         node_from_odcs(_contract(columns=[column]))
@@ -337,9 +385,11 @@ def test_a_column_without_a_name_or_a_type_is_refused(column):
 
 def test_an_upsert_key_follows_its_positions():
     doc = _contract(
-        columns=[_column("a", primaryKey=True, primaryKeyPosition=2),
-                 _column("b", primaryKey=True, primaryKeyPosition=1),
-                 _column("c")],
+        columns=[
+            _column("a", primaryKey=True, primaryKeyPosition=2),
+            _column("b", primaryKey=True, primaryKeyPosition=1),
+            _column("c"),
+        ],
         custom=[("modeType", "upsert")],
     )
     node = node_from_odcs(doc)
@@ -351,8 +401,10 @@ def test_the_positions_of_a_key_need_not_be_next_to_each_other_or_in_file_order(
     names = ["a", "b", "c", "d"]
     positions = [4, 1, 9, 2]
     doc = _contract(
-        columns=[_column(name, primaryKey=True, primaryKeyPosition=position)
-                 for name, position in zip(names, positions, strict=True)],
+        columns=[
+            _column(name, primaryKey=True, primaryKeyPosition=position)
+            for name, position in zip(names, positions, strict=True)
+        ],
         custom=[("modeType", "upsert")],
     )
     assert node_from_odcs(doc).primary_key == ("b", "d", "a", "c")
@@ -387,14 +439,18 @@ def test_a_key_column_that_is_not_a_key_stays_out():
 
 
 def test_a_descriptive_key_without_positions_keeps_the_file_order():
-    doc = _contract(columns=[_column("z", primaryKey=True), _column("a", primaryKey=True)])
+    doc = _contract(
+        columns=[_column("z", primaryKey=True), _column("a", primaryKey=True)]
+    )
     assert node_from_odcs(doc).primary_key == ("z", "a")
 
 
 @pytest.mark.parametrize("mode", ["replace", "append"])
 def test_a_descriptive_key_leaves_the_projection_empty(mode):
     custom = [("modeType", mode)]
-    keyed = _contract(columns=[_column("a", primaryKey=True), _column("b")], custom=custom)
+    keyed = _contract(
+        columns=[_column("a", primaryKey=True), _column("b")], custom=custom
+    )
     plain = _contract(columns=[_column("a"), _column("b")], custom=custom)
     node = node_from_odcs(keyed)
     assert node.primary_key == ("a",)

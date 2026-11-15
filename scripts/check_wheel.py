@@ -77,13 +77,17 @@ def wheel_problems(wheel: Path) -> list[str]:
     return problems
 
 
-def _dist_info_problems(label: str, archive: zipfile.ZipFile, names: set[str]) -> list[str]:
+def _dist_info_problems(
+    label: str, archive: zipfile.ZipFile, names: set[str]
+) -> list[str]:
     """Return the problems of the licence files, the METADATA and the console script of the
     wheel's `.dist-info`."""
     top_levels = {name.split("/")[0] for name in names}
     directories = sorted(d for d in top_levels if d.endswith(DIST_INFO_SUFFIX))
     if len(directories) != 1:
-        return [f"{label}: expected exactly one {DIST_INFO_SUFFIX} directory, found {directories}"]
+        return [
+            f"{label}: expected exactly one {DIST_INFO_SUFFIX} directory, found {directories}"
+        ]
     info = directories[0]
     problems: list[str] = []
     for license_file in LICENSE_FILES:
@@ -94,12 +98,18 @@ def _dist_info_problems(label: str, archive: zipfile.ZipFile, names: set[str]) -
     if metadata not in names:
         problems.append(f"{label}: missing member {metadata}")
     else:
-        problems.extend(_metadata_problems(label, archive.read(metadata).decode("utf-8")))
+        problems.extend(
+            _metadata_problems(label, archive.read(metadata).decode("utf-8"))
+        )
     entry_points = f"{info}/entry_points.txt"
     if entry_points not in names:
         problems.append(f"{label}: missing member {entry_points}")
     else:
-        problems.extend(_entry_point_problems(label, archive.read(entry_points).decode("utf-8")))
+        problems.extend(
+            _entry_point_problems(
+                label, archive.read(entry_points).decode("utf-8")
+            )
+        )
     return problems
 
 
@@ -111,17 +121,22 @@ def _metadata_problems(label: str, text: str) -> list[str]:
     if requires_python != REQUIRES_PYTHON:
         problems.append(
             f"{label}: METADATA Requires-Python is {requires_python!r}, "
-            f"must be {REQUIRES_PYTHON!r}")
+            f"must be {REQUIRES_PYTHON!r}"
+        )
     license_expression = str(message.get("License-Expression", "")).strip()
     if license_expression != LICENSE_EXPRESSION:
         problems.append(
             f"{label}: METADATA License-Expression is {license_expression!r}, "
-            f"must be {LICENSE_EXPRESSION!r}")
+            f"must be {LICENSE_EXPRESSION!r}"
+        )
     declared = message.get_all("Requires-Dist", [])
-    requires_dist = [str(requirement).replace(" ", "").lower() for requirement in declared]
+    requires_dist = [
+        str(requirement).replace(" ", "").lower() for requirement in declared
+    ]
     if requires_dist != REQUIRES_DIST:
         problems.append(
-            f"{label}: METADATA Requires-Dist is {requires_dist}, must be {REQUIRES_DIST}")
+            f"{label}: METADATA Requires-Dist is {requires_dist}, must be {REQUIRES_DIST}"
+        )
     return problems
 
 
@@ -155,17 +170,25 @@ def _entry_point_problems(label: str, text: str) -> list[str]:
 
 def main(argv: list[str] | None = None) -> int:
     """Check the wheel in the dist directory named by `argv` and return the exit status."""
-    parser = argparse.ArgumentParser(description="Check the wheel in a dist directory.")
-    parser.add_argument("dist", type=Path, help="directory that holds one .whl and one .tar.gz")
+    parser = argparse.ArgumentParser(
+        description="Check the wheel in a dist directory."
+    )
+    parser.add_argument(
+        "dist", type=Path, help="directory that holds one .whl and one .tar.gz"
+    )
     dist: Path = parser.parse_args(argv).dist
     wheels = sorted(dist.glob("*.whl"))
     sdists = sorted(dist.glob(f"*{SDIST_SUFFIX}"))
     problems: list[str] = []
     if len(wheels) != 1:
-        problems.append(f"{dist}: expected exactly one .whl, found {[w.name for w in wheels]}")
+        problems.append(
+            f"{dist}: expected exactly one .whl, found {[w.name for w in wheels]}"
+        )
     if len(sdists) != 1:
         found = [s.name for s in sdists]
-        problems.append(f"{dist}: expected exactly one {SDIST_SUFFIX}, found {found}")
+        problems.append(
+            f"{dist}: expected exactly one {SDIST_SUFFIX}, found {found}"
+        )
     if len(wheels) == 1:
         problems.extend(wheel_problems(wheels[0]))
     for problem in problems:
@@ -177,5 +200,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(stream=sys.stderr, level=logging.INFO, format="%(levelname)s %(message)s")
+    logging.basicConfig(
+        stream=sys.stderr, level=logging.INFO, format="%(levelname)s %(message)s"
+    )
     raise SystemExit(main())

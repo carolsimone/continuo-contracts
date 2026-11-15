@@ -91,11 +91,20 @@ _MAX_LENGTH: Final = 2**53 - 1
 
 # The lists whose order says nothing: they are sorted by the canonical JSON of each item.
 _SET_LIKE: Final = frozenset(
-    {"customProperties", "tags", "roles", "quality", "relationships", "authoritativeDefinitions"}
+    {
+        "customProperties",
+        "tags",
+        "roles",
+        "quality",
+        "relationships",
+        "authoritativeDefinitions",
+    }
 )
 
 # The `continuo` properties whose value is continuo's default, which the stored form leaves out.
-_CONTINUO_DEFAULTS: Final = MappingProxyType({"modeType": "replace", "extraColumns": "raise"})
+_CONTINUO_DEFAULTS: Final = MappingProxyType(
+    {"modeType": "replace", "extraColumns": "raise"}
+)
 
 _COLUMN_DEFAULTS: Final = MappingProxyType(
     {
@@ -178,16 +187,23 @@ _SHAPES: Final = MappingProxyType(
         "map": _Shape(children={"key": "property", "value": "property"}),
         "quality": _Shape(
             defaults={"type": "library"},
-            free_form=frozenset({"implementation", "arguments", "mustBe", "mustNotBe"}),
+            free_form=frozenset(
+                {"implementation", "arguments", "mustBe", "mustNotBe"}
+            ),
             kept_empty=frozenset({"mustBe", "mustNotBe"}),
             lower_case=frozenset({"severity"}),
         ),
         "relationship": _Shape(defaults={"type": "foreignKey"}),
-        "custom_property": _Shape(free_form=frozenset({"value"}), kept_empty=frozenset({"value"})),
-        "service_level": _Shape(
-            free_form=frozenset({"value", "valueExt"}), kept_empty=frozenset({"value"})
+        "custom_property": _Shape(
+            free_form=frozenset({"value"}), kept_empty=frozenset({"value"})
         ),
-        "enum_value": _Shape(free_form=frozenset({"value"}), kept_empty=frozenset({"value"})),
+        "service_level": _Shape(
+            free_form=frozenset({"value", "valueExt"}),
+            kept_empty=frozenset({"value"}),
+        ),
+        "enum_value": _Shape(
+            free_form=frozenset({"value"}), kept_empty=frozenset({"value"})
+        ),
         "object": _Shape(),
     }
 )
@@ -213,7 +229,10 @@ def logical_type(physical_type: str) -> dict[str, Any] | None:
         length = _length(canonical)
         if length is None:
             return None
-        return {"logicalType": "string", "logicalTypeOptions": {"maxLength": length}}
+        return {
+            "logicalType": "string",
+            "logicalTypeOptions": {"maxLength": length},
+        }
     logical = _LOGICAL_TYPES.get(name)
     return {"logicalType": logical} if logical is not None else None
 
@@ -260,7 +279,9 @@ def normalise_python(
     never holds.
     """
     if not service.strip():
-        raise HashInputError(f"service {service!r}: the service of a release is not empty or blank")
+        raise HashInputError(
+            f"service {service!r}: the service of a release is not empty or blank"
+        )
     tables = _reads(reads)
     stored: dict[str, Any] = _as_written(doc)
     stored["version"] = _STORED_VERSION
@@ -315,7 +336,9 @@ def _reads(reads: Sequence[str]) -> list[str]:
     """Return the tables of `reads` with their ASCII letters in lower case, sorted by code point
     and listed once."""
     if isinstance(reads, str):
-        raise HashInputError(f"reads {reads!r}: reads is a list of tables, not one string")
+        raise HashInputError(
+            f"reads {reads!r}: reads is a list of tables, not one string"
+        )
     tables = set()
     for entry in reads:
         if (
@@ -337,7 +360,11 @@ def _set_property(items: list[Any], name: str, value: str) -> None:
     """Set the value of the `continuo` property `name` of the list `items`, adding it when the
     list has none."""
     for item in items:
-        if isinstance(item, dict) and item.get("vendor") == VENDOR and item.get("property") == name:
+        if (
+            isinstance(item, dict)
+            and item.get("vendor") == VENDOR
+            and item.get("property") == name
+        ):
             item["value"] = value
             return
     items.append({"vendor": VENDOR, "property": name, "value": value})
@@ -363,7 +390,9 @@ def _as_written(value: Any) -> Any:
 
 
 def _is_empty(value: object) -> bool:
-    return value is None or (isinstance(value, str | list | tuple | Mapping) and len(value) == 0)
+    return value is None or (
+        isinstance(value, str | list | tuple | Mapping) and len(value) == 0
+    )
 
 
 def _is_default(value: object, default: object) -> bool:
@@ -378,7 +407,11 @@ def _clean(value: Any, shape: str) -> Any:
         return _clean_object(value, _SHAPES[shape])
     if isinstance(value, list | tuple):
         items = [_clean(item, shape) for item in value]
-        return [item for item in items if not _is_empty(item) and not _dropped(item, shape)]
+        return [
+            item
+            for item in items
+            if not _is_empty(item) and not _dropped(item, shape)
+        ]
     if isinstance(value, float):
         return _number(value)
     return value
@@ -415,7 +448,9 @@ def _clean_object(obj: Mapping[str, Any], shape: _Shape) -> dict[str, Any]:
                 item = normalise_text(item)
             if key in shape.lower_case:
                 item = _ascii_lower(item)
-        if _is_empty(item) or (key in shape.defaults and _is_default(item, shape.defaults[key])):
+        if _is_empty(item) or (
+            key in shape.defaults and _is_default(item, shape.defaults[key])
+        ):
             continue
         if key in _SET_LIKE and isinstance(item, list):
             item = _sorted_once(item)

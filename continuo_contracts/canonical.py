@@ -44,7 +44,9 @@ _STRING_ESCAPES: Final = {
 _ASCII_WHITESPACE: Final = " \t\n\r\x0b\x0c"
 
 # The ASCII letters in upper case, each with its lower case.
-_ASCII_LOWER: Final = str.maketrans(string.ascii_uppercase, string.ascii_lowercase)
+_ASCII_LOWER: Final = str.maketrans(
+    string.ascii_uppercase, string.ascii_lowercase
+)
 
 # The control characters: C0 (U+0000 to U+001F), DEL (U+007F) and C1 (U+0080 to U+009F).
 _CONTROL: Final = re.compile(r"[\x00-\x1f\x7f-\x9f]")
@@ -118,7 +120,9 @@ def _write(value: object, path: str, out: list[str], active: set[int]) -> None:
         raise _fail(path, f"unsupported type {type(value).__name__}")
 
 
-def _write_array(items: Sequence[object], path: str, out: list[str], active: set[int]) -> None:
+def _write_array(
+    items: Sequence[object], path: str, out: list[str], active: set[int]
+) -> None:
     _enter(items, path, active)
     out.append("[")
     for index, item in enumerate(items):
@@ -136,7 +140,9 @@ def _write_object(
     entries: list[tuple[str, object]] = []
     for key, item in mapping.items():
         if not isinstance(key, str):
-            raise _fail(path, f"object key of type {type(key).__name__} is not a string")
+            raise _fail(
+                path, f"object key of type {type(key).__name__} is not a string"
+            )
         _check_encodable(key, path, "object key")
         entries.append((key, item))
     entries.sort(key=lambda entry: entry[0].encode("utf-16-be"))
@@ -157,7 +163,8 @@ def _enter(container: object, path: str, active: set[int]) -> None:
     # level of `container` is one more than its size.
     if len(active) >= MAX_DEPTH:
         raise _fail(
-            path, f"nesting is too deep, a container may be at most {MAX_DEPTH} levels down"
+            path,
+            f"nesting is too deep, a container may be at most {MAX_DEPTH} levels down",
         )
     active.add(id(container))
 

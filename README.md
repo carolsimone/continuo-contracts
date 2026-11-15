@@ -41,7 +41,9 @@ from continuo_contracts.canonical import MAX_DEPTH, canonical_json, normalise_te
   runs it.
 
 ```python
-canonical_json({"b": [1.0, "\u00e9"], "a": True}) == b'{"a":true,"b":[1,"\xc3\xa9"]}'
+canonical_json(
+    {"b": [1.0, "\u00e9"], "a": True}
+) == b'{"a":true,"b":[1,"\xc3\xa9"]}'
 ```
 
 ### Public names
@@ -54,7 +56,13 @@ canonical_json({"b": [1.0, "\u00e9"], "a": True}) == b'{"a":true,"b":[1,"\xc3\xa
 ## hashing
 
 ```python
-from continuo_contracts.hashing import fold3, fold4, sha256_hex, shared_fold, shared_hash
+from continuo_contracts.hashing import (
+    fold3,
+    fold4,
+    sha256_hex,
+    shared_fold,
+    shared_hash,
+)
 ```
 
 A node's `content_hash` is `"sha256:"` followed by the lowercase hex SHA-256 of its parts joined
@@ -100,7 +108,11 @@ fold3("1" * 64, shared_hash({}), "2" * 64)  # "sha256:23208c80..."
 
 ```python
 from continuo_contracts.python import (
-    PythonColumn, PythonNode, canonical_sql_type, code_projection, node_from_odcs,
+    PythonColumn,
+    PythonNode,
+    canonical_sql_type,
+    code_projection,
+    node_from_odcs,
     projection_hash,
 )
 ```
@@ -241,15 +253,21 @@ node = PythonNode(
     schema="analytics",
     table="py_daily_kpis",
     script="scripts/py_daily_kpis.py",
-    reads={"daily": "select created_at, amount_eur from analytics.daily_transactions"},
+    reads={
+        "daily": "select created_at, amount_eur from analytics.daily_transactions"
+    },
     output_columns=(
         PythonColumn("day", "date", nullable=False),
         PythonColumn("tx_count", "int", nullable=False),
         PythonColumn("total_amount", "decimal(12, 2)", nullable=False),
     ),
 )
-code_projection(node)["output_columns"][1]  # {"name": "tx_count", "nullable": False, "type": "INTEGER"}
-projection_hash(node)  # "a01d7d6065f055bb2d87959aaf178d08f5a3f96c86912099b9876239d84f6efe"
+code_projection(node)["output_columns"][
+    1
+]  # {"name": "tx_count", "nullable": False, "type": "INTEGER"}
+projection_hash(
+    node
+)  # "a01d7d6065f055bb2d87959aaf178d08f5a3f96c86912099b9876239d84f6efe"
 ```
 
 Two data files pin this behaviour, and the wheel ships both:
@@ -286,7 +304,11 @@ hash, and compares them with the pinned values.
 
 ```python
 from continuo_contracts.fingerprints import (
-    classify, contract_hash_exclusions, hashed_config_denylist, projection_keys, unclassified,
+    classify,
+    contract_hash_exclusions,
+    hashed_config_denylist,
+    projection_keys,
+    unclassified,
 )
 ```
 
@@ -455,8 +477,12 @@ what lets one small file mean more than it says or mean different things to diff
   in `line 0, column 0: $.config.rate: NaN and the infinities are not JSON numbers`.
 
 ```python
-load("a: on\nb: 1e3\nc: 2026-11-14\n")  # {"a": "on", "b": 1000.0, "c": "2026-11-14"}
-load("a: &x 1\nb: *x\n")  # StrictYamlError: line 2, column 4: YAML aliases are not allowed
+load(
+    "a: on\nb: 1e3\nc: 2026-11-14\n"
+)  # {"a": "on", "b": 1000.0, "c": "2026-11-14"}
+load(
+    "a: &x 1\nb: *x\n"
+)  # StrictYamlError: line 2, column 4: YAML aliases are not allowed
 ```
 
 ### Public names
@@ -468,7 +494,12 @@ load("a: &x 1\nb: *x\n")  # StrictYamlError: line 2, column 4: YAML aliases are 
 ## vocabulary
 
 ```python
-from continuo_contracts.vocabulary import PROPERTIES, VENDOR, ContinuoProperty, continuo_values
+from continuo_contracts.vocabulary import (
+    PROPERTIES,
+    VENDOR,
+    ContinuoProperty,
+    continuo_values,
+)
 ```
 
 An ODCS contract carries custom properties as `{vendor, property, value}` items in a
@@ -500,11 +531,15 @@ ones the package knows and where each may sit. It reads no file and checks no co
   looks at the list itself.
 
 ```python
-continuo_values([
-    {"vendor": "lotse", "property": "schedule", "value": "x"},
-    {"vendor": "continuo", "property": "schedule", "value": "daily"},
-])  # {"schedule": "daily"}
-PROPERTIES["reads"]  # ContinuoProperty(name="reads", sits_on="schema", python="filled")
+continuo_values(
+    [
+        {"vendor": "lotse", "property": "schedule", "value": "x"},
+        {"vendor": "continuo", "property": "schedule", "value": "daily"},
+    ]
+)  # {"schedule": "daily"}
+PROPERTIES[
+    "reads"
+]  # ContinuoProperty(name="reads", sits_on="schema", python="filled")
 ```
 
 ### Public names
@@ -520,7 +555,11 @@ PROPERTIES["reads"]  # ContinuoProperty(name="reads", sits_on="schema", python="
 
 ```python
 from continuo_contracts.validate import (
-    REASONS, Issue, rule_issues, schema_issues, validate_python_contract,
+    REASONS,
+    Issue,
+    rule_issues,
+    schema_issues,
+    validate_python_contract,
 )
 ```
 
@@ -659,7 +698,9 @@ describes. The module logs nothing.
   `service` otherwise. An empty list means the contract passed every check of this module.
 
 ```python
-validate_python_contract(doc, path="contracts/kpis.odcs.yaml", service="service-py")
+validate_python_contract(
+    doc, path="contracts/kpis.odcs.yaml", service="service-py"
+)
 # [Issue(path="$", reason="file_name",
 #        message="the file is named 'kpis.odcs.yaml', it must be 'py_daily_kpis.odcs.yaml' or "
 #                "'analytics.py_daily_kpis.odcs.yaml'")]
@@ -679,7 +720,11 @@ validate_python_contract(doc, path="contracts/kpis.odcs.yaml", service="service-
 ## contract
 
 ```python
-from continuo_contracts.contract import contract_hash, logical_type, normalise_python
+from continuo_contracts.contract import (
+    contract_hash,
+    logical_type,
+    normalise_python,
+)
 ```
 
 continuo stores a Python contract in one canonical shape, its stored form, and fingerprints it
@@ -763,11 +808,17 @@ hash, whatever their line endings, byte order mark, key order or quoting. The mo
   returns a new dict.
 
 ```python
-stored = normalise_python(doc, service="service-py", reads=["Analytics.Daily_Transactions"])
+stored = normalise_python(
+    doc, service="service-py", reads=["Analytics.Daily_Transactions"]
+)
 stored["schema"][0]["customProperties"]
 # [{"vendor": "continuo", "property": "reads", "value": ["analytics.daily_transactions"]}]
-contract_hash(stored)  # "sha256:15268bb30f205e0e5cfb4791715391f3cf7ba527a671f319a6b77e1b087dda59"
-logical_type("varchar(64)")  # {"logicalType": "string", "logicalTypeOptions": {"maxLength": 64}}
+contract_hash(
+    stored
+)  # "sha256:15268bb30f205e0e5cfb4791715391f3cf7ba527a671f319a6b77e1b087dda59"
+logical_type(
+    "varchar(64)"
+)  # {"logicalType": "string", "logicalTypeOptions": {"maxLength": 64}}
 ```
 
 ### Public names
@@ -849,8 +900,13 @@ continuo-contracts hash contracts/py_daily_kpis.odcs.yaml --service service-py \
 
 ```python
 from continuo_contracts.errors import (
-    CanonicalJsonError, ContractsError, FingerprintsFileError, HashInputError, ProjectionError,
-    SchemaFileError, StrictYamlError,
+    CanonicalJsonError,
+    ContractsError,
+    FingerprintsFileError,
+    HashInputError,
+    ProjectionError,
+    SchemaFileError,
+    StrictYamlError,
 )
 ```
 

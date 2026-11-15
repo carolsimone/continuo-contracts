@@ -7,7 +7,9 @@ import pytest
 from continuo_contracts.canonical import MAX_DEPTH, canonical_json
 from continuo_contracts.errors import CanonicalJsonError
 
-VECTOR_FILE = resources.files("continuo_contracts") / "vectors" / "canonical_json.json"
+VECTOR_FILE = (
+    resources.files("continuo_contracts") / "vectors" / "canonical_json.json"
+)
 CASES = json.loads(VECTOR_FILE.read_text(encoding="utf-8"))
 WRITTEN = [case for case in CASES if "error" not in case]
 REFUSED = [case for case in CASES if case.get("error")]
@@ -24,7 +26,9 @@ def _code_point_order(keys):
 
 def _object_keys(text):
     keys = []
-    json.loads(text, object_pairs_hook=lambda pairs: keys.append([k for k, _ in pairs]))
+    json.loads(
+        text, object_pairs_hook=lambda pairs: keys.append([k for k, _ in pairs])
+    )
     return keys
 
 
@@ -68,7 +72,11 @@ def test_the_object_key_trap_cases_sort_by_utf16_and_not_by_code_point():
 
 
 def test_the_number_cases_hold_both_forms_of_a_float_and_a_negative_zero():
-    canonical = {case["canonical"] for case in WRITTEN if case["name"].startswith("number_")}
+    canonical = {
+        case["canonical"]
+        for case in WRITTEN
+        if case["name"].startswith("number_")
+    }
     assert {"1e+21", "1e-7", "123456789012345680000", "0.002", "4.5"} <= canonical
     assert math.copysign(1.0, BY_NAME["number_negative_zero"]["value"]) == -1.0
 
@@ -87,7 +95,9 @@ def test_an_integer_in_a_value_is_inside_the_safe_range():
             for item in value.values():
                 yield from numbers(item)
 
-    assert all(abs(n) <= 2**53 - 1 for case in WRITTEN for n in numbers(case["value"]))
+    assert all(
+        abs(n) <= 2**53 - 1 for case in WRITTEN for n in numbers(case["value"])
+    )
 
 
 def _levels(value):

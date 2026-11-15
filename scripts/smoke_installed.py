@@ -57,7 +57,9 @@ def _installed_failures() -> list[str]:
     location = Path(continuo_contracts.__file__)
     if "site-packages" in location.parts:
         return []
-    return [f"continuo_contracts was imported from {location}, not from a site-packages directory"]
+    return [
+        f"continuo_contracts was imported from {location}, not from a site-packages directory"
+    ]
 
 
 def _fingerprint_failures() -> list[str]:
@@ -94,7 +96,9 @@ def _projection_failures(cases: list[dict[str, Any]]) -> list[str]:
             failures.append(f"projection vector {name!r}: refused: {error}")
             continue
         if projection != case["projection"]:
-            failures.append(f"projection vector {name!r}: the code projection differs")
+            failures.append(
+                f"projection vector {name!r}: the code projection differs"
+            )
         if digest != case["projection_hash"]:
             failures.append(f"projection vector {name!r}: the hash is {digest}")
     return failures
@@ -110,7 +114,9 @@ def _sql_type_failures(cases: list[dict[str, Any]]) -> list[str]:
         except ProjectionError:
             got = None
         if got != expected:
-            failures.append(f"sql type vector {raw!r}: expected {expected!r}, got {got!r}")
+            failures.append(
+                f"sql type vector {raw!r}: expected {expected!r}, got {got!r}"
+            )
     return failures
 
 
@@ -126,9 +132,13 @@ def _canonical_vector_failures(cases: list[dict[str, Any]]) -> list[str]:
         except CanonicalJsonError:
             written = None
         if refused and written is not None:
-            failures.append(f"canonical json vector {name!r}: the value is not refused")
+            failures.append(
+                f"canonical json vector {name!r}: the value is not refused"
+            )
         elif not refused and written != case["canonical"].encode("utf-8"):
-            failures.append(f"canonical json vector {name!r}: written as {written!r}")
+            failures.append(
+                f"canonical json vector {name!r}: written as {written!r}"
+            )
     return failures
 
 
@@ -142,7 +152,12 @@ def _hash_vector(case: dict[str, Any]) -> str:
     if function == "shared_fold":
         return shared_fold(inputs["unit_digests"])
     if function == "shared_hash":
-        return shared_hash({key: bytes.fromhex(hex_) for key, hex_ in inputs["units_hex"].items()})
+        return shared_hash(
+            {
+                key: bytes.fromhex(hex_)
+                for key, hex_ in inputs["units_hex"].items()
+            }
+        )
     raise ValueError(f"unknown function {function!r}")
 
 
@@ -160,9 +175,13 @@ def _hashing_failures(cases: list[dict[str, Any]]) -> list[str]:
             continue
         if case.get("error"):
             if got is not None:
-                failures.append(f"hashing vector {name!r}: the inputs are not refused")
+                failures.append(
+                    f"hashing vector {name!r}: the inputs are not refused"
+                )
         elif got != case["expected"]:
-            failures.append(f"hashing vector {name!r}: expected {case['expected']!r}, got {got!r}")
+            failures.append(
+                f"hashing vector {name!r}: expected {case['expected']!r}, got {got!r}"
+            )
     return failures
 
 
@@ -175,12 +194,18 @@ def _strict_yaml_failures(cases: list[dict[str, Any]]) -> list[str]:
             value = yaml_strict.load(case["text"])
         except StrictYamlError:
             if not case.get("error"):
-                failures.append(f"strict yaml vector {name!r}: the text is refused")
+                failures.append(
+                    f"strict yaml vector {name!r}: the text is refused"
+                )
             continue
         if case.get("error"):
-            failures.append(f"strict yaml vector {name!r}: the text is not refused")
+            failures.append(
+                f"strict yaml vector {name!r}: the text is not refused"
+            )
         # `json.dumps` tells `1`, `1.0` and `true` apart, which `==` does not.
-        elif json.dumps(value, sort_keys=True) != json.dumps(case["value"], sort_keys=True):
+        elif json.dumps(value, sort_keys=True) != json.dumps(
+            case["value"], sort_keys=True
+        ):
             failures.append(f"strict yaml vector {name!r}: read as {value!r}")
     return failures
 
@@ -193,9 +218,15 @@ def _contract_result(case: dict[str, Any]) -> dict[str, Any]:
         doc = yaml_strict.load(case["text"])
     except StrictYamlError:
         return {"issues": [{"path": "$", "reason": "strict_yaml"}]}
-    issues = validate_python_contract(doc, path=case["path"], service=case["service"])
+    issues = validate_python_contract(
+        doc, path=case["path"], service=case["service"]
+    )
     if issues:
-        return {"issues": [{"path": issue.path, "reason": issue.reason} for issue in issues]}
+        return {
+            "issues": [
+                {"path": issue.path, "reason": issue.reason} for issue in issues
+            ]
+        }
     # The contract check accepts only a mapping, so `doc` is one here.
     stored = normalise_python(
         cast(Mapping[str, Any], doc), service=case["service"], reads=case["reads"]
@@ -217,12 +248,18 @@ def _contract_failures(cases: list[dict[str, Any]]) -> list[str]:
             if result != {"issues": case["issues"]}:
                 failures.append(f"contract vector {name!r}: gave {result!r}")
         elif "issues" in result:
-            failures.append(f"contract vector {name!r}: issues {result['issues']!r}")
+            failures.append(
+                f"contract vector {name!r}: issues {result['issues']!r}"
+            )
         else:
             if result["stored"] != case["stored"]:
-                failures.append(f"contract vector {name!r}: the stored form differs")
+                failures.append(
+                    f"contract vector {name!r}: the stored form differs"
+                )
             if result["contract_hash"] != case["contract_hash"]:
-                failures.append(f"contract vector {name!r}: the hash is {result['contract_hash']}")
+                failures.append(
+                    f"contract vector {name!r}: the hash is {result['contract_hash']}"
+                )
     return failures
 
 
@@ -285,5 +322,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(stream=sys.stderr, level=logging.INFO, format="%(levelname)s %(message)s")
+    logging.basicConfig(
+        stream=sys.stderr, level=logging.INFO, format="%(levelname)s %(message)s"
+    )
     raise SystemExit(main())

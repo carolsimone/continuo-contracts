@@ -3,7 +3,12 @@ import re
 
 import pytest
 
-from continuo_contracts.vocabulary import PROPERTIES, VENDOR, ContinuoProperty, continuo_values
+from continuo_contracts.vocabulary import (
+    PROPERTIES,
+    VENDOR,
+    ContinuoProperty,
+    continuo_values,
+)
 
 ROOT_AUTHORED = (
     "service kind schedule criticality timeoutMinutes script readQueries csvSource extraColumns "
@@ -46,8 +51,15 @@ def test_sits_on_and_python_use_the_closed_words():
 
 
 def test_the_properties_are_exactly_the_rows_of_this_release():
-    assert set(PROPERTIES) == {*ROOT_AUTHORED, *ROOT_REFUSED, "reads", *QUALITY_AUTHORED}
-    assert len(PROPERTIES) == len(ROOT_AUTHORED) + len(ROOT_REFUSED) + 1 + len(QUALITY_AUTHORED)
+    assert set(PROPERTIES) == {
+        *ROOT_AUTHORED,
+        *ROOT_REFUSED,
+        "reads",
+        *QUALITY_AUTHORED,
+    }
+    assert len(PROPERTIES) == len(ROOT_AUTHORED) + len(ROOT_REFUSED) + 1 + len(
+        QUALITY_AUTHORED
+    )
 
 
 def test_the_root_properties_an_author_may_write():
@@ -56,7 +68,9 @@ def test_the_root_properties_an_author_may_write():
 
 def test_the_python_refused_set():
     assert len(ROOT_REFUSED) == 10
-    refused = {name for name, prop in PROPERTIES.items() if prop.python == "refused"}
+    refused = {
+        name for name, prop in PROPERTIES.items() if prop.python == "refused"
+    }
     assert refused == set(ROOT_REFUSED)
     assert refused == _named("root", "refused")
 
@@ -102,7 +116,12 @@ def test_continuo_values_keeps_any_json_value_and_the_order_of_the_file():
     ]
     values = continuo_values(items)
     assert list(values) == ["config", "timeoutMinutes", "assets", "extraColumns"]
-    assert values == {"config": config, "timeoutMinutes": 30, "assets": [], "extraColumns": None}
+    assert values == {
+        "config": config,
+        "timeoutMinutes": 30,
+        "assets": [],
+        "extraColumns": None,
+    }
 
 
 def test_continuo_values_keeps_the_last_value_of_a_repeated_name_in_the_place_of_its_first():
@@ -117,7 +136,12 @@ def test_continuo_values_keeps_the_last_value_of_a_repeated_name_in_the_place_of
 
 
 def test_continuo_values_reads_an_item_with_other_keys():
-    item = {"vendor": "continuo", "property": "kind", "value": "python-csv", "description": "d"}
+    item = {
+        "vendor": "continuo",
+        "property": "kind",
+        "value": "python-csv",
+        "description": "d",
+    }
     assert continuo_values([item]) == {"kind": "python-csv"}
 
 
