@@ -261,6 +261,17 @@ def test_hash_refuses_a_read_value_that_is_not_a_table(tmp_path, capsys, caplog)
     assert "'daily'" in message and "<schema>.<table>" in message
 
 
+@pytest.mark.parametrize("table", ["db.analytics.x", "analytics. x", "analytics.x\x00"])
+def test_hash_refuses_a_read_value_that_is_not_exactly_a_schema_and_a_table(
+    tmp_path, capsys, caplog, table
+):
+    path = _put(tmp_path, "py_daily_kpis.odcs.yaml", _demo_text())
+    assert main(["hash", str(path), "--service", "service-py", "--read", table]) == 2
+    assert capsys.readouterr().out == ""
+    (message,) = _errors(caplog)
+    assert "exactly two parts" in message
+
+
 def test_hash_refuses_a_path_that_is_not_a_contract_file(tmp_path, caplog):
     unnamed = _put(tmp_path, "py_daily_kpis.yaml", _demo_text())
     for target in (tmp_path / "missing.odcs.yaml", unnamed, tmp_path):

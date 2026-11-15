@@ -84,7 +84,7 @@ REFUSED = {
 
 
 def test_the_file_holds_the_valid_and_the_refused_cases():
-    assert sorted(case["name"] for case in VALID) == sorted([*FIXTURE_OF, MESSY])
+    assert sorted(case["name"] for case in VALID) == sorted([*FIXTURE_OF, MESSY, MESSY_TYPES])
     assert {case["name"]: [i["reason"] for i in case["issues"]] for case in INVALID} == REFUSED
     assert len({case["name"] for case in CASES}) == len(CASES)
 
@@ -150,6 +150,32 @@ def test_the_messy_case_stores_and_hashes_like_the_clean_contract():
     assert messy["text"] != clean["text"]
     assert messy["stored"] == clean["stored"]
     assert messy["contract_hash"] == clean["contract_hash"]
+
+
+# The case that writes the column types of the demo node in spellings other than the canonical one.
+MESSY_TYPES = "messy_column_types"
+
+
+def test_the_messy_types_case_writes_each_type_in_another_spelling():
+    text = _case(MESSY_TYPES)["text"]
+    for spelling in ('physicalType: " Date"', "physicalType: int,", '"decimal(012, 02)"'):
+        assert spelling in text, spelling
+    for canonical in ("DATE", "INTEGER", "NUMERIC"):
+        assert canonical not in text.split("properties:")[1], canonical
+
+
+def test_the_messy_types_case_stores_and_hashes_like_the_demo_node():
+    messy, clean = _case(MESSY_TYPES), _case("demo_py_daily_kpis")
+    assert messy["text"] != clean["text"]
+    assert messy["stored"] == clean["stored"]
+    assert messy["contract_hash"] == clean["contract_hash"]
+
+
+def test_the_one_key_column_of_the_csv_contract_is_stored_without_its_position():
+    case = _case("full_python_csv")
+    assert "primaryKeyPosition: 1" in case["text"]
+    (key,) = [c for c in case["stored"]["schema"][0]["properties"] if c.get("primaryKey")]
+    assert "primaryKeyPosition" not in key
 
 
 def test_the_clean_api_contract_has_a_lower_case_severity():

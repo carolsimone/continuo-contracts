@@ -26,7 +26,7 @@ from jsonschema import Draft201909Validator
 from jsonschema.exceptions import ValidationError
 
 from continuo_contracts import schema
-from continuo_contracts.canonical import _ascii_lower
+from continuo_contracts.canonical import _ascii_lower, _has_control, _has_whitespace
 from continuo_contracts.contract import _MAX_LENGTH, _SHAPES, _STRING_TYPES, _length
 from continuo_contracts.errors import ProjectionError
 from continuo_contracts.python import (
@@ -96,8 +96,6 @@ _WHY_REFUSED: Final = {
 _CRITICALITIES: Final = ("REGULATORY", "CORE", "SECONDARY")
 # The longest schedule name: the width of the schedule name of a run in continuo's run store.
 _SCHEDULE_MAX: Final = 50
-# The control characters, C0, DEL and C1, which no name or path holds.
-_CONTROL: Final = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 # A Windows drive letter at the start of a path, as in `C:/x` or `c:x`.
 _DRIVE: Final = re.compile(r"[A-Za-z]:")
 _TIMEOUT_MAX_MINUTES: Final = 10080
@@ -303,9 +301,9 @@ def _name_fault(
         return "must not be blank"
     if value != value.strip():
         return "must not start or end with whitespace"
-    if not inner_whitespace and any(character.isspace() for character in value):
+    if not inner_whitespace and _has_whitespace(value):
         return "must not contain whitespace"
-    if _CONTROL.search(value):
+    if _has_control(value):
         return "must not contain a control character"
     if not separators and "." in value:
         return "must not contain a dot, which separates the schema from the table in the id"

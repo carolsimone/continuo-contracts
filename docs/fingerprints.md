@@ -152,11 +152,11 @@ The names in the *Inputs* column are these:
 | `assets` | authored list | both (config, shared) | content: the list in the projection, the files' bytes in the shared part; contract: `assets` | `projection.assets`, `odcs.custom.assets` |
 | `readQueries` | authored | both (config) | content: the projection's `reads`, each query with LF line endings and no outer ASCII whitespace; contract: `readQueries` | `projection.reads`, `odcs.custom.readQueries` |
 | Columns: name and order | `schema[0].properties` | both (config) | content: the projection's `output_columns`; contract: `properties` in file order | `projection.output_columns`, `odcs.schema.properties.name` |
-| Column `physicalType` | authored | both (config) | content: the canonical type, so `INT` and `INTEGER` hash alike; contract: the type as written | `odcs.schema.properties.physicalType` |
+| Column `physicalType` | authored | both (config) | content and contract: the canonical type, so `INT` and `INTEGER` hash alike in both | `odcs.schema.properties.physicalType` |
 | Column `required` | authored | both (config) | content: `nullable` in the projection; contract: `required` | `odcs.schema.properties.required` |
 | Column `logicalType` and `logicalTypeOptions` | derived from `physicalType` | contract | stored and hashed; an authored `logicalType` is replaced and an authored `logicalTypeOptions` is refused | `odcs.schema.properties.logicalType`, `odcs.schema.properties.logicalTypeOptions` |
 | Column `unique` | authored | contract | descriptive: the runtime creates no constraint | `odcs.schema.properties.unique` |
-| `primaryKey`, `primaryKeyPosition` | authored | contract; both (config) on an `upsert` node | content: the projection's `primary_key`, `[]` unless `upsert`; contract: the key, descriptive on `replace` and `append` | `projection.primary_key`, `odcs.schema.properties.primaryKey`, `odcs.schema.properties.primaryKeyPosition` |
+| `primaryKey`, `primaryKeyPosition` | authored | contract; both (config) on an `upsert` node | content: the projection's `primary_key`, `[]` unless `upsert`; contract: the key, descriptive on `replace` and `append`, and a key of one column is stored without its `primaryKeyPosition` | `projection.primary_key`, `odcs.schema.properties.primaryKey`, `odcs.schema.properties.primaryKeyPosition` |
 | `kind` | authored, default `python-node` | both (config) | content: the projection's canonical kind; contract: `kind` | `projection.kind`, `odcs.custom.kind` |
 | `modeType` | authored, default `replace` | both (config) | content: the projection's `mode_type`; contract: `modeType` | `projection.mode_type`, `odcs.custom.modeType` |
 | `extraColumns` | authored, default `raise` | both (config) | content: the projection's `extra_columns`; contract: `extraColumns` | `projection.extra_columns`, `odcs.custom.extraColumns` |
@@ -195,7 +195,7 @@ The names in the *Inputs* column are these:
 | Columns, each column's `physicalType` and `required` | authored | both (config) | as for a `python-node` | `projection.output_columns`, `odcs.schema.properties.name`, `odcs.schema.properties.physicalType`, `odcs.schema.properties.required` |
 | Column `logicalType` and `logicalTypeOptions` | derived from `physicalType` | contract | as for a `python-node` | `odcs.schema.properties.logicalType`, `odcs.schema.properties.logicalTypeOptions` |
 | Column `unique` | authored | contract | as for a `python-node` | `odcs.schema.properties.unique` |
-| `primaryKey`, `primaryKeyPosition` | authored | contract | descriptive: a csv node is `replace` only, so the projection's `primary_key` is `[]` | `projection.primary_key`, `odcs.schema.properties.primaryKey`, `odcs.schema.properties.primaryKeyPosition` |
+| `primaryKey`, `primaryKeyPosition` | authored | contract | descriptive: a csv node is `replace` only, so the projection's `primary_key` is `[]`; a key of one column is stored without its `primaryKeyPosition` | `projection.primary_key`, `odcs.schema.properties.primaryKey`, `odcs.schema.properties.primaryKeyPosition` |
 | `kind` | authored, `python-csv` | both (config) | as for a `python-node` | `projection.kind`, `odcs.custom.kind` |
 | `modeType` | `replace` only, the default | both (config) | the projection's `mode_type` is always `replace` | `projection.mode_type`, `odcs.custom.modeType` |
 | `extraColumns`, `config` | authored | both (config) | as for a `python-node` | `projection.extra_columns`, `projection.config`, `odcs.custom.extraColumns`, `odcs.custom.config` |

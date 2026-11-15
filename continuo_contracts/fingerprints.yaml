@@ -666,7 +666,7 @@ families:
       source: "authored"
       fingerprint: "both"
       parts: ["config"]
-      why: "content: the canonical type, so `INT` and `INTEGER` hash alike; contract: the type as written"
+      why: "content and contract: the canonical type, so `INT` and `INTEGER` hash alike in both"
       inputs: ["odcs.schema.properties.physicalType"]
     - id: "column_required"
       field: "Column `required`"
@@ -692,7 +692,7 @@ families:
       source: "authored"
       fingerprint: "contract"
       when: {condition: "upsert", fingerprint: "both", parts: ["config"]}
-      why: "content: the projection's `primary_key`, `[]` unless `upsert`; contract: the key, descriptive on `replace` and `append`"
+      why: "content: the projection's `primary_key`, `[]` unless `upsert`; contract: the key, descriptive on `replace` and `append`, and a key of one column is stored without its `primaryKeyPosition`"
       inputs: ["projection.primary_key", "odcs.schema.properties.primaryKey",
                "odcs.schema.properties.primaryKeyPosition"]
     - id: "kind"
@@ -927,7 +927,7 @@ families:
       field: "`primaryKey`, `primaryKeyPosition`"
       source: "authored"
       fingerprint: "contract"
-      why: "descriptive: a csv node is `replace` only, so the projection's `primary_key` is `[]`"
+      why: "descriptive: a csv node is `replace` only, so the projection's `primary_key` is `[]`; a key of one column is stored without its `primaryKeyPosition`"
       inputs: ["projection.primary_key", "odcs.schema.properties.primaryKey",
                "odcs.schema.properties.primaryKeyPosition"]
     - id: "kind"

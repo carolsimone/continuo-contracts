@@ -21,6 +21,8 @@ object it
   `semanticType: column` on a column, `type: library` on a quality rule and `type: foreignKey`
   on a relationship;
 - drops the `physicalName` of a column when it equals the column's `name`;
+- drops the `primaryKeyPosition` of a column when it is the only column with `primaryKey: true`,
+  because a position orders the columns of a key and a key of one column has no order;
 - drops a custom property whose value is null or empty, and a `continuo` property that says
   continuo's default: `modeType: replace` or `extraColumns: raise`;
 - sorts the set-like lists `customProperties`, `tags`, `roles`, `quality`, `relationships` and
@@ -50,7 +52,13 @@ from types import MappingProxyType
 from typing import Any, Final
 
 from continuo_contracts import fingerprints
-from continuo_contracts.canonical import _ascii_lower, canonical_json, normalise_text
+from continuo_contracts.canonical import (
+    _ascii_lower,
+    _has_control,
+    _has_whitespace,
+    canonical_json,
+    normalise_text,
+)
 from continuo_contracts.errors import HashInputError, ProjectionError
 from continuo_contracts.hashing import sha256_hex
 from continuo_contracts.python import KIND_ALIASES, canonical_sql_type
@@ -192,16 +200,20 @@ def logical_type(physical_type: str) -> dict[str, Any] | None:
     and `BIGINT` are `integer`, `NUMERIC(p,s)` and `DOUBLE PRECISION` are `number`, `TEXT` is
     `string`, `VARCHAR(n)` and `CHAR(n)` are `string` with the `logicalTypeOptions`
     `{"maxLength": n}`, and `DATE`, `TIMESTAMP` and `BOOLEAN` are `date`, `timestamp` and
-    `boolean`. A type that `canonical_sql_type` refuses has none. The result is a new dict, such
-    as `{"logicalType": "integer"}`.
+    `boolean`. A type that `canonical_sql_type` refuses has none, and so has a `VARCHAR(n)` or
+    `CHAR(n)` whose length is not from 1 to 2**53 - 1, the lengths the contract check accepts. The
+    result is a new dict, such as `{"logicalType": "integer"}`.
     """
     try:
         canonical = canonical_sql_type(physical_type)
     except ProjectionError:
         return None
-    name, _, parameters = canonical.partition("(")
+    name = canonical.partition("(")[0]
     if name in _STRING_TYPES:
-        return {"logicalType": "string", "logicalTypeOptions": {"maxLength": int(parameters[:-1])}}
+        length = _length(canonical)
+        if length is None:
+            return None
+        return {"logicalType": "string", "logicalTypeOptions": {"maxLength": length}}
     logical = _LOGICAL_TYPES.get(name)
     return {"logicalType": logical} if logical is not None else None
 
@@ -232,18 +244,20 @@ def normalise_python(
     The stored form is `doc` with `version: "0"` and `status: active`, the root `name` and the
     `physicalName` of the schema object set to the table when they are absent, the `continuo`
     properties `kind` (the kind of the node, read through `python.KIND_ALIASES`, `python-node`
-    when `doc` writes none) and `service` always written, and on each column the `logicalType`
-    and `logicalTypeOptions` that `logical_type` gives for its `physicalType`, in place of any
-    written ones (both are removed when it gives none). When `reads` is not empty, the schema
+    when `doc` writes none) and `service` always written, and on each column the `physicalType`
+    as `python.canonical_sql_type` writes it, with the `logicalType` and `logicalTypeOptions`
+    that `logical_type` gives for it in place of any written ones (both are removed when it gives
+    none). A `physicalType` that `canonical_sql_type` refuses, which an accepted contract never
+    holds, stays as written and gets no logical type. When `reads` is not empty, the schema
     object gets the `continuo` property `reads` with the tables' ASCII letters in lower case, sorted
     by code point and listed once. The result is then written in the canonical form that the module
     describes.
 
     Raises `HashInputError` when `service` is empty or blank, when `reads` is a string or lists a
-    table that is not a string of at least two non-empty parts joined by dots, or that has
-    whitespace at either end, and `CanonicalJsonError` when an item of a set-like list holds a
-    value that canonical JSON cannot write, which a document that `yaml_strict.load` read never
-    holds.
+    table that is not a string of exactly two parts joined by a dot, neither empty, with no
+    whitespace and no control character, and `CanonicalJsonError` when an item of a set-like list
+    holds a value that canonical JSON cannot write, which a document that `yaml_strict.load` read
+    never holds.
     """
     if not service.strip():
         raise HashInputError(f"service {service!r}: the service of a release is not empty or blank")
@@ -259,12 +273,22 @@ def normalise_python(
     declared = continuo_values(custom).get("kind", _DEFAULT_KIND)
     _set_property(custom, "kind", KIND_ALIASES.get(declared, declared))
     _set_property(custom, "service", service)
-    for column in table_object.get("properties", []):
+    columns = table_object.get("properties", [])
+    for column in columns:
         column.pop("logicalType", None)
         column.pop("logicalTypeOptions", None)
-        derived = logical_type(column.get("physicalType"))
+        try:
+            physical = canonical_sql_type(column.get("physicalType"))
+        except ProjectionError:
+            continue
+        column["physicalType"] = physical
+        derived = logical_type(physical)
         if derived is not None:
             column.update(derived)
+    keys = [column for column in columns if column.get("primaryKey") is True]
+    if len(keys) == 1:
+        # A position orders the columns of a key, so one key column says nothing with it.
+        keys[0].pop("primaryKeyPosition", None)
     if tables:
         table_object.setdefault("customProperties", []).append(
             {"vendor": VENDOR, "property": "reads", "value": tables}
@@ -296,13 +320,14 @@ def _reads(reads: Sequence[str]) -> list[str]:
     for entry in reads:
         if (
             not isinstance(entry, str)
-            or entry != entry.strip()
-            or len(parts := entry.split(".")) < 2
+            or len(parts := entry.split(".")) != 2
             or not all(parts)
+            or _has_whitespace(entry)
+            or _has_control(entry)
         ):
             raise HashInputError(
-                f"reads entry {entry!r}: a table is written <schema>.<table>, with no empty part "
-                "and no whitespace around it"
+                f"reads entry {entry!r}: a table is written <schema>.<table>, exactly two parts "
+                "that are not empty, with no whitespace and no control character"
             )
         tables.add(_ascii_lower(entry))
     return sorted(tables)

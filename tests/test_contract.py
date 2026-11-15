@@ -521,10 +521,22 @@ def test_a_whole_number_float_outside_the_safe_integer_range_stays_a_float():
         ("DATE", {"logicalType": "date"}),
         ("timestamp", {"logicalType": "timestamp"}),
         ("BOOLEAN", {"logicalType": "boolean"}),
+        ("VARCHAR(9007199254740991)", {
+            "logicalType": "string", "logicalTypeOptions": {"maxLength": 9007199254740991}
+        }),
         ("NUMERIC(12)", None),
         ("JSONB", None),
         ("", None),
+        ("VARCHAR(0)", None),
+        ("CHAR(000)", None),
+        ("VARCHAR(9007199254740992)", None),
+        ("CHAR(99999999999999999999)", None),
+        ("VARCHAR(" + "9" * 5000 + ")", None),
+        ("VARCHAR(" + "0" * 5000 + "7)", {"logicalType": "string", "logicalTypeOptions": {
+            "maxLength": 7
+        }}),
     ],
+    ids=lambda value: value[:30] if isinstance(value, str) else None,
 )
 def test_logical_type(physical, logical):
     assert logical_type(physical) == logical
@@ -538,6 +550,86 @@ def test_logical_type_gives_a_new_dict_each_time():
         "logicalType": "string",
         "logicalTypeOptions": {"maxLength": 5},
     }
+
+
+# the physical type
+
+
+@pytest.mark.parametrize(
+    ("written", "canonical"),
+    [
+        ("date", "DATE"),
+        (" DATE", "DATE"),
+        ("DATE\n", "DATE"),
+        ("int", "INTEGER"),
+        ("Integer", "INTEGER"),
+        ("decimal(12, 2)", "NUMERIC(12,2)"),
+        ("NUMERIC(012,02)", "NUMERIC(12,2)"),
+        ("varchar(0010)", "VARCHAR(10)"),
+        ("double precision", "DOUBLE PRECISION"),
+    ],
+)
+def test_the_physical_type_is_stored_in_its_canonical_spelling(written, canonical):
+    doc = _with_column(_kpis(), 0, physicalType=written)
+    stored = _stored(doc, reads=KPIS_READS)
+    assert stored["schema"][0]["properties"][0]["physicalType"] == canonical
+    clean = _stored(_with_column(_kpis(), 0, physicalType=canonical), reads=KPIS_READS)
+    assert stored == clean
+    assert contract_hash(stored) == contract_hash(clean)
+
+
+def test_two_spellings_of_a_type_give_one_contract_hash_and_one_projection_hash():
+    plain = _with_column(_kpis(), 2, physicalType="NUMERIC(12,2)")
+    spelled = _with_column(_kpis(), 2, physicalType="decimal(12, 2)")
+    assert contract_hash(_stored(plain, reads=KPIS_READS)) == contract_hash(
+        _stored(spelled, reads=KPIS_READS)
+    )
+    assert projection_hash(node_from_odcs(plain)) == projection_hash(node_from_odcs(spelled))
+
+
+def test_a_physical_type_that_is_not_accepted_is_stored_as_written():
+    # The contract check refuses it, so no stored form holds it; normalise_python leaves it alone.
+    doc = _with_column(_kpis(), 0, physicalType="JSONB")
+    stored = normalise_python(doc, service="service-py", reads=[])
+    assert stored["schema"][0]["properties"][0]["physicalType"] == "JSONB"
+    assert "logicalType" not in stored["schema"][0]["properties"][0]
+
+
+# the key
+
+
+def _keyed(position):
+    """The demo contract with `day` as its one key column, written with `position` (`None`
+    writes none)."""
+    doc = _with_column(_kpis(), 0, primaryKey=True)
+    if position is not None:
+        doc["schema"][0]["properties"][0]["primaryKeyPosition"] = position
+    return doc
+
+
+@pytest.mark.parametrize("position", [1, 7, 1.0, None])
+def test_the_one_column_of_a_key_is_stored_without_its_position(position):
+    stored = _stored(_keyed(position), reads=KPIS_READS)
+    column = stored["schema"][0]["properties"][0]
+    assert column["primaryKey"] is True
+    assert "primaryKeyPosition" not in column
+    assert contract_hash(stored) == contract_hash(_stored(_keyed(None), reads=KPIS_READS))
+
+
+def test_the_columns_of_a_key_of_several_keep_their_positions():
+    doc = _with_column(_keyed(2), 1, primaryKey=True, primaryKeyPosition=1)
+    stored = _stored(doc, reads=KPIS_READS)
+    columns = stored["schema"][0]["properties"]
+    assert [column.get("primaryKeyPosition") for column in columns] == [2, 1, None]
+    swapped = _with_column(_keyed(1), 1, primaryKey=True, primaryKeyPosition=2)
+    assert contract_hash(stored) != contract_hash(_stored(swapped, reads=KPIS_READS))
+
+
+def test_the_position_of_a_column_that_is_not_in_the_key_is_kept():
+    doc = _with_column(_keyed(1), 1, primaryKeyPosition=3)
+    columns = _stored(doc, reads=KPIS_READS)["schema"][0]["properties"]
+    assert "primaryKeyPosition" not in columns[0]
+    assert columns[1]["primaryKeyPosition"] == 3
 
 
 def test_an_authored_logical_type_is_replaced():
@@ -614,7 +706,27 @@ def test_the_reads_are_lower_cased_in_ascii_only():
 
 @pytest.mark.parametrize(
     "entry",
-    ["daily_transactions", "", 7, ".", "a.", ".b", "a..b", " a.b", "a.b ", "a.b\n", "\ta.b"],
+    [
+        "daily_transactions",
+        "",
+        7,
+        ".",
+        "a.",
+        ".b",
+        "a..b",
+        " a.b",
+        "a.b ",
+        "a.b\n",
+        "\ta.b",
+        "db.analytics.x",
+        "a.b.c.d",
+        "analytics. x",
+        "analytics .x",
+        "ana lytics.x",
+        "analytics.x\u00a0y",
+        "analytics.x\x00",
+        "analytics.\x7fx",
+    ],
 )
 def test_a_reads_entry_that_is_not_a_schema_and_a_table_is_refused(entry):
     with pytest.raises(HashInputError, match="reads"):

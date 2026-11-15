@@ -59,18 +59,21 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   written as a wire entry.
 - `continuo_contracts.contract`: `normalise_python()` builds the stored form of a Python contract
   (`version: "0"`, `status: active`, the table's names, the `kind` and `service` properties, the
-  `reads` tables in lower case, sorted and listed once, and a `logicalType` per column from
-  `logical_type()`), written in the canonical form: description text stripped, quality severity
-  lower-cased, empty values, ODCS defaults and continuo's default `modeType` and `extraColumns`
-  dropped, whole-number floats stored as integers and the set-like lists sorted, with free-form
-  values kept as written. Two files that mean the same thing, whatever their line endings, byte
-  order mark, key order or quoting, store the same form. `contract_hash()` hashes the stored form
-  without `apiVersion`, `kind`, `status` and `version`. The new vector file `vectors/contracts.json`
-  pins the stored form and the `contract_hash` of seven contracts, one of them a messy spelling of
-  another that stores alike, and the issues of nineteen refused ones, among them one for each
-  name and path rule.
-- `normalise_python()` raises `HashInputError` for a `service` that is empty or blank, as it does
-  for a `reads` entry that is not `<schema>.<table>`.
+  `reads` tables in lower case, sorted and listed once, and per column the `physicalType` in the
+  spelling `canonical_sql_type()` writes and a `logicalType` from `logical_type()`), written in
+  the canonical form: description text stripped, quality severity lower-cased, empty values, ODCS
+  defaults, the `primaryKeyPosition` of a key of one column and continuo's default `modeType` and
+  `extraColumns` dropped, whole-number floats stored as integers and the set-like lists sorted,
+  with free-form values kept as written. Two files that mean the same thing, whatever their line
+  endings, byte order mark, key order, quoting or spelling of a column type, store the same form.
+  It raises `HashInputError` for a `service` that is empty or blank and for a `reads` entry that
+  is not exactly `<schema>.<table>`: two parts joined by a dot, neither empty, with no whitespace
+  and no control character. `contract_hash()` hashes the stored form without `apiVersion`, `kind`,
+  `status` and `version`. `logical_type()` gives `None` for a type `canonical_sql_type()` refuses
+  and for a `VARCHAR(n)` or `CHAR(n)` whose length is not from 1 to 2**53 - 1. The new vector file
+  `vectors/contracts.json` pins the stored form and the `contract_hash` of eight contracts, two of
+  them messy spellings of another that store alike, and the issues of nineteen refused ones,
+  among them one for each name and path rule.
 - `fingerprints.yaml` classifies every field of a Python contract's stored form for `python-node`,
   `python-csv` and `python-api`, in the new input pattern `odcs.<path>` (`odcs.team.name`,
   `odcs.schema.properties.logicalType`, `odcs.custom.timeoutMinutes`, `odcs.schema.custom.reads`),

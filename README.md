@@ -687,8 +687,10 @@ hash, whatever their line endings, byte order mark, key order or quoting. The mo
   - the root `name` and the `physicalName` of the schema object, set to the table when absent;
   - the `continuo` properties `kind` (the kind of the node, `python-model` stored as
     `python-node`, and `python-node` when none is written) and `service`, always written;
-  - on each column, the `logicalType` and `logicalTypeOptions` that `logical_type` gives for its
-    `physicalType`, in place of any written ones, and neither when it gives none;
+  - on each column, the `physicalType` as `python.canonical_sql_type` writes it (`date` is `DATE`,
+    `int` is `INTEGER`, `decimal(12, 02)` is `NUMERIC(12,2)` and `VARCHAR(0010)` is `VARCHAR(10)`),
+    so two spellings of a type store alike, and the `logicalType` and `logicalTypeOptions` that
+    `logical_type` gives for it, in place of any written ones, and neither when it gives none;
   - when `reads` is not empty, `{vendor: continuo, property: reads, value: [...]}` on the schema
     object, with the tables in lower case (ASCII letters only), sorted by code point and listed
     once.
@@ -708,6 +710,9 @@ hash, whatever their line endings, byte order mark, key order or quoting. The mo
     `semanticType: column` on a column; `type: library` on a quality rule; `type: foreignKey` on
     a relationship;
   - drops the `physicalName` of a column when it equals the column's `name`;
+  - drops the `primaryKeyPosition` of a column when it is the only column with `primaryKey: true`,
+    since a position orders the columns of a key and a key of one column has no order, so `1`, `7`
+    and no position store alike;
   - drops a custom property whose value is null or empty, and the `continuo` properties that
     say continuo's default, `modeType: replace` and `extraColumns: raise`;
   - sorts `customProperties`, `tags`, `roles`, `quality`, `relationships` and
@@ -723,11 +728,12 @@ hash, whatever their line endings, byte order mark, key order or quoting. The mo
   service level or an enum entry, which stay, because there the author compares with that value.
   `validate` reads the same keys as data. Everywhere, free-form values included, a float that is a
   whole number within -(2**53 - 1) to 2**53 - 1 becomes an integer, so `batch_size: 10.0` is stored
-  as `10`. `physicalType` is stored as written.
+  as `10`.
 
   Raises `HashInputError` when `service` is empty or blank, when `reads` is one string, or lists a
-  table that is not a string of at least two non-empty parts joined by dots (`"."`, `"a."` and
-  `".b"` are refused) or that has whitespace at either end, and `CanonicalJsonError` when an item
+  table that is not `<schema>.<table>`: a string of exactly two parts joined by a dot, neither
+  empty, with no whitespace and no control character anywhere (`"."`, `"a."`, `".b"`,
+  `"db.analytics.x"` and `"analytics. x"` are refused), and `CanonicalJsonError` when an item
   of a set-like list holds a value that canonical JSON cannot write, which a document that
   `yaml_strict.load` read never holds.
 - `contract_hash(stored: Mapping[str, Any]) -> str` returns `"sha256:"` and the lowercase hex
@@ -744,7 +750,9 @@ hash, whatever their line endings, byte order mark, key order or quoting. The mo
   `string`, `VARCHAR(n)` and `CHAR(n)` are
   `{"logicalType": "string", "logicalTypeOptions": {"maxLength": n}}`, and `DATE`, `TIMESTAMP`
   and `BOOLEAN` are `date`, `timestamp` and `boolean`. A type that `canonical_sql_type` refuses
-  gives `None`. Each call returns a new dict.
+  gives `None`, and so does a `VARCHAR(n)` or `CHAR(n)` whose length is not from 1 to 2**53 - 1,
+  the lengths the contract check accepts, however many digits it is written with. Each call
+  returns a new dict.
 
 ```python
 stored = normalise_python(doc, service="service-py", reads=["Analytics.Daily_Transactions"])
@@ -797,7 +805,8 @@ with `validate.validate_python_contract`, so they find what topology-controller 
   With `--json`, stdout is `{"contract_hash": "sha256:...", "stored": {...}}`, where `stored` is
   the stored form that the hash is of. `--service` is required, because it is part of the stored
   form, and it may not be empty or blank. `--read TABLE` names one table that the node's read
-  queries name, written `<schema>.<table>`, and may be repeated. topology-controller passes these
+  queries name, written `<schema>.<table>` (exactly two parts joined by a dot, neither empty, with
+  no whitespace and no control character), and may be repeated. topology-controller passes these
   at release time and the hash covers them, so pass the same tables to get the hash it stores. A
   file with an issue logs each issue at ERROR, prints nothing on stdout and exits 1.
 
@@ -851,7 +860,8 @@ surrogate, and an argument of the wrong type can raise `TypeError` or `Attribute
   the message starts with the JSON path of that value.
 - `HashInputError`: `shared_fold` and `shared_hash` refuse a unit key or a digest that is in a
   form they do not accept, and the message names the key. `contract.normalise_python` refuses an
-  empty or blank `service` and a `reads` entry that is not `<schema>.<table>`, and the message
+  empty or blank `service` and a `reads` entry that is not `<schema>.<table>` (exactly two parts
+  joined by a dot, neither empty, with no whitespace and no control character), and the message
   names the service or the entry.
 - `ProjectionError`: `canonical_sql_type`, `PythonNode.from_mapping`, `code_projection` and
   `projection_hash` refuse an SQL type or a Python node.
@@ -919,8 +929,9 @@ every case of every file.
   the python-api one again in every spelling the canonical form removes (a byte order mark and CRLF,
   lists out of order with a repeat, descriptions with outer whitespace, an upper-case severity,
   `type: library`, `logicalType: object`, `primaryKey: false`, a column `physicalName` equal to its
-  name and an empty `valueExt`), whose `stored` and `contract_hash` are those of the clean file. The
-  refused ones are a `NUMERIC(12)` column, a contract that names its `servers`, a file name that
+  name and an empty `valueExt`), whose `stored` and `contract_hash` are those of the clean file, and
+  the demo `py_daily_kpis` again with its column types spelled ` Date`, `int` and
+  `decimal(012, 02)`, which stores and hashes like the demo file. The refused ones are a `NUMERIC(12)` column, a contract that names its `servers`, a file name that
   does not match the table, a repeated key, and one case for each name and path rule: a schema
   part of the id that is blank, has whitespace or has a slash, a table name with whitespace or a
   control character, a column name with outer whitespace or a control character, a read query

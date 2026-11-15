@@ -283,9 +283,10 @@ def _parser() -> argparse.ArgumentParser:
         default=[],
         metavar="TABLE",
         help=(
-            "a table the node's read queries name, written <schema>.<table>; repeat it for each "
-            "table. topology-controller passes these at release time, and the hash covers them, "
-            "so pass the same ones to get the hash it stores"
+            "a table the node's read queries name, written <schema>.<table>: exactly two parts "
+            "joined by a dot, neither empty, with no whitespace and no control character; repeat "
+            "it for each table. topology-controller passes these at release time, and the hash "
+            "covers them, so pass the same ones to get the hash it stores"
         ),
     )
     hash_.set_defaults(handler=_hash)
