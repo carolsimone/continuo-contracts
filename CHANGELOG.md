@@ -5,6 +5,21 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-15
+
+**TL;DR**
+
+- Python ODCS contracts: continuo-contracts reads a Python node's ODCS v3.2.0 contract strictly
+  (`yaml_strict`), checks it against the vendored ODCS schema and continuo's rules (`validate`,
+  every problem an `Issue` with a closed reason code), and turns it into the `PythonNode` the
+  0.1.0 code projection takes (`python.node_from_odcs`).
+- The stored form and `contract_hash`: `contract.normalise_python()` writes one canonical form
+  for files that mean the same thing, and `contract.contract_hash()` hashes it. The new vector
+  files `vectors/contracts.json` and `vectors/strict_yaml.json` pin both.
+- `continuo-contracts validate` and `continuo-contracts hash`, for producer CI and people.
+- `jsonschema>=4.26` is a new runtime dependency, and the library requires Python 3.14.
+- No hash of 0.1.0 moves: the four 0.1.0 vector files are byte for byte the same.
+
 ### Added
 
 - `continuo_contracts.schema`: the ODCS v3.2.0 JSON schema ships in the wheel, and `load()` returns
