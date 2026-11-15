@@ -81,10 +81,11 @@ filterwarnings = ["error"]
 root_package = "continuo_contracts"
 include_external_packages = true
 
-# The import graph of CONTRIBUTING.md. A module imports only from the layers below its own, so
-# nothing imports `cli`, and `errors` and `vocabulary`, the bottom layer, import nothing from
-# the package. The modules of one layer, separated by `|`, import none of each other, directly
-# or through another module. `exhaustive` makes a module that no layer names fail the check.
+# The ordering of the import graph in CONTRIBUTING.md, not each edge of it. A module imports
+# only from the layers below its own, so nothing imports `cli`, and `errors` and `vocabulary`,
+# the bottom layer, import nothing from the package. The modules of one layer, separated by
+# `|`, import none of each other, directly or through another module. `exhaustive` makes a
+# module that no layer names fail the check.
 [[tool.importlinter.contracts]]
 name = "import-graph"
 type = "layers"

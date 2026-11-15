@@ -1,4 +1,4 @@
-"""The import graph of CONTRIBUTING.md, checked mechanically.
+"""The import contracts of CONTRIBUTING.md, checked mechanically.
 
 import-linter (`uv run lint-imports`) enforces the contracts in `pyproject.toml`. These
 tests cover what it cannot say by itself:
@@ -8,7 +8,10 @@ tests cover what it cannot say by itself:
   cannot sit outside the graph;
 - each third-party confinement names every module but the ones that may use the library,
   so a new module cannot import the library unnoticed;
-- nothing in the package imports `scripts` or `tests`, which import-linter cannot see;
+- no file of the package, `__init__.py` included, imports `cli`, `logging` or a confined
+  library outside the modules that may, and none imports `scripts` or `tests`: a contract
+  that named `__init__` would name every module of the package with it, and the other two
+  are outside the package, so import-linter cannot say this by itself;
 - the contracts fail when an import crosses them, so they cannot silently stop working.
 """
 
@@ -35,6 +38,10 @@ CONFINED = {
     "logging": {"cli"},
 }
 
+# What a file of the package may not import unless its module is named: `cli` is imported by
+# no module, and each confined library only by its users.
+GUARDED = {"continuo_contracts.cli": set(), **CONFINED}
+
 
 def _contracts() -> list[dict]:
     config = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
@@ -53,15 +60,64 @@ def _layer_modules(layer: str) -> list[str]:
     return [name for name in re.split(r"\s*[|:]\s*", layer) if name]
 
 
-def _imported_names(path: Path) -> set[str]:
-    """The top-level names of the modules `path` imports with an absolute import."""
+def _imports(path: Path) -> set[str]:
+    """The dotted names of the modules `path` imports, relative imports resolved.
+
+    `from a import b` gives `a` and `a.b`, so `from continuo_contracts import cli` names
+    `continuo_contracts.cli`. A relative import starts from `continuo_contracts`, the package
+    that holds `path`.
+    """
     names: set[str] = set()
     for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
         if isinstance(node, ast.Import):
-            names.update(alias.name.split(".")[0] for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
-            names.add(node.module.split(".")[0])
+            names.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            module = ".".join(
+                part
+                for part in (
+                    "continuo_contracts" if node.level else None,
+                    node.module,
+                )
+                if part
+            )
+            if module:
+                names.add(module)
+                names.update(f"{module}.{alias.name}" for alias in node.names)
     return names
+
+
+def _covers(name: str, module: str) -> bool:
+    """Whether the imported `name` is `module` or a module inside it."""
+    return name == module or name.startswith(f"{module}.")
+
+
+def _guarded_imports(package: Path) -> dict[str, set[str]]:
+    """The `GUARDED` modules that each file of `package` imports without being a user."""
+    found = {}
+    for path in sorted(package.glob("*.py")):
+        names = _imports(path)
+        offences = {
+            guarded
+            for guarded, users in GUARDED.items()
+            if path.stem not in users
+            and any(_covers(name, guarded) for name in names)
+        }
+        if offences:
+            found[path.name] = offences
+    return found
+
+
+def _copy_package(root: Path) -> Path:
+    """Copy the modules of the package into `root`, so a test can change them freely."""
+    copy = root / "continuo_contracts"
+    shutil.copytree(
+        PACKAGE,
+        copy,
+        ignore=lambda _folder, names: [
+            name for name in names if not name.endswith(".py")
+        ],
+    )
+    return copy
 
 
 def test_no_contract_ignores_an_import() -> None:
@@ -84,9 +140,12 @@ def test_the_layers_name_every_module_of_the_package_once() -> None:
 
 def test_cli_is_the_top_layer_and_the_bottom_layer_imports_nothing() -> None:
     [graph] = [c for c in _contracts() if c["type"] == "layers"]
+    top, *_, bottom = graph["layers"]
 
-    assert graph["layers"][0] == "cli"
-    assert graph["layers"][-1] == "errors | vocabulary"
+    assert _layer_modules(top) == ["cli"]
+    assert set(_layer_modules(bottom)) == {"errors", "vocabulary"}
+    # `|` makes the two independent of each other; `:` would let one import the other.
+    assert ":" not in bottom
 
 
 @pytest.mark.parametrize("library", CONFINED)
@@ -112,14 +171,22 @@ def test_the_modules_that_use_a_confined_library_do_import_it() -> None:
     """An allowance that outlives its use would let a later import in unnoticed."""
     for library, users in CONFINED.items():
         for user in users:
-            assert library in _imported_names(PACKAGE / f"{user}.py")
+            assert any(
+                _covers(name, library)
+                for name in _imports(PACKAGE / f"{user}.py")
+            )
+
+
+def _outside_the_package(path: Path) -> set[str]:
+    """The top-level names `scripts` and `tests` that `path` imports."""
+    return {name.split(".")[0] for name in _imports(path)} & {"scripts", "tests"}
 
 
 def test_no_module_of_the_package_imports_scripts_or_tests() -> None:
     offenders = {
         path.name: found
         for path in sorted(PACKAGE.glob("*.py"))
-        if (found := _imported_names(path) & {"scripts", "tests"})
+        if (found := _outside_the_package(path))
     }
 
     assert offenders == {}
@@ -133,32 +200,74 @@ def test_a_planted_import_of_scripts_or_tests_is_found(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    assert _imported_names(planted) & {"scripts", "tests"} == {"scripts", "tests"}
+    assert _outside_the_package(planted) == {"scripts", "tests"}
 
 
-def _copy_package(root: Path) -> Path:
-    """Copy the modules of the package into `root`, so a test can change them freely."""
-    copy = root / "continuo_contracts"
-    shutil.copytree(
-        PACKAGE,
-        copy,
-        ignore=lambda _folder, names: [
-            name for name in names if not name.endswith(".py")
-        ],
-    )
-    return copy
+def test_no_file_imports_cli_or_a_confined_library_outside_its_users() -> None:
+    """`__init__.py` is scanned with the modules: no contract reaches it."""
+    assert _guarded_imports(PACKAGE) == {}
+
+
+# Each way a file may import a guarded module, and the module it is found importing.
+PLANTED_IMPORTS = {
+    "import logging": "logging",
+    "import yaml": "yaml",
+    "import jsonschema.exceptions": "jsonschema",
+    "from yaml.reader import ReaderError": "yaml",
+    "from continuo_contracts import cli": "continuo_contracts.cli",
+    "import continuo_contracts.cli": "continuo_contracts.cli",
+    "from continuo_contracts.cli import main": "continuo_contracts.cli",
+    "from . import cli": "continuo_contracts.cli",
+    "from .cli import main": "continuo_contracts.cli",
+}
+
+
+@pytest.mark.parametrize("code", PLANTED_IMPORTS)
+@pytest.mark.parametrize("module", ["__init__", "hashing"])
+def test_a_planted_guarded_import_is_found(
+    module: str, code: str, tmp_path: Path
+) -> None:
+    """The control for the test above: it finds each form, in `__init__` and in a module."""
+    copy = _copy_package(tmp_path)
+    with (copy / f"{module}.py").open("a", encoding="utf-8") as out:
+        out.write(f"\n{code}\n")
+
+    assert _guarded_imports(copy) == {f"{module}.py": {PLANTED_IMPORTS[code]}}
+
+
+def test_a_user_of_a_confined_library_is_not_found(tmp_path: Path) -> None:
+    """The clean control: the copy has no offence, and `validate` may import `jsonschema`."""
+    copy = _copy_package(tmp_path)
+    with (copy / "validate.py").open("a", encoding="utf-8") as out:
+        out.write("\nimport jsonschema\n")
+
+    assert _guarded_imports(copy) == {}
+
+
+# What the `lint-imports` script runs, started from this interpreter so that no script has to
+# sit beside it.
+LINT_IMPORTS = (
+    "import sys;"
+    " from importlinter.cli import lint_imports_command;"
+    " sys.exit(lint_imports_command())"
+)
 
 
 def _lint_imports(root: Path) -> subprocess.CompletedProcess[str]:
     """Run the venv's lint-imports on the package copy in `root`, with the real contracts.
 
-    lint-imports puts its working directory first on the import path, so the copy wins
-    over the installed package.
+    `python -c` puts the working directory first on the import path, so the copy wins over
+    the installed package.
     """
     shutil.copy(PYPROJECT, root / "pyproject.toml")
-    executable = Path(sys.executable).with_name("lint-imports")
     return subprocess.run(
-        [str(executable), "--config", str(root / "pyproject.toml")],
+        [
+            sys.executable,
+            "-c",
+            LINT_IMPORTS,
+            "--config",
+            str(root / "pyproject.toml"),
+        ],
         cwd=root,
         capture_output=True,
         text=True,
@@ -173,7 +282,7 @@ def test_the_contracts_pass_on_an_unchanged_package_copy(tmp_path: Path) -> None
     result = _lint_imports(tmp_path)
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "4 kept, 0 broken" in result.stdout, result.stdout
+    assert f"{len(_contracts())} kept, 0 broken" in result.stdout, result.stdout
 
 
 # Each offence: the module it is added to, the code, the contract it breaks, and the edge
