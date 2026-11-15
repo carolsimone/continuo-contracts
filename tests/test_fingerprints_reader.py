@@ -290,7 +290,6 @@ def test_an_odcs_input_may_name_a_segment_in_camel_case():
         "standard_field")
 
 
-
 @pytest.mark.parametrize("text", ["", "- a\n- b\n", "version: [1\n"])
 def test_a_text_that_is_not_a_fingerprints_mapping_is_refused(text):
     with pytest.raises(FingerprintsFileError):

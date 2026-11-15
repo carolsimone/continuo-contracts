@@ -67,8 +67,15 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `lists.contract_hash_exclusions`, holds the root keys that `contract_hash` leaves out
   (`apiVersion`, `kind`, `status`, `version`): `fingerprints.contract_hash_exclusions()` and
   `Fingerprints.contract_hash_exclusions` return it, `contract.contract_hash` reads it, and
-  `parse_fingerprints()` refuses a file without the list. The guard test walks the stored form of the demo, full and messy contracts and fails for a field no
-  entry classifies.
+  `parse_fingerprints()` refuses a file without the list. The guard test walks the stored form of
+  the demo, full and messy contracts and fails for a field no entry classifies.
+- `continuo_contracts.cli` and the console script `continuo-contracts`. `validate PATH...` checks
+  `*.odcs.yaml` files (a folder is read for them, without the folders below it) and logs every
+  issue at ERROR as `<file>: <path>: <message>`. `hash FILE --service SERVICE [--read TABLE]...`
+  checks one file and prints its `contract_hash`. With `--json`, stdout is one JSON document
+  (`validate`: `valid` and the `issues` of each file, `hash`: `contract_hash` and the `stored`
+  form), and the log goes to stderr in either mode. Exit status 0 is valid, 1 is an issue and 2 is
+  a usage error, a path that names no contract file or a file that cannot be read.
 
 ## [0.1.0] - 2026-11-11
 

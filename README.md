@@ -722,8 +722,9 @@ hash, whatever their line endings, byte order mark, key order or quoting. The mo
   `kind`, `status` and `version`, 71 characters in all. Those keys are the list
   `contract_hash_exclusions` of `fingerprints.yaml`, which `fingerprints.contract_hash_exclusions()`
   returns. Every stored form holds those four with the same values, so leaving them out changes
-  nothing but keeps the hash free of the version continuo numbers from history. `stored` is hashed as it is, so pass the result of
-  `normalise_python`. Raises `CanonicalJsonError` for a value that canonical JSON cannot write.
+  nothing but keeps the hash free of the version continuo numbers from history. `stored` is
+  hashed as it is, so pass the result of `normalise_python`. Raises `CanonicalJsonError` for a
+  value that canonical JSON cannot write.
 - `logical_type(physical_type: str) -> dict[str, Any] | None` returns the ODCS logical type of an
   SQL type, read as `python.canonical_sql_type` writes it: `INTEGER` and `BIGINT` are
   `{"logicalType": "integer"}`, `NUMERIC(p,s)` and `DOUBLE PRECISION` are `number`, `TEXT` is
@@ -746,6 +747,73 @@ logical_type("varchar(64)")  # {"logicalType": "string", "logicalTypeOptions": {
   accepted, written in the canonical form.
 - `contract_hash`: returns the `contract_hash` of a stored form, `"sha256:"` and 64 hex digits.
 - `logical_type`: returns the ODCS logical type of an SQL type, or `None`.
+
+## cli
+
+```bash
+continuo-contracts validate PATH... [--service SERVICE] [--json]
+continuo-contracts hash FILE --service SERVICE [--read TABLE]... [--json]
+```
+
+```python
+from continuo_contracts.cli import main
+```
+
+The package installs the console script `continuo-contracts`, which checks the ODCS contract of a
+Python node. A producer's CI runs `validate` on its contract files, and a person runs `hash` to
+see the `contract_hash` of a file. Both commands read a file with `yaml_strict.load` and check it
+with `validate.validate_python_contract`, so they find what topology-controller finds. Both log
+`this release checks Python contracts` at INFO, in either output mode.
+
+- `validate PATH...` checks each `PATH`, a `*.odcs.yaml` file or a folder. A folder gives its
+  `*.odcs.yaml` files in name order, without the folders below it. Every issue is logged at ERROR
+  as `<file>: <path>: <message>`, and a last INFO line counts the files checked and the files with
+  an issue. `--service` is the service of the release, and a `service` property that names
+  another one is an issue; without `--service` that check is skipped. A text that
+  `yaml_strict.load` refuses is the one issue `strict_yaml` at `$`, with the line and the column
+  in its message. With `--json`, stdout is one document, and a file with no issue is listed with
+  an empty `issues`:
+
+  ```json
+  {"valid": false,
+   "files": [{"path": "contracts/kpis.odcs.yaml",
+              "issues": [{"path": "$", "reason": "file_name", "message": "..."}]}]}
+  ```
+
+- `hash FILE --service SERVICE` checks one file and prints its `contract_hash` alone on stdout.
+  With `--json`, stdout is `{"contract_hash": "sha256:...", "stored": {...}}`, where `stored` is
+  the stored form that the hash is of. `--service` is required, because it is part of the stored
+  form. `--read TABLE` names one table that the node's read queries name, written
+  `<schema>.<table>`, and may be repeated. topology-controller passes these at release time and
+  the hash covers them, so pass the same tables to get the hash it stores. A file with an issue
+  logs each issue at ERROR, prints nothing on stdout and exits 1.
+
+The human text goes through `logging` to stderr. Stdout holds only the result, so
+`continuo-contracts hash ... > hash.txt` and `continuo-contracts validate ... --json | jq` read
+it whole. When the command cannot run, stdout is empty.
+
+| Exit status | Meaning |
+|---|---|
+| 0 | every contract is valid, or `hash` printed its hash |
+| 1 | a contract has an issue |
+| 2 | a usage error of the arguments, a path that names no contract file (a folder with no `*.odcs.yaml` file, a path that does not exist, a file not named `*.odcs.yaml`), a file that is not UTF-8 text or cannot be read, or a `--read` value that is not a table |
+
+Nothing is checked when one path of the command is refused with status 2.
+
+- `main(argv: Sequence[str] | None = None) -> int` runs the command with `argv` (`sys.argv[1:]`
+  by default) and returns the exit status. It sets up logging to stderr when it runs, not when
+  the module is imported. An error of the arguments exits through `argparse` with status 2, as
+  does `--help` with status 0.
+
+```bash
+continuo-contracts hash contracts/py_daily_kpis.odcs.yaml --service service-py \
+  --read analytics.daily_transactions
+# sha256:15268bb30f205e0e5cfb4791715391f3cf7ba527a671f319a6b77e1b087dda59
+```
+
+### Public names
+
+- `main`: runs the `continuo-contracts` command and returns its exit status.
 
 ## errors
 

@@ -32,6 +32,7 @@ REQUIRED_MEMBERS: tuple[str, ...] = tuple(
     for name in (
         "__init__.py",
         "canonical.py",
+        "cli.py",
         "contract.py",
         "errors.py",
         "fingerprints.py",

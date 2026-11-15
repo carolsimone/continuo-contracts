@@ -17,6 +17,9 @@ classifiers = [
 ]
 dependencies = ["jsonschema>=4.26", "PyYAML>=6.0"]
 
+[project.scripts]
+continuo-contracts = "continuo_contracts.cli:main"
+
 [project.urls]
 Repository = "https://github.com/carolsimone/continuo-contracts"
 Changelog = "https://github.com/carolsimone/continuo-contracts/blob/main/CHANGELOG.md"

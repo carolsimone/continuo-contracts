@@ -26,6 +26,7 @@ MODULES = (
     "vocabulary",
     "validate",
     "contract",
+    "cli",
     "errors",
 )
 LISTING = "### Public names\n"
