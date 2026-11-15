@@ -31,7 +31,7 @@ jobs:
       - run: uv run --locked ruff check .
       - run: uv run --locked ruff format --check .
       - run: uv run --locked mypy continuo_contracts scripts
-      - run: uv run --locked pytest
+      - run: uv run --locked pytest -q --cov --cov-report=term-missing
 
   # Builds the distributions, refuses a wheel that lacks a module or a data file, and runs the
   # installed wheel from outside the checkout on Python 3.14.

@@ -7,3 +7,5 @@ dist/
 .worktrees/
 .DS_Store
 docs/ddd-violations/
+.coverage
+.coverage.*

@@ -46,10 +46,15 @@ and the PyYAML and jsonschema type stubs) into `.venv`.
 uv run ruff check .
 uv run ruff format --check .
 uv run mypy continuo_contracts scripts
-uv run pytest
+uv run pytest -q --cov --cov-report=term-missing
 ```
 
 These are the checks `.github/workflows/ci.yml` runs on Python 3.14.
+
+The test run measures line and branch coverage of `continuo_contracts` and fails under 100%
+(`fail_under` in `pyproject.toml`); the report lists each line and branch that no test reaches. The
+only exclusion is the `if __name__ == "__main__":` guard, and `# pragma: no cover` is not used: reach
+a line with a test through the public functions, or delete it when no input can reach it.
 
 ## Conventions
 
