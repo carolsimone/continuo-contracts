@@ -3,13 +3,15 @@
 Run it on a dist directory that holds one wheel and one sdist:
 `uv run --no-project --python 3.12 scripts/check_wheel.py dist`. It uses the standard library
 only, so any Python 3.12 runs it. The wheel must be pure Python, carry every module and data file
-the package reads at run time, carry the licence files, and declare the metadata the package
-promises. Exit status 0 means the wheel passed, 1 means at least one problem was logged.
+the package reads at run time, carry the licence files, and declare the metadata and the
+console script the package promises. Exit status 0 means the wheel passed, 1 means at least one
+problem was logged.
 """
 
 from __future__ import annotations
 
 import argparse
+import configparser
 import email.parser
 import logging
 import sys
@@ -26,6 +28,9 @@ REQUIRES_PYTHON = ">=3.12"
 LICENSE_EXPRESSION = "Apache-2.0"
 REQUIRES_DIST = ["jsonschema>=4.26", "pyyaml>=6.0"]
 LICENSE_FILES = ("LICENSE", "NOTICE")
+CONSOLE_SCRIPTS_GROUP = "console_scripts"
+CONSOLE_SCRIPT_NAME = "continuo-contracts"
+CONSOLE_SCRIPT_TARGET = "continuo_contracts.cli:main"
 
 REQUIRED_MEMBERS: tuple[str, ...] = tuple(
     f"{PACKAGE}/{name}"
@@ -73,7 +78,8 @@ def wheel_problems(wheel: Path) -> list[str]:
 
 
 def _dist_info_problems(label: str, archive: zipfile.ZipFile, names: set[str]) -> list[str]:
-    """Return the problems of the licence files and the METADATA of the wheel's `.dist-info`."""
+    """Return the problems of the licence files, the METADATA and the console script of the
+    wheel's `.dist-info`."""
     top_levels = {name.split("/")[0] for name in names}
     directories = sorted(d for d in top_levels if d.endswith(DIST_INFO_SUFFIX))
     if len(directories) != 1:
@@ -89,6 +95,11 @@ def _dist_info_problems(label: str, archive: zipfile.ZipFile, names: set[str]) -
         problems.append(f"{label}: missing member {metadata}")
     else:
         problems.extend(_metadata_problems(label, archive.read(metadata).decode("utf-8")))
+    entry_points = f"{info}/entry_points.txt"
+    if entry_points not in names:
+        problems.append(f"{label}: missing member {entry_points}")
+    else:
+        problems.extend(_entry_point_problems(label, archive.read(entry_points).decode("utf-8")))
     return problems
 
 
@@ -112,6 +123,34 @@ def _metadata_problems(label: str, text: str) -> list[str]:
         problems.append(
             f"{label}: METADATA Requires-Dist is {requires_dist}, must be {REQUIRES_DIST}")
     return problems
+
+
+def _entry_point_problems(label: str, text: str) -> list[str]:
+    """Return the problems of the `entry_points.txt` text of a wheel: it must declare the console
+    script `continuo-contracts` that runs `continuo_contracts.cli:main`."""
+    # Entry point names keep their case, and a value has no `%` interpolation.
+    parser = configparser.ConfigParser(delimiters=("=",), interpolation=None)
+    parser.optionxform = str  # type: ignore[assignment,method-assign]
+    try:
+        parser.read_string(text)
+    except configparser.Error as error:
+        return [f"{label}: entry_points.txt cannot be read: {error}"]
+    declared = (
+        parser[CONSOLE_SCRIPTS_GROUP].get(CONSOLE_SCRIPT_NAME)
+        if parser.has_section(CONSOLE_SCRIPTS_GROUP)
+        else None
+    )
+    if declared is None:
+        return [
+            f"{label}: entry_points.txt declares no {CONSOLE_SCRIPT_NAME} in "
+            f"[{CONSOLE_SCRIPTS_GROUP}]"
+        ]
+    if declared.strip() != CONSOLE_SCRIPT_TARGET:
+        return [
+            f"{label}: entry_points.txt declares {CONSOLE_SCRIPT_NAME} = {declared.strip()!r}, "
+            f"must be {CONSOLE_SCRIPT_TARGET!r}"
+        ]
+    return []
 
 
 def main(argv: list[str] | None = None) -> int:
