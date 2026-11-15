@@ -123,6 +123,53 @@ def test_from_mapping_refuses_a_missing_table():
         PythonNode.from_mapping({"schema": "analytics"})
 
 
+def test_from_mapping_leaves_the_columns_empty_when_the_entry_has_none():
+    built = PythonNode.from_mapping({"schema": "analytics", "table": "t"})
+    assert built == PythonNode(schema="analytics", table="t")
+    assert built.output_columns == ()
+
+
+@pytest.mark.parametrize("entry", [None, ["analytics", "t"], "analytics.t"])
+def test_from_mapping_refuses_an_entry_that_is_not_a_mapping(entry):
+    with pytest.raises(ProjectionError, match="must be a mapping, not"):
+        PythonNode.from_mapping(entry)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("changes", "needle"),
+    [
+        ({"schema": ""}, "schema must not be empty"),
+        ({"table": ""}, "table must not be empty"),
+        ({"kind": ""}, "kind must not be empty"),
+        (
+            {"output_columns": (PythonColumn("", "INTEGER"),)},
+            r"output_columns\[0\]\.name must not be empty",
+        ),
+    ],
+)
+def test_an_empty_name_is_refused(changes, needle):
+    with pytest.raises(ProjectionError, match=needle) as err:
+        code_projection(node(**changes))
+    assert str(err.value).startswith(
+        f"{changes.get('schema', 'analytics')}.{changes.get('table', 't')}: "
+    )
+
+
+def test_a_column_that_is_not_a_python_column_is_refused():
+    with pytest.raises(
+        ProjectionError,
+        match=r"output_columns\[1\] must be a PythonColumn, not dict",
+    ):
+        code_projection(
+            node(
+                output_columns=(
+                    PythonColumn("x", "INTEGER"),
+                    {"name": "y", "type": "INTEGER"},
+                )
+            )
+        )
+
+
 @pytest.mark.parametrize(
     ("entry", "needle"),
     [

@@ -1150,6 +1150,27 @@ def test_a_double_precision_key_column_is_refused(raw):
     assert "DOUBLE PRECISION" in issue.message
 
 
+@pytest.mark.parametrize("raw", [7, None, ["INTEGER"], 1.5, True])
+def test_a_column_type_that_is_not_a_string_is_refused_by_the_rule(raw):
+    doc = _kpis()
+    _columns(doc)[0]["physicalType"] = raw
+    issues = rule_issues(doc, path=KPIS_PATH, service=SERVICE)
+    assert _found(issues) == [
+        ("schema[0].properties[0].physicalType", "column_type")
+    ]
+    assert "is not a type continuo accepts" in issues[0].message
+
+
+@pytest.mark.parametrize("raw", [7, None, ["DOUBLE PRECISION"]])
+def test_a_key_column_whose_type_is_not_a_string_gets_only_the_type_issue(raw):
+    doc = _upsert()
+    _columns(doc)[1]["physicalType"] = raw
+    issues = rule_issues(doc, path=_path_of("python_node"), service=SERVICE)
+    assert _found(issues) == [
+        ("schema[0].properties[1].physicalType", "column_type")
+    ]
+
+
 def test_a_key_column_whose_type_is_refused_gets_only_the_type_issue():
     doc = _upsert()
     _columns(doc)[1]["physicalType"] = "float"

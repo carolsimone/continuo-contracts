@@ -16,6 +16,7 @@ from continuo_contracts.fingerprints import (
     projection_keys,
     render_in,
     render_markdown,
+    unclassified,
 )
 
 # A backslash at the end of a line joins it to the next, so a long flow mapping
@@ -134,6 +135,28 @@ def test_classify_refuses_a_name_that_is_not_a_family():
 
 def test_unclassified_lists_the_unknown_names_sorted():
     assert FP.unclassified("dbt-model", ["raw_code", "zz", "aa"]) == ["aa", "zz"]
+
+
+def test_unclassified_refuses_a_name_that_is_not_a_family():
+    for family in ("every", "python"):
+        with pytest.raises(ValueError, match="unknown family"):
+            FP.unclassified(family, ["raw_code"])
+
+
+def test_entries_refuses_a_name_that_is_not_a_section():
+    with pytest.raises(ValueError, match="unknown section"):
+        FP.entries("python")
+    assert [entry.id for entry in FP.entries("dbt-test")] == ["severity"]
+
+
+def test_the_packaged_file_lists_the_names_it_does_not_classify():
+    names = ["projection.assets", "odcs.custom.madeUp", "odcs.custom.madeUp"]
+    assert unclassified("python-node", names) == ["odcs.custom.madeUp"]
+    assert unclassified("python-node", names) == load().unclassified(
+        "python-node", names
+    )
+    with pytest.raises(ValueError, match="unknown family"):
+        unclassified("python", names)
 
 
 def test_moves_reads_the_parts_and_the_widening():
@@ -428,6 +451,59 @@ ODCS_REFUSALS = [
 
 @pytest.mark.parametrize(("needle", "mutate"), ODCS_REFUSALS)
 def test_a_malformed_odcs_input_rule_or_list_is_refused(needle, mutate):
+    with pytest.raises(FingerprintsFileError, match=re.escape(needle)):
+        parse_fingerprints(_with(mutate))
+
+
+SHAPE_REFUSALS = [
+    (
+        "expected a list of entries",
+        lambda d: d["families"].update({"dbt-seed": {"id": "raw_code"}}),
+    ),
+    (
+        "expected a list of entries",
+        lambda d: d["families"].update({"every": "provenance"}),
+    ),
+    ("does not match", lambda d: _model(0)(d).update(id="Raw Code")),
+    ("does not match", lambda d: _model(0)(d).update(id=7)),
+    (
+        "field: expected a non-empty string",
+        lambda d: _model(0)(d).update(field=" "),
+    ),
+    (
+        "source: expected a non-empty string",
+        lambda d: _model(0)(d).update(source=""),
+    ),
+    ("why: expected a non-empty string", lambda d: _model(0)(d).update(why=7)),
+    (
+        "parts: expected a non-empty list of parts",
+        lambda d: _model(0)(d).update(parts=[]),
+    ),
+    (
+        "parts: expected a non-empty list of parts",
+        lambda d: _model(0)(d).update(parts="source"),
+    ),
+    (
+        "when.parts: expected a non-empty list of parts",
+        lambda d: _model(3)(d)["when"].update(parts=[]),
+    ),
+    (
+        "parts[1]: duplicate part 'source'",
+        lambda d: _model(0)(d).update(parts=["source", "source"]),
+    ),
+    (
+        "when.parts[1]: duplicate part 'compiled'",
+        lambda d: _model(3)(d)["when"].update(parts=["compiled", "compiled"]),
+    ),
+    ("inputs: expected a list", lambda d: _model(0)(d).update(inputs="raw_code")),
+    ("inputs: expected a list", lambda d: _model(0)(d).update(inputs=None)),
+    ("is not an input name", lambda d: _model(0)(d).update(inputs=[7])),
+    ("is not an input name", lambda d: _model(0)(d).update(inputs=[None])),
+]
+
+
+@pytest.mark.parametrize(("needle", "mutate"), SHAPE_REFUSALS)
+def test_an_entry_of_the_wrong_shape_is_refused_with_its_place(needle, mutate):
     with pytest.raises(FingerprintsFileError, match=re.escape(needle)):
         parse_fingerprints(_with(mutate))
 

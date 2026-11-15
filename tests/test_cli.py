@@ -170,6 +170,19 @@ def test_validate_does_not_read_a_folder_below_the_one_it_is_given(
     assert main(["validate", str(tmp_path)]) == 2
 
 
+def test_validate_skips_a_folder_entry_that_is_not_a_regular_file(
+    tmp_path, capsys
+):
+    _put(tmp_path, "py_daily_kpis.odcs.yaml", _demo_text())
+    (tmp_path / "a_folder.odcs.yaml").mkdir()
+    (tmp_path / "a_dangling_link.odcs.yaml").symlink_to(tmp_path / "nothing_here")
+    assert main(["validate", str(tmp_path), "--json"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert [file["path"] for file in report["files"]] == [
+        (tmp_path / "py_daily_kpis.odcs.yaml").as_posix()
+    ]
+
+
 def test_validate_refuses_a_missing_path(tmp_path, caplog):
     assert main(["validate", str(tmp_path / "missing.odcs.yaml")]) == 2
     assert len(_errors(caplog)) == 1

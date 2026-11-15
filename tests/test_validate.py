@@ -1,4 +1,5 @@
 import copy
+import datetime
 import time
 
 from pathlib import Path
@@ -1266,6 +1267,43 @@ def test_validate_python_contract_gives_the_rule_issues_otherwise():
     assert validate_python_contract(
         doc, path=KPIS_PATH, service=SERVICE
     ) == rule_issues(doc, path=KPIS_PATH, service=SERVICE)
+
+
+def test_a_key_that_is_not_a_string_is_reported_with_each_error_it_causes():
+    # A key that `repr` writes as something other than a literal, such as the date key that a
+    # YAML 1.1 reader makes of `2026-11-14`, cannot be read back from the message, so the
+    # "Unevaluated properties" error next to the "Additional properties" one is not a repeat.
+    doc = _kpis()
+    doc[datetime.date(2026, 11, 14)] = "x"
+    issues = schema_issues(doc)
+    assert [issue.path for issue in issues] == ["$", "$"]
+    assert [issue.message.partition(" (")[0] for issue in issues] == [
+        "Additional properties are not allowed",
+        "Unevaluated properties are not allowed",
+    ]
+    assert all("datetime.date(2026, 11, 14)" in issue.message for issue in issues)
+
+
+@pytest.mark.parametrize("written", ["x", {"a": 1}, 7, None])
+def test_a_custom_properties_value_that_is_not_a_list_is_not_walked(written):
+    doc = _kpis()
+    doc["customProperties"] = written
+    issues = rule_issues(doc, path=KPIS_PATH, service=SERVICE)
+    assert issues
+    assert {issue.path for issue in issues} == {"customProperties"}
+    doc = _kpis()
+    doc["schema"][0]["customProperties"] = written
+    assert rule_issues(doc, path=KPIS_PATH, service=SERVICE) == []
+
+
+@pytest.mark.parametrize("name", [7, None, ["entity"]])
+def test_a_continuo_property_with_no_name_is_left_to_the_schema_check(name):
+    doc = _kpis()
+    doc["customProperties"].append(_continuo(name, "x"))
+    assert rule_issues(doc, path=KPIS_PATH, service=SERVICE) == []
+    assert [issue.path for issue in schema_issues(doc)] == [
+        "customProperties[4].property"
+    ]
 
 
 def test_a_comparison_value_of_a_quality_rule_is_data_and_not_walked():

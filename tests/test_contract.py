@@ -704,6 +704,46 @@ def test_a_physical_type_that_is_not_accepted_is_stored_as_written():
     assert "logicalType" not in stored["schema"][0]["properties"][0]
 
 
+@pytest.mark.parametrize("written", ["varchar(0)", "CHAR(9007199254740992)"])
+def test_a_type_with_no_logical_type_is_stored_canonical_and_loses_the_written_one(
+    written,
+):
+    # The contract check refuses a length outside 1 to 2**53 - 1, so no stored form holds one;
+    # normalise_python writes the type's canonical spelling and gives it no logical type.
+    doc = _with_column(
+        _kpis(),
+        0,
+        physicalType=written,
+        logicalType="string",
+        logicalTypeOptions={"maxLength": 5},
+    )
+    stored = normalise_python(doc, service="service-py", reads=[])
+    column = stored["schema"][0]["properties"][0]
+    assert column["physicalType"] == written.upper()
+    assert "logicalType" not in column
+    assert "logicalTypeOptions" not in column
+
+
+def test_a_threshold_keeps_its_fraction_and_a_whole_float_is_written_as_an_integer():
+    doc = _kpis()
+    column = doc["schema"][0]["properties"][0]
+    column["quality"] = [
+        {"metric": "rowCount", "mustBeGreaterThan": 0.5},
+        {"metric": "rowCount", "mustBeLessThan": 2.0},
+    ]
+    rules = _stored(doc, reads=KPIS_READS)["schema"][0]["properties"][0][
+        "quality"
+    ]
+    thresholds = {
+        key: value
+        for rule in rules
+        for key, value in rule.items()
+        if key.startswith("mustBe")
+    }
+    assert thresholds == {"mustBeGreaterThan": 0.5, "mustBeLessThan": 2}
+    assert type(thresholds["mustBeLessThan"]) is int
+
+
 # the key
 
 

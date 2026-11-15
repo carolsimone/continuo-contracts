@@ -5,6 +5,7 @@ import time
 from importlib import resources
 
 import pytest
+import yaml
 
 from continuo_contracts import yaml_strict
 from continuo_contracts.canonical import MAX_DEPTH
@@ -145,6 +146,70 @@ def test_a_duplicate_key_after_a_crlf_names_the_line_of_the_second_key():
 def test_a_yaml_syntax_error_names_its_position():
     with pytest.raises(StrictYamlError, match=r"^line 2, column \d+: "):
         yaml_strict.load("a: [1, 2\nb: 3\n")
+
+
+def test_a_yaml_error_with_no_context_is_the_problem_alone():
+    with pytest.raises(StrictYamlError) as raised:
+        yaml_strict.load("a: b: c\n")
+    assert str(raised.value) == (
+        "line 1, column 5: mapping values are not allowed here"
+    )
+    with pytest.raises(StrictYamlError) as raised:
+        yaml_strict.load("a: 1\n...\nb\n")
+    assert str(raised.value).startswith(
+        "line 3, column 1: expected '<document start>'"
+    )
+
+
+@pytest.mark.parametrize(
+    ("context", "reason"),
+    [(None, "no position"), ("while testing", "while testing, no position")],
+)
+def test_a_pyyaml_error_with_no_position_is_an_error_at_line_0_column_0(
+    monkeypatch, context, reason
+):
+    def refuse(self):
+        raise yaml.MarkedYAMLError(context=context, problem="no position")
+
+    monkeypatch.setattr(yaml.SafeLoader, "get_single_data", refuse)
+    with pytest.raises(StrictYamlError) as raised:
+        yaml_strict.load("a: 1\n")
+    assert (raised.value.line, raised.value.column) == (0, 0)
+    assert str(raised.value) == f"line 0, column 0: {reason}"
+
+
+@pytest.mark.parametrize(
+    ("text", "kind"),
+    [
+        ("a: !!map foo\n", "scalar"),
+        ("a: !!map [1]\n", "sequence"),
+        ("a: !!map\n", "scalar"),
+    ],
+)
+def test_a_map_tag_on_something_that_is_not_a_mapping_is_refused(text, kind):
+    with pytest.raises(StrictYamlError) as raised:
+        yaml_strict.load(text)
+    assert str(raised.value) == (
+        f"line 1, column 4: expected a mapping, but found a {kind}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "kind"),
+    [
+        ("a: !!str [1]\n", "sequence"),
+        ("a: !!int {b: 1}\n", "mapping"),
+        ("a: !!null [1]\n", "sequence"),
+        ("a: !!bool {}\n", "mapping"),
+        ("a: !!float [1.5]\n", "sequence"),
+    ],
+)
+def test_a_scalar_tag_on_a_sequence_or_a_mapping_is_refused(text, kind):
+    with pytest.raises(StrictYamlError) as raised:
+        yaml_strict.load(text)
+    assert str(raised.value) == (
+        f"line 1, column 4: expected a scalar, but found a {kind}"
+    )
 
 
 def test_a_character_yaml_cannot_hold_names_its_position():

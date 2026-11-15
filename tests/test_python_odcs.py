@@ -373,6 +373,14 @@ def test_a_property_of_the_wrong_shape_is_refused_as_a_projection_error(custom):
         node_from_odcs(_contract(columns=[_column("x")], custom=custom))
 
 
+@pytest.mark.parametrize("properties", ["x INTEGER", {"x": "INTEGER"}, 7])
+def test_properties_that_are_not_a_list_are_refused(properties):
+    doc = _contract(columns=[_column("x")])
+    doc["schema"][0]["properties"] = properties
+    with pytest.raises(ProjectionError, match="properties must be a list, not"):
+        node_from_odcs(doc)
+
+
 @pytest.mark.parametrize(
     "column", [["x", "INTEGER"], {"name": "x"}, {"physicalType": "DATE"}]
 )
