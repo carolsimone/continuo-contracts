@@ -45,7 +45,7 @@ and the PyYAML and jsonschema type stubs) into `.venv`.
 ```bash
 uv run ruff check .
 uv run ruff format --check .
-uv run mypy continuo_contracts scripts
+uv run mypy
 uv run lint-imports
 uv run pytest -q --cov --cov-report=term-missing
 ```

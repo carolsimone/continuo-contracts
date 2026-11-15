@@ -30,7 +30,7 @@ jobs:
         run: uv run --locked python -c "import sys; assert sys.version.startswith(sys.argv[1] + '.'), sys.version" "$EXPECTED_PYTHON"
       - run: uv run --locked ruff check .
       - run: uv run --locked ruff format --check .
-      - run: uv run --locked mypy continuo_contracts scripts
+      - run: uv run --locked mypy
       - run: uv run --locked lint-imports
       - run: uv run --locked pytest -q --cov --cov-report=term-missing
 
