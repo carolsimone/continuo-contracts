@@ -224,9 +224,12 @@ jobs:
           set -euo pipefail
           # The index can lag the upload, so ask every 20 s, up to 30 times. pip's own
           # cache is off: it would keep serving the index page it read before the upload.
+          # The runner's python3 is older than the package's Requires-Python, so pip is told
+          # to select for the Python of the matrix, or it would skip the release.
           downloaded=false
           for attempt in $(seq 1 30); do
             if python3 -m pip download --no-cache-dir --no-deps --only-binary :all: \
+                --python-version "$PY_VERSION" \
                 --index-url "$INDEX" "continuo-contracts==$VERSION" -d "$RUNNER_TEMP/dl"; then
               downloaded=true
               break
