@@ -15,7 +15,10 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
     "Typing :: Typed",
 ]
-dependencies = ["PyYAML>=6.0"]
+dependencies = ["jsonschema>=4.26", "PyYAML>=6.0"]
+
+[project.scripts]
+continuo-contracts = "continuo_contracts.cli:main"
 
 [project.urls]
 Repository = "https://github.com/carolsimone/continuo-contracts"
@@ -27,6 +30,7 @@ dev = [
     "ruff==0.17.1",
     "mypy==2.4.0",
     "types-PyYAML==6.0.12.20250915",
+    "types-jsonschema==4.26.0.20261006",
 ]
 
 [build-system]

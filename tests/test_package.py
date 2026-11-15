@@ -13,7 +13,10 @@ def test_distribution_supports_python_3_12_and_later():
     assert importlib.metadata.metadata(DIST)["Requires-Python"] == ">=3.12"
 
 
-def test_distribution_is_apache_2_0_and_needs_only_pyyaml():
+def test_distribution_is_apache_2_0_and_needs_only_jsonschema_and_pyyaml():
     meta = importlib.metadata.metadata(DIST)
     assert meta["License-Expression"] == "Apache-2.0"
-    assert [r.replace(" ", "").lower() for r in meta.get_all("Requires-Dist")] == ["pyyaml>=6.0"]
+    assert sorted(r.replace(" ", "").lower() for r in meta.get_all("Requires-Dist")) == [
+        "jsonschema>=4.26",
+        "pyyaml>=6.0",
+    ]

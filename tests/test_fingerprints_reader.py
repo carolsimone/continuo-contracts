@@ -9,6 +9,7 @@ from continuo_contracts.fingerprints import (
     Entry,
     When,
     _StrictLoader,
+    contract_hash_exclusions,
     hashed_config_denylist,
     load,
     parse_fingerprints,
@@ -24,6 +25,7 @@ version: 1
 lists:
   hashed_config_denylist: ["meta", "tags"]
   projection_keys: ["schema", "table"]
+  contract_hash_exclusions: ["kind", "version"]
 families:
   every:
     - {id: "provenance", field: "Image tag", source: "the release", fingerprint: "neither", \
@@ -52,6 +54,12 @@ parts: ["config"], why: "lower-cased", inputs: ["config.severity"]}
   python-node:
     - {id: "assets", field: "`assets`", source: "authored", fingerprint: "both", \
 parts: ["config", "shared"], why: "projection and shared part", inputs: ["projection.assets"]}
+    - {id: "team", field: "`team.name`", source: "authored", fingerprint: "contract", \
+why: "not code", inputs: ["odcs.team.name", "odcs.custom.schedule"]}
+    - {id: "refused_property", field: "`filePath`", source: "authored", fingerprint: "neither", \
+why: "refused", inputs: ["odcs.custom.filePath"]}
+    - {id: "standard_field", field: "Every other standard field", source: "authored", \
+fingerprint: "contract", why: "hashed as written", inputs: ["odcs.*"], rule: "standard_field"}
   python-csv: []
   python-api: []
 """
@@ -72,6 +80,19 @@ FP = parse_fingerprints(MINIMAL)
     ("python-node", "config.persist_docs", None),           # the rule is for dbt only
     ("python-node", "projection.assets", "assets"),
     ("dbt-model", "nothing.here", None),
+    ("python-node", "odcs.team.name", "team"),
+    ("python-node", "odcs.custom.schedule", "team"),
+    ("python-node", "odcs.custom.filePath", "refused_property"),
+    ("python-node", "odcs.description.usage", "standard_field"),    # the rule
+    ("python-node", "odcs.schema.properties.businessName", "standard_field"),
+    ("python-node", "odcs.customProperties", "standard_field"),     # another vendor's property
+    ("python-node", "odcs.custom.madeUp", None),                    # a continuo property
+    ("python-node", "odcs.schema.custom.madeUp", None),
+    ("python-node", "odcs.schema.properties.quality.custom.where", None),
+    ("python-node", "odcs.custom", None),
+    ("python-csv", "odcs.description.usage", None),                 # no rule entry in that family
+    ("dbt-model", "odcs.description.usage", None),                  # the rule is for Python only
+    ("dbt-model", "odcs.team.name", None),
 ])
 def test_classify(family, name, expected):
     entry = FP.classify(family, name)
@@ -127,6 +148,10 @@ def test_render_markdown():
     assert "The *Part, or why neither* column names the part" in md
     assert "`contract_hash`, the fingerprint of a node's contract" in md
     assert "`ci.source_hash` (the digest of the node's script bytes" in md
+    assert "- `contract_hash_exclusions`: the root keys of the stored form that `contract_hash` " \
+           "leaves out: `kind`, `version`." in md
+    assert "`odcs.<path>`" in md and "`odcs.*`" in md
+    assert "| `odcs.team.name`, `odcs.custom.schedule` |" in md
 
 
 def _with(mutate):
@@ -166,7 +191,9 @@ def test_a_malformed_file_is_refused(needle, mutate):
         parse_fingerprints(_with(mutate))
 
 
-def test_the_packaged_file_holds_the_two_lists():
+def test_the_packaged_file_holds_the_three_lists():
+    assert contract_hash_exclusions() == frozenset({"apiVersion", "kind", "status", "version"})
+    assert load().contract_hash_exclusions == contract_hash_exclusions()
     assert hashed_config_denylist() == frozenset(
         {"meta", "docs", "description", "grants", "tags", "access", "group", "freshness"})
     assert projection_keys() == ("schema", "table", "kind", "script", "reads", "output_columns",
@@ -197,6 +224,70 @@ MORE_REFUSALS = [
 def test_a_malformed_rule_or_value_is_refused(needle, mutate):
     with pytest.raises(FingerprintsFileError, match=re.escape(needle)):
         parse_fingerprints(_with(mutate))
+
+
+def _python(i):
+    return lambda d: d["families"]["python-node"][i]
+
+
+def _second_standard_field(d):
+    d["families"]["python-node"].append(
+        {**_python(3)(d), "id": "standard_field_2", "inputs": ["odcs.*"]})
+
+
+ODCS_REFUSALS = [
+    ("rule", lambda d: _model(0)(d).update(rule="standard_field")),
+    ("rule", lambda d: d["families"]["every"][0].update(rule="standard_field")),
+    ("rule", lambda d: _python(3)(d).update(fingerprint="neither")),
+    ("rule", lambda d: _python(3)(d).update(fingerprint="both", parts=["config"])),
+    ("rule", lambda d: _python(3)(d).update(inputs=["odcs.*", "odcs.team.name"])),
+    ("rule", lambda d: _python(3)(d).update(inputs=["odcs.team.name"])),
+    ("rule", lambda d: _python(3)(d).update(inputs=["config.*"])),
+    ("rule", lambda d: _python(3)(d).update(
+        when={"condition": "upsert", "fingerprint": "both", "parts": ["config"]})),
+    ("rule", _second_standard_field),
+    ("rule", lambda d: _python(3)(d).update(rule="outside_standard_field")),
+    ("odcs.*", lambda d: _python(1)(d).update(inputs=["odcs.*"])),
+    ("odcs.*", lambda d: _model(0)(d).update(inputs=["odcs.*"])),
+    ("input name", lambda d: _python(1)(d).update(inputs=["odcs"])),
+    ("input name", lambda d: _python(1)(d).update(inputs=["odcs."])),
+    ("input name", lambda d: _python(1)(d).update(inputs=["odcs.1a"])),
+    ("input name", lambda d: _python(1)(d).update(inputs=["odcs.a-b"])),
+    ("input name", lambda d: _python(1)(d).update(inputs=["odcs..a"])),
+    ("input name", lambda d: _python(1)(d).update(inputs=["odcs.a_b"])),
+    ("input name", lambda d: _python(1)(d).update(inputs=["Odcs.a"])),
+    ("input name", lambda d: _python(1)(d).update(inputs=["odcs.schema.*"])),
+    ("input name", lambda d: _python(1)(d).update(inputs=["odcs.*.name"])),
+    ("input name", lambda d: _model(0)(d).update(inputs=["config.Foo"])),
+    ("duplicate input", lambda d: _python(1)(d).update(
+        inputs=["odcs.team.name", "odcs.team.name"])),
+    ("duplicate input", lambda d: _python(2)(d).update(inputs=["odcs.team.name"])),
+    ("missing key 'contract_hash_exclusions'",
+     lambda d: d["lists"].pop("contract_hash_exclusions")),
+    ("contract_hash_exclusions", lambda d: d["lists"].update(contract_hash_exclusions=[])),
+    ("contract_hash_exclusions", lambda d: d["lists"].update(contract_hash_exclusions="kind")),
+    ("duplicate name", lambda d: d["lists"]["contract_hash_exclusions"].append("kind")),
+    ("key name", lambda d: d["lists"]["contract_hash_exclusions"].append("a.b")),
+    ("key name", lambda d: d["lists"]["contract_hash_exclusions"].append(" version")),
+    ("key name", lambda d: d["lists"]["contract_hash_exclusions"].append(7)),
+]
+
+
+@pytest.mark.parametrize(("needle", "mutate"), ODCS_REFUSALS)
+def test_a_malformed_odcs_input_rule_or_list_is_refused(needle, mutate):
+    with pytest.raises(FingerprintsFileError, match=re.escape(needle)):
+        parse_fingerprints(_with(mutate))
+
+
+def test_an_odcs_input_may_name_a_segment_in_camel_case():
+    def mutate(d):
+        _python(1)(d).update(
+            inputs=["odcs.custom.timeoutMinutes", "odcs.schema.properties.logicalTypeOptions"])
+    fp = parse_fingerprints(_with(mutate))
+    assert fp.classify("python-node", "odcs.custom.timeoutMinutes").id == "team"
+    assert fp.classify("python-node", "odcs.schema.properties.logicalTypeOptions").id == "team"
+    assert fp.classify("python-node", "odcs.schema.properties.logicaltypeoptions").id == (
+        "standard_field")
 
 
 @pytest.mark.parametrize("text", ["", "- a\n- b\n", "version: [1\n"])

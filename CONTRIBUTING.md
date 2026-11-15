@@ -55,8 +55,9 @@ These are the checks `.github/workflows/ci.yml` runs on Python 3.12, 3.13 and 3.
 - **Changelog.** A pull request that changes behaviour adds a line under
   `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md), Keep a Changelog style.
 - **Python logging.** Use the standard `logging` module for diagnostic output, written to
-  stderr, never `print`. The library modules log nothing. The only exception is a
-  machine-read stdout value, which stays an explicit `print`.
+  stderr, never `print`. The library modules log nothing, and `cli` logs from `main`, not at
+  import. The only exception is a machine-read stdout value, such as the JSON or the hash that
+  `cli` prints, which stays an explicit `print`.
 - **Fingerprint declaration.** Change `continuo_contracts/fingerprints.yaml`, never
   `docs/fingerprints.md`; then run `uv run python scripts/render_fingerprints.py`. The test
   `test_the_docs_are_the_rendered_file` fails until you do.
@@ -77,11 +78,26 @@ not a service, and layers would add indirection without a second implementation.
 - `hashing`: `sha256_hex`, the `content_hash` folds and the shared fold.
 - `python`: the Python node, its code projection and the SQL type canonicaliser.
 - `fingerprints`: the field declaration, its YAML loader and its Markdown renderer.
+- `schema`: the packaged ODCS v3.2.0 JSON schema and the check of its bytes.
+- `yaml_strict`: the reader of a contract file, YAML 1.2 core with no aliases, merge keys or
+  repeated keys.
+- `vocabulary`: the custom properties of the `continuo` vendor and where each may sit.
+- `validate`: the check of a Python node's ODCS contract, the JSON schema and continuo's rules, with
+  every problem as an `Issue` that has a path and a closed reason.
+- `contract`: the stored form of a Python node's ODCS contract, in the canonical form, and its
+  `contract_hash`.
+- `cli`: the `continuo-contracts` command, `validate` and `hash`, over contract files.
 
-`errors` imports nothing from the package. `canonical`, `hashing` and `fingerprints` import only
-`errors` (`fingerprints` also PyYAML), `python` imports the other four, and nothing imports `scripts`
-or `tests`. The only file the package reads is the packaged `fingerprints.yaml`, in `fingerprints.load()`.
-A split into layers is proposed only when a module gets a second reason to change.
+`errors` and `vocabulary` import nothing from the package. `canonical`, `hashing`, `fingerprints`
+and `schema` import only `errors` (`fingerprints` also PyYAML), `yaml_strict` imports `canonical`,
+`errors` and PyYAML, `python` imports `canonical`, `errors`, `hashing`, `fingerprints` and
+`vocabulary`, `validate` imports `contract`, `errors`, `python`, `schema`, `vocabulary` and
+jsonschema, `contract` imports `canonical`, `errors`, `fingerprints`, `hashing`, `python` and
+`vocabulary`, `cli` imports `contract`, `errors`, `validate` and `yaml_strict`, and nothing imports
+`scripts` or `tests`. The only files the package reads are the packaged `fingerprints.yaml`, in
+`fingerprints.load()`, the packaged ODCS schema, in `schema.load()`, and the contract files that
+the arguments of `cli` name. A split into layers is proposed only when a module gets a second
+reason to change.
 
 ## Releasing
 

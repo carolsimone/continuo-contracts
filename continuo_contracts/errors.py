@@ -1,5 +1,7 @@
 """The errors this package defines."""
 
+from typing import Self
+
 
 class ContractsError(ValueError):
     """The base of the errors this package defines, each raised for an input it refuses.
@@ -21,10 +23,12 @@ class CanonicalJsonError(ContractsError):
 
 
 class HashInputError(ContractsError):
-    """A hash input in a form this package refuses, such as a unit key that is empty or a unit
-    digest that is not 64 lowercase hex characters.
+    """A hash input in a form this package refuses, such as a unit key that is empty, a unit
+    digest that is not 64 lowercase hex characters, a `reads` entry of a contract that is not
+    `<schema>.<table>` (exactly two parts joined by a dot, neither empty, with no whitespace and
+    no control character) or a service of a release that is empty or blank.
 
-    The message names the offending unit key.
+    The message names the offending unit key or `reads` entry.
     """
 
 
@@ -42,3 +46,32 @@ class FingerprintsFileError(ContractsError):
     The message names the location in the file, such as `families.dbt-model[3] (meta_other)`,
     then `: ` and the reason.
     """
+
+
+class SchemaFileError(ContractsError):
+    """The packaged ODCS JSON schema does not have the bytes this package pins.
+
+    The message names the file, then `: ` and the SHA-256 it found next to the pinned one.
+    """
+
+
+class StrictYamlError(ContractsError):
+    """A text that `yaml_strict.load` refuses.
+
+    The message is ``line <line>, column <column>: <reason>``. `line` and `column` count from 1
+    and are 0 when the reason has no position in the text, as for a value that canonical JSON
+    refuses after the whole text was read (its reason then starts with the JSON path of the value).
+    """
+
+    line: int
+    column: int
+    reason: str
+
+    def __init__(self, line: int, column: int, reason: str) -> None:
+        super().__init__(f"line {line}, column {column}: {reason}")
+        self.line = line
+        self.column = column
+        self.reason = reason
+
+    def __reduce__(self) -> tuple[type[Self], tuple[int, int, str]]:
+        return (type(self), (self.line, self.column, self.reason))

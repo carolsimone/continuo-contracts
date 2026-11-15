@@ -12,6 +12,7 @@ The names in the *Inputs* column are these:
 - dbt enforced contract: `contract.columns`, `constraints`.
 - dbt shared units: `macros`, `functions`, `unit_tests`, `on_run_start`, `on_run_end`, `project_flags`, `generate_schema_name`, `generate_alias_name`.
 - Python: `projection.<key>` for each key of the code projection, `ci.source_hash` (the digest of the node's script bytes, computed by the producer's CI, and for a CSV node the digest of its URI), `ci.shared_code_hash` (the shared part for the in-repo files the script imports or lists as assets, folded path by path by `shared_hash`).
+- Python contract: `odcs.<path>` for a field of the contract's stored form, written with its ODCS names as they are in the file and without array indexes, such as `odcs.team.name` or `odcs.schema.properties.logicalType`. A continuo custom property is `odcs.custom.<property>` on the contract (`odcs.custom.timeoutMinutes`) and `odcs.schema.custom.<property>` on the schema object (`odcs.schema.custom.reads`). `odcs.*` covers every standard ODCS field that no entry names, which a Python family classifies as contract, and no continuo custom property.
 
 ## Terms
 
@@ -23,6 +24,7 @@ The names in the *Inputs* column are these:
 
 - `hashed_config_denylist`: the dbt `config` keys that stay out of the hashed config: `access`, `description`, `docs`, `freshness`, `grants`, `group`, `meta`, `tags`.
 - `projection_keys`: the keys of the Python code projection, in projection order: `schema`, `table`, `kind`, `script`, `reads`, `output_columns`, `extra_columns`, `config`, `secret_ref`, `mode_type`, `primary_key`, `assets`.
+- `contract_hash_exclusions`: the root keys of the stored form that `contract_hash` leaves out: `apiVersion`, `kind`, `status`, `version`.
 
 ## Every family
 
@@ -140,48 +142,117 @@ The names in the *Inputs* column are these:
 
 | Field or input | Source | In | Part, or why neither | Inputs |
 |---|---|---|---|---|
-| `id` | authored, lower case | both (config) | content: its schema part, the projection's `schema`; contract: `id` | `projection.schema` |
-| The table, `schema[0].name`, and `name` | authored; `name` defaults to the table | both (config) | content: the projection's `table`; contract: `schema[0].name`, `name` | `projection.table` |
+| `id` | authored, lower case | both (config) | content: its schema part, the projection's `schema`; contract: `id` | `projection.schema`, `odcs.id` |
+| The table, `schema[0].name`, and `name` | authored; `name` defaults to the table | both (config) | content: the projection's `table`; contract: `schema[0].name`, `name` | `projection.table`, `odcs.schema.name`, `odcs.name` |
+| `physicalName` | defaulted to the table | contract | stored and hashed; any other value is refused, so it adds nothing beyond the table | `odcs.schema.physicalName` |
+| `schema[0].physicalType` | authored, must be `table` | contract | a constant for a Python node | `odcs.schema.physicalType` |
 | Script bytes | the script file | content (source) | source part, computed by the producer's CI | `ci.source_hash` |
-| `script` | authored path | both (config) | content: the projection's `script`; contract: `script` | `projection.script` |
+| `script` | authored path | both (config) | content: the projection's `script`; contract: `script` | `projection.script`, `odcs.custom.script` |
 | In-repo import closure | the files the script imports | content (shared) | shared part, each folded with its path, computed by the producer's CI | `ci.shared_code_hash` |
-| `assets` | authored list | both (config, shared) | content: the list in the projection, the files' bytes in the shared part; contract: `assets` | `projection.assets` |
-| `readQueries` | authored | both (config) | content: the projection's `reads`, each query with LF line endings and no outer ASCII whitespace; contract: `readQueries` | `projection.reads` |
-| Columns: name and order | `schema[0].properties` | both (config) | content: the projection's `output_columns`; contract: `properties` in file order | `projection.output_columns` |
-| Column `physicalType` | authored | both (config) | content: the canonical type, so `INT` and `INTEGER` hash alike; contract: the type as written | |
-| Column `required` | authored | both (config) | content: `nullable` in the projection; contract: `required` | |
-| `primaryKey`, `primaryKeyPosition` | authored | contract; both (config) on an `upsert` node | content: the projection's `primary_key`, `[]` unless `upsert`; contract: the key, descriptive on `replace` and `append` | `projection.primary_key` |
-| `kind` | authored, default `python-node` | both (config) | content: the projection's canonical kind; contract: `kind` | `projection.kind` |
-| `modeType` | authored, default `replace` | both (config) | content: the projection's `mode_type`; contract: `modeType` | `projection.mode_type` |
-| `extraColumns` | authored, default `raise` | both (config) | content: the projection's `extra_columns`; contract: `extraColumns` | `projection.extra_columns` |
-| `config` | authored | both (config) | content: the projection's `config`; contract: `config` | `projection.config` |
-| `csvSource`, `secretRef` | refused on a `python-node` | neither | the projection's `reads` holds the read queries, and its `secret_ref` is `""` | `projection.secret_ref` |
+| `assets` | authored list | both (config, shared) | content: the list in the projection, the files' bytes in the shared part; contract: `assets` | `projection.assets`, `odcs.custom.assets` |
+| `readQueries` | authored | both (config) | content: the projection's `reads`, each query with LF line endings and no outer ASCII whitespace; contract: `readQueries` | `projection.reads`, `odcs.custom.readQueries` |
+| Columns: name and order | `schema[0].properties` | both (config) | content: the projection's `output_columns`; contract: `properties` in file order | `projection.output_columns`, `odcs.schema.properties.name` |
+| Column `physicalType` | authored | both (config) | content and contract: the canonical type, so `INT` and `INTEGER` hash alike in both | `odcs.schema.properties.physicalType` |
+| Column `required` | authored | both (config) | content: `nullable` in the projection; contract: `required` | `odcs.schema.properties.required` |
+| Column `logicalType` and `logicalTypeOptions` | derived from `physicalType` | contract | stored and hashed; an authored `logicalType` is replaced and an authored `logicalTypeOptions` is refused | `odcs.schema.properties.logicalType`, `odcs.schema.properties.logicalTypeOptions` |
+| Column `unique` | authored | contract | descriptive: the runtime creates no constraint | `odcs.schema.properties.unique` |
+| `primaryKey`, `primaryKeyPosition` | authored | contract; both (config) on an `upsert` node | content: the projection's `primary_key`, `[]` unless `upsert`; contract: the key, descriptive on `replace` and `append`, and a key of one column is stored without its `primaryKeyPosition` | `projection.primary_key`, `odcs.schema.properties.primaryKey`, `odcs.schema.properties.primaryKeyPosition` |
+| `kind` | authored, default `python-node` | both (config) | content: the projection's canonical kind; contract: `kind` | `projection.kind`, `odcs.custom.kind` |
+| `modeType` | authored, default `replace` | both (config) | content: the projection's `mode_type`; contract: `modeType` | `projection.mode_type`, `odcs.custom.modeType` |
+| `extraColumns` | authored, default `raise` | both (config) | content: the projection's `extra_columns`; contract: `extraColumns` | `projection.extra_columns`, `odcs.custom.extraColumns` |
+| `config` | authored | both (config) | content: the projection's `config`; contract: `config` | `projection.config`, `odcs.custom.config` |
+| `csvSource`, `secretRef` | refused on a `python-node` | neither | the projection's `reads` holds the read queries, and its `secret_ref` is `""` | `projection.secret_ref`, `odcs.custom.csvSource`, `odcs.custom.secretRef` |
+| `team.name`, `schedule`, `criticality` | authored | contract | not code, so outside `content_hash` | `odcs.team.name`, `odcs.custom.schedule`, `odcs.custom.criticality` |
+| Descriptions, `tags` | authored | contract | not code, so outside `content_hash` | `odcs.description.purpose`, `odcs.schema.description`, `odcs.schema.properties.description`, `odcs.tags`, `odcs.schema.tags`, `odcs.schema.properties.tags` |
+| `timeoutMinutes` | authored | contract | not code, so outside `content_hash` | `odcs.custom.timeoutMinutes` |
+| `service` | the release, or authored and equal | contract | not code, so outside `content_hash`; the stored form always carries it | `odcs.custom.service` |
+| `reads` on the schema object | filled from the tables the read queries name | contract | the tables the read queries name, which topology-controller lists; never authored | `odcs.schema.custom.reads` |
+| Quality rules | authored | contract | as written; the `where`, `warnIf`, `errorIf` and `failCalc` of a rule are `continuo` custom properties of the rule | `odcs.schema.quality.metric`, `odcs.schema.quality.mustBe`, `odcs.schema.quality.severity`, `odcs.schema.quality.custom.where`, `odcs.schema.quality.custom.warnIf`, `odcs.schema.quality.custom.errorIf`, `odcs.schema.quality.custom.failCalc`, `odcs.schema.properties.quality.metric`, `odcs.schema.properties.quality.mustBe`, `odcs.schema.properties.quality.severity`, `odcs.schema.properties.quality.custom.where`, `odcs.schema.properties.quality.custom.warnIf`, `odcs.schema.properties.quality.custom.errorIf`, `odcs.schema.properties.quality.custom.failCalc` |
+| `relationships` | authored | contract | as written | `odcs.schema.relationships.from`, `odcs.schema.relationships.to`, `odcs.schema.properties.relationships.to` |
+| `classification` | authored | contract | as written | `odcs.schema.properties.classification` |
+| `roles` | authored | contract | as written | `odcs.roles.role`, `odcs.roles.access`, `odcs.roles.description` |
+| `slaProperties`, `support`, `price` | authored | contract | hashed as written | `odcs.slaProperties.property`, `odcs.slaProperties.value`, `odcs.slaProperties.unit`, `odcs.slaProperties.description`, `odcs.support.channel`, `odcs.support.tool`, `odcs.support.url`, `odcs.support.description`, `odcs.price.priceAmount`, `odcs.price.priceCurrency`, `odcs.price.priceUnit` |
+| Other vendors' custom properties | authored | contract | hashed as written | `odcs.customProperties`, `odcs.schema.customProperties`, `odcs.schema.properties.customProperties` |
+| Every other standard ODCS field the author writes: `description.usage` and `.limitations`, `domain`, `context`, `slaDefaultElement`, `authoritativeDefinitions`, a schema object's or column's `businessName`, `synonyms` or `deprecated`, and a column's `examples`, `enum`, `criticalDataElement` or `transformLogic` | authored | contract | hashed as written; every standard field that no entry names is classified by this rule | `odcs.*` |
+| The `continuo` properties that a Python node does not carry: `filePath`, `materialization`, `contractEnforced`, `access`, `group`, `deprecationDate`, `freshnessBuildAfter`, `snapshot`, `quoteColumns`, `provenance` and an authored `reads` | authored | neither | refused: the first nine describe how dbt builds or governs a node and nothing reads them on a Python node, `provenance` belongs to the published file and is never stored, and `reads` is filled from the read queries | `odcs.custom.filePath`, `odcs.custom.materialization`, `odcs.custom.contractEnforced`, `odcs.custom.access`, `odcs.custom.group`, `odcs.custom.deprecationDate`, `odcs.custom.freshnessBuildAfter`, `odcs.custom.snapshot`, `odcs.custom.quoteColumns`, `odcs.custom.provenance`, `odcs.custom.reads` |
+| `servers`, `tenant`, `contractCreatedTs` | authored | neither | refused: the install decides where the table lives and which tenant owns it, and a clock value is no part of a contract | `odcs.servers`, `odcs.tenant`, `odcs.contractCreatedTs` |
+| A column's nested `properties`, `items` and `map`, `partitioned: true` and a `partitionKeyPosition` other than -1 | authored | neither | refused: the column of a Python node has a name, a type and a nullability, and its table is not partitioned | `odcs.schema.properties.properties`, `odcs.schema.properties.items`, `odcs.schema.properties.map`, `odcs.schema.properties.partitioned`, `odcs.schema.properties.partitionKeyPosition` |
+| A column's `physicalName` | authored | neither | left out of the stored form when it equals the column's `name`, and refused when it differs | `odcs.schema.properties.physicalName` |
+| `version`, `status` as authored | authored | neither | ignored: the stored form always holds `version: "0"` and `status: active`, and `contract_hash` leaves both out | `odcs.version`, `odcs.status` |
+| `apiVersion` and the ODCS `kind` | `v3.2.0` and `DataContract` | neither | format constants, the same in every stored form, which `contract_hash` leaves out | `odcs.apiVersion`, `odcs.kind` |
+| The contract file's path and layout: comments, key order, quoting | the `.odcs.yaml` file | neither | the path is provenance, and the canonical form reads values, not text | |
 
 ## python-csv
 
 | Field or input | Source | In | Part, or why neither | Inputs |
 |---|---|---|---|---|
-| `id`, the table and `name` | authored | both (config) | as for a `python-node` | `projection.schema`, `projection.table` |
-| CSV URI | authored `csvSource` | both (source, config) | content: the source part, `sha256(uri)` computed by the producer's CI, and the projection's `reads.csv`; contract: `csvSource` | `projection.reads`, `ci.source_hash` |
+| `id`, the table and `name` | authored | both (config) | as for a `python-node` | `projection.schema`, `projection.table`, `odcs.id`, `odcs.schema.name`, `odcs.name` |
+| `physicalName` | defaulted to the table | contract | as for a `python-node` | `odcs.schema.physicalName` |
+| `schema[0].physicalType` | authored, must be `table` | contract | as for a `python-node` | `odcs.schema.physicalType` |
+| CSV URI | authored `csvSource` | both (source, config) | content: the source part, `sha256(uri)` computed by the producer's CI, and the projection's `reads.csv`; contract: `csvSource` | `projection.reads`, `ci.source_hash`, `odcs.custom.csvSource` |
 | The CSV's content at the URI | the object | neither | data, not a new node version | |
-| `script`, `readQueries`, `secretRef`, `assets` | refused on a csv node | neither | the projection holds `script: ""`, `reads: {csv: <uri>}`, `secret_ref: ""` and `assets: []`, and the shared part is empty | `projection.script`, `projection.secret_ref`, `projection.assets`, `ci.shared_code_hash` |
-| Columns, each column's `physicalType` and `required` | authored | both (config) | as for a `python-node` | `projection.output_columns` |
-| `primaryKey`, `primaryKeyPosition` | authored | contract | descriptive: a csv node is `replace` only, so the projection's `primary_key` is `[]` | `projection.primary_key` |
-| `kind` | authored, `python-csv` | both (config) | as for a `python-node` | `projection.kind` |
-| `modeType` | `replace` only, the default | both (config) | the projection's `mode_type` is always `replace` | `projection.mode_type` |
-| `extraColumns`, `config` | authored | both (config) | as for a `python-node` | `projection.extra_columns`, `projection.config` |
+| `script`, `readQueries`, `secretRef`, `assets` | refused on a csv node | neither | the projection holds `script: ""`, `reads: {csv: <uri>}`, `secret_ref: ""` and `assets: []`, and the shared part is empty | `projection.script`, `projection.secret_ref`, `projection.assets`, `ci.shared_code_hash`, `odcs.custom.script`, `odcs.custom.readQueries`, `odcs.custom.secretRef`, `odcs.custom.assets` |
+| Columns, each column's `physicalType` and `required` | authored | both (config) | as for a `python-node` | `projection.output_columns`, `odcs.schema.properties.name`, `odcs.schema.properties.physicalType`, `odcs.schema.properties.required` |
+| Column `logicalType` and `logicalTypeOptions` | derived from `physicalType` | contract | as for a `python-node` | `odcs.schema.properties.logicalType`, `odcs.schema.properties.logicalTypeOptions` |
+| Column `unique` | authored | contract | as for a `python-node` | `odcs.schema.properties.unique` |
+| `primaryKey`, `primaryKeyPosition` | authored | contract | descriptive: a csv node is `replace` only, so the projection's `primary_key` is `[]`; a key of one column is stored without its `primaryKeyPosition` | `projection.primary_key`, `odcs.schema.properties.primaryKey`, `odcs.schema.properties.primaryKeyPosition` |
+| `kind` | authored, `python-csv` | both (config) | as for a `python-node` | `projection.kind`, `odcs.custom.kind` |
+| `modeType` | `replace` only, the default | both (config) | the projection's `mode_type` is always `replace` | `projection.mode_type`, `odcs.custom.modeType` |
+| `extraColumns`, `config` | authored | both (config) | as for a `python-node` | `projection.extra_columns`, `projection.config`, `odcs.custom.extraColumns`, `odcs.custom.config` |
+| `team.name`, `schedule`, `criticality` | authored | contract | as for a `python-node` | `odcs.team.name`, `odcs.custom.schedule`, `odcs.custom.criticality` |
+| Descriptions, `tags` | authored | contract | as for a `python-node` | `odcs.description.purpose`, `odcs.schema.description`, `odcs.schema.properties.description`, `odcs.tags`, `odcs.schema.tags`, `odcs.schema.properties.tags` |
+| `timeoutMinutes` | authored | contract | as for a `python-node` | `odcs.custom.timeoutMinutes` |
+| `service` | the release, or authored and equal | contract | as for a `python-node` | `odcs.custom.service` |
+| `reads` on the schema object | filled from the tables the read queries name | contract | as for a `python-node`; this kind has no read queries, so it lists no table | `odcs.schema.custom.reads` |
+| Quality rules | authored | contract | as for a `python-node` | `odcs.schema.quality.metric`, `odcs.schema.quality.mustBe`, `odcs.schema.quality.severity`, `odcs.schema.quality.custom.where`, `odcs.schema.quality.custom.warnIf`, `odcs.schema.quality.custom.errorIf`, `odcs.schema.quality.custom.failCalc`, `odcs.schema.properties.quality.metric`, `odcs.schema.properties.quality.mustBe`, `odcs.schema.properties.quality.severity`, `odcs.schema.properties.quality.custom.where`, `odcs.schema.properties.quality.custom.warnIf`, `odcs.schema.properties.quality.custom.errorIf`, `odcs.schema.properties.quality.custom.failCalc` |
+| `relationships` | authored | contract | as for a `python-node` | `odcs.schema.relationships.from`, `odcs.schema.relationships.to`, `odcs.schema.properties.relationships.to` |
+| `classification` | authored | contract | as for a `python-node` | `odcs.schema.properties.classification` |
+| `roles` | authored | contract | as for a `python-node` | `odcs.roles.role`, `odcs.roles.access`, `odcs.roles.description` |
+| `slaProperties`, `support`, `price` | authored | contract | as for a `python-node` | `odcs.slaProperties.property`, `odcs.slaProperties.value`, `odcs.slaProperties.unit`, `odcs.slaProperties.description`, `odcs.support.channel`, `odcs.support.tool`, `odcs.support.url`, `odcs.support.description`, `odcs.price.priceAmount`, `odcs.price.priceCurrency`, `odcs.price.priceUnit` |
+| Other vendors' custom properties | authored | contract | as for a `python-node` | `odcs.customProperties`, `odcs.schema.customProperties`, `odcs.schema.properties.customProperties` |
+| Every other standard ODCS field the author writes: `description.usage` and `.limitations`, `domain`, `context`, `slaDefaultElement`, `authoritativeDefinitions`, a schema object's or column's `businessName`, `synonyms` or `deprecated`, and a column's `examples`, `enum`, `criticalDataElement` or `transformLogic` | authored | contract | hashed as written; every standard field that no entry names is classified by this rule | `odcs.*` |
+| The `continuo` properties that a Python node does not carry: `filePath`, `materialization`, `contractEnforced`, `access`, `group`, `deprecationDate`, `freshnessBuildAfter`, `snapshot`, `quoteColumns`, `provenance` and an authored `reads` | authored | neither | as for a `python-node` | `odcs.custom.filePath`, `odcs.custom.materialization`, `odcs.custom.contractEnforced`, `odcs.custom.access`, `odcs.custom.group`, `odcs.custom.deprecationDate`, `odcs.custom.freshnessBuildAfter`, `odcs.custom.snapshot`, `odcs.custom.quoteColumns`, `odcs.custom.provenance`, `odcs.custom.reads` |
+| `servers`, `tenant`, `contractCreatedTs` | authored | neither | as for a `python-node` | `odcs.servers`, `odcs.tenant`, `odcs.contractCreatedTs` |
+| A column's nested `properties`, `items` and `map`, `partitioned: true` and a `partitionKeyPosition` other than -1 | authored | neither | as for a `python-node` | `odcs.schema.properties.properties`, `odcs.schema.properties.items`, `odcs.schema.properties.map`, `odcs.schema.properties.partitioned`, `odcs.schema.properties.partitionKeyPosition` |
+| A column's `physicalName` | authored | neither | as for a `python-node` | `odcs.schema.properties.physicalName` |
+| `version`, `status` as authored | authored | neither | as for a `python-node` | `odcs.version`, `odcs.status` |
+| `apiVersion` and the ODCS `kind` | `v3.2.0` and `DataContract` | neither | as for a `python-node` | `odcs.apiVersion`, `odcs.kind` |
+| The contract file's path and layout: comments, key order, quoting | the `.odcs.yaml` file | neither | as for a `python-node` | |
 
 ## python-api
 
 | Field or input | Source | In | Part, or why neither | Inputs |
 |---|---|---|---|---|
-| `id`, the table and `name` | authored | both (config) | as for a `python-node` | `projection.schema`, `projection.table` |
+| `id`, the table and `name` | authored | both (config) | as for a `python-node` | `projection.schema`, `projection.table`, `odcs.id`, `odcs.schema.name`, `odcs.name` |
+| `physicalName` | defaulted to the table | contract | as for a `python-node` | `odcs.schema.physicalName` |
+| `schema[0].physicalType` | authored, must be `table` | contract | as for a `python-node` | `odcs.schema.physicalType` |
 | Script bytes, the in-repo import closure, the asset files' bytes | the repository | content (source, shared) | source and shared parts, as for a `python-node` | `ci.source_hash`, `ci.shared_code_hash` |
-| `script`, `assets` | authored | both (config) | as for a `python-node` | `projection.script`, `projection.assets` |
-| `readQueries`, `csvSource` | refused on an api node | neither | the projection's `reads` is `{}` | `projection.reads` |
-| `secretRef` | authored, optional | both (config) | content: the projection's `secret_ref`, `""` when none; contract: `secretRef` | `projection.secret_ref` |
+| `script`, `assets` | authored | both (config) | as for a `python-node` | `projection.script`, `projection.assets`, `odcs.custom.script`, `odcs.custom.assets` |
+| `readQueries`, `csvSource` | refused on an api node | neither | the projection's `reads` is `{}` | `projection.reads`, `odcs.custom.readQueries`, `odcs.custom.csvSource` |
+| `secretRef` | authored, optional | both (config) | content: the projection's `secret_ref`, `""` when none; contract: `secretRef` | `projection.secret_ref`, `odcs.custom.secretRef` |
 | The Secret's values | the cluster | neither | install data; continuo carries only the name | |
 | What the script fetches at run time | the API | neither | data, not code or a promise | |
-| Columns, each column's `physicalType` and `required` | authored | both (config) | as for a `python-node` | `projection.output_columns` |
-| `primaryKey`, `primaryKeyPosition` | authored | contract; both (config) on an `upsert` node | as for a `python-node` | `projection.primary_key` |
-| `kind` (`python-api`), `modeType`, `extraColumns`, `config` | authored or defaulted | both (config) | as for a `python-node` | `projection.kind`, `projection.mode_type`, `projection.extra_columns`, `projection.config` |
+| Columns, each column's `physicalType` and `required` | authored | both (config) | as for a `python-node` | `projection.output_columns`, `odcs.schema.properties.name`, `odcs.schema.properties.physicalType`, `odcs.schema.properties.required` |
+| Column `logicalType` and `logicalTypeOptions` | derived from `physicalType` | contract | as for a `python-node` | `odcs.schema.properties.logicalType`, `odcs.schema.properties.logicalTypeOptions` |
+| Column `unique` | authored | contract | as for a `python-node` | `odcs.schema.properties.unique` |
+| `primaryKey`, `primaryKeyPosition` | authored | contract; both (config) on an `upsert` node | as for a `python-node` | `projection.primary_key`, `odcs.schema.properties.primaryKey`, `odcs.schema.properties.primaryKeyPosition` |
+| `kind` (`python-api`), `modeType`, `extraColumns`, `config` | authored or defaulted | both (config) | as for a `python-node` | `projection.kind`, `projection.mode_type`, `projection.extra_columns`, `projection.config`, `odcs.custom.kind`, `odcs.custom.modeType`, `odcs.custom.extraColumns`, `odcs.custom.config` |
+| `team.name`, `schedule`, `criticality` | authored | contract | as for a `python-node` | `odcs.team.name`, `odcs.custom.schedule`, `odcs.custom.criticality` |
+| Descriptions, `tags` | authored | contract | as for a `python-node` | `odcs.description.purpose`, `odcs.schema.description`, `odcs.schema.properties.description`, `odcs.tags`, `odcs.schema.tags`, `odcs.schema.properties.tags` |
+| `timeoutMinutes` | authored | contract | as for a `python-node` | `odcs.custom.timeoutMinutes` |
+| `service` | the release, or authored and equal | contract | as for a `python-node` | `odcs.custom.service` |
+| `reads` on the schema object | filled from the tables the read queries name | contract | as for a `python-node`; this kind has no read queries, so it lists no table | `odcs.schema.custom.reads` |
+| Quality rules | authored | contract | as for a `python-node` | `odcs.schema.quality.metric`, `odcs.schema.quality.mustBe`, `odcs.schema.quality.severity`, `odcs.schema.quality.custom.where`, `odcs.schema.quality.custom.warnIf`, `odcs.schema.quality.custom.errorIf`, `odcs.schema.quality.custom.failCalc`, `odcs.schema.properties.quality.metric`, `odcs.schema.properties.quality.mustBe`, `odcs.schema.properties.quality.severity`, `odcs.schema.properties.quality.custom.where`, `odcs.schema.properties.quality.custom.warnIf`, `odcs.schema.properties.quality.custom.errorIf`, `odcs.schema.properties.quality.custom.failCalc` |
+| `relationships` | authored | contract | as for a `python-node` | `odcs.schema.relationships.from`, `odcs.schema.relationships.to`, `odcs.schema.properties.relationships.to` |
+| `classification` | authored | contract | as for a `python-node` | `odcs.schema.properties.classification` |
+| `roles` | authored | contract | as for a `python-node` | `odcs.roles.role`, `odcs.roles.access`, `odcs.roles.description` |
+| `slaProperties`, `support`, `price` | authored | contract | as for a `python-node` | `odcs.slaProperties.property`, `odcs.slaProperties.value`, `odcs.slaProperties.unit`, `odcs.slaProperties.description`, `odcs.support.channel`, `odcs.support.tool`, `odcs.support.url`, `odcs.support.description`, `odcs.price.priceAmount`, `odcs.price.priceCurrency`, `odcs.price.priceUnit` |
+| Other vendors' custom properties | authored | contract | as for a `python-node` | `odcs.customProperties`, `odcs.schema.customProperties`, `odcs.schema.properties.customProperties` |
+| Every other standard ODCS field the author writes: `description.usage` and `.limitations`, `domain`, `context`, `slaDefaultElement`, `authoritativeDefinitions`, a schema object's or column's `businessName`, `synonyms` or `deprecated`, and a column's `examples`, `enum`, `criticalDataElement` or `transformLogic` | authored | contract | hashed as written; every standard field that no entry names is classified by this rule | `odcs.*` |
+| The `continuo` properties that a Python node does not carry: `filePath`, `materialization`, `contractEnforced`, `access`, `group`, `deprecationDate`, `freshnessBuildAfter`, `snapshot`, `quoteColumns`, `provenance` and an authored `reads` | authored | neither | as for a `python-node` | `odcs.custom.filePath`, `odcs.custom.materialization`, `odcs.custom.contractEnforced`, `odcs.custom.access`, `odcs.custom.group`, `odcs.custom.deprecationDate`, `odcs.custom.freshnessBuildAfter`, `odcs.custom.snapshot`, `odcs.custom.quoteColumns`, `odcs.custom.provenance`, `odcs.custom.reads` |
+| `servers`, `tenant`, `contractCreatedTs` | authored | neither | as for a `python-node` | `odcs.servers`, `odcs.tenant`, `odcs.contractCreatedTs` |
+| A column's nested `properties`, `items` and `map`, `partitioned: true` and a `partitionKeyPosition` other than -1 | authored | neither | as for a `python-node` | `odcs.schema.properties.properties`, `odcs.schema.properties.items`, `odcs.schema.properties.map`, `odcs.schema.properties.partitioned`, `odcs.schema.properties.partitionKeyPosition` |
+| A column's `physicalName` | authored | neither | as for a `python-node` | `odcs.schema.properties.physicalName` |
+| `version`, `status` as authored | authored | neither | as for a `python-node` | `odcs.version`, `odcs.status` |
+| `apiVersion` and the ODCS `kind` | `v3.2.0` and `DataContract` | neither | as for a `python-node` | `odcs.apiVersion`, `odcs.kind` |
+| The contract file's path and layout: comments, key order, quoting | the `.odcs.yaml` file | neither | as for a `python-node` | |

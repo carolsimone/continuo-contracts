@@ -250,8 +250,8 @@ jobs:
           # The index must serve the very file this run built.
           cmp "${fetched[0]}" "${built[0]}"
           uv venv -q --python "$PY_VERSION" "$RUNNER_TEMP/venv"
-          # PyYAML comes from PyPI first: TestPyPI holds copies of real project names,
-          # so it must not supply a dependency.
-          uv pip install -q --python "$RUNNER_TEMP/venv/bin/python" "PyYAML>=6.0"
+          # The dependencies come from PyPI first: TestPyPI holds copies of real project names,
+          # so it must not supply one.
+          uv pip install -q --python "$RUNNER_TEMP/venv/bin/python" "jsonschema>=4.26" "PyYAML>=6.0"
           uv pip install -q --python "$RUNNER_TEMP/venv/bin/python" --no-deps "${fetched[0]}"
           (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/venv/bin/python" -I "$GITHUB_WORKSPACE/scripts/smoke_installed.py")

@@ -16,7 +16,19 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 README = ROOT / "README.md"
-MODULES = ("canonical", "hashing", "python", "fingerprints", "errors")
+MODULES = (
+    "canonical",
+    "hashing",
+    "python",
+    "fingerprints",
+    "schema",
+    "yaml_strict",
+    "vocabulary",
+    "validate",
+    "contract",
+    "cli",
+    "errors",
+)
 LISTING = "### Public names\n"
 IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
