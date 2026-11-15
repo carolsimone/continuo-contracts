@@ -260,6 +260,16 @@ def test_a_lookup_error_is_named_with_the_other_bad_paths(locked, tmp_path, caps
     assert [m.split(": ")[0] for m in _errors(caplog)] == [inside.as_posix(), missing.as_posix()]
 
 
+@pytest.mark.parametrize("command", ["validate", "hash"])
+def test_a_path_with_a_nul_character_is_a_usage_error(command, tmp_path, capsys, caplog):
+    path = tmp_path / "py_daily\0kpis.odcs.yaml"
+    assert main(_argv(command, path)) == 2
+    assert capsys.readouterr().out == ""
+    (message,) = _errors(caplog)
+    assert message.startswith(f"{path.as_posix()}: cannot look up the path: ")
+    assert "null" in message
+
+
 def test_validate_reads_a_hidden_contract_file_of_a_folder(tmp_path, capsys):
     _put(tmp_path, ".py_daily_kpis.odcs.yaml", _demo_text())
     _put(tmp_path, "py_daily_kpis.ODCS.YAML", _demo_text())

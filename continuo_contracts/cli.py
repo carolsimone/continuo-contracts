@@ -92,9 +92,9 @@ def _posix(path: Path) -> str:
     return path.as_posix()
 
 
-def _cannot(path: Path, action: str, error: OSError) -> str:
+def _cannot(path: Path, action: str, error: OSError | ValueError) -> str:
     """Write the problem of an `action` on `path` that the system refused with `error`."""
-    return f"{_posix(path)}: cannot {action}: {error.strerror or error}"
+    return f"{_posix(path)}: cannot {action}: {getattr(error, 'strerror', None) or error}"
 
 
 def _mode(path: Path) -> int | None:
@@ -102,7 +102,8 @@ def _mode(path: Path) -> int | None:
     nothing is there.
 
     Raises the `OSError` of any other failure to look the path up, such as a folder on the way
-    that the process may not search, so the caller reports it instead of reading it as a missing
+    that the process may not search, and the `ValueError` of a path that no file can have, such
+    as one with a NUL character, so the caller reports it instead of reading it as a missing
     path.
     """
     try:
@@ -144,7 +145,7 @@ def _contract_files(paths: Sequence[Path]) -> list[Path]:
     for path in paths:
         try:
             mode = _mode(path)
-        except OSError as error:
+        except (OSError, ValueError) as error:
             problems.append(_cannot(path, "look up the path", error))
             continue
         if mode is not None and stat.S_ISDIR(mode):
@@ -245,7 +246,7 @@ def _hash(args: argparse.Namespace) -> int:
     path: Path = args.file
     try:
         mode = _mode(path)
-    except OSError as error:
+    except (OSError, ValueError) as error:
         raise _UsageError(_cannot(path, "look up the path", error)) from error
     if mode is not None and stat.S_ISDIR(mode):
         raise _UsageError(f"{_posix(path)}: hash takes one contract file, not a folder")
