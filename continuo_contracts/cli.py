@@ -10,8 +10,8 @@ Output follows one rule. The human text goes through `logging` to stderr. Stdout
 machine-read result: with `--json` one JSON document, and for `hash` without it the hash alone.
 When a command finds nothing to print, as a usage error does, stdout stays empty. Exit status 0
 means the contracts are valid, 1 means a contract has an issue, and 2 means the command could not
-run: a usage error, a path that names no contract file, a file that cannot be read, or a `--read`
-value that is not a table.
+run: a usage error (a `--service` that is empty or blank among them), a path that names no contract
+file, a file that cannot be read, or a `--read` value that is not a table.
 
 `main` configures logging when it runs, not when the module is imported, and returns the exit
 status. The console script `continuo-contracts` calls it.
@@ -43,8 +43,8 @@ _EXIT_CODES: Final = """\
 exit status:
   0  every contract is valid
   1  a contract has an issue
-  2  a usage error, a path that names no contract file, a file that cannot be read, or a
-     --read value that is not a table
+  2  a usage error (an empty or blank --service among them), a path that names no contract
+     file, a file that cannot be read, or a --read value that is not a table
 """
 
 _VALIDATE_DESCRIPTION: Final = """\
@@ -74,6 +74,14 @@ class _UsageError(Exception):
     def __init__(self, *problems: str) -> None:
         super().__init__("; ".join(problems))
         self.problems = problems
+
+
+def _service(value: str) -> str:
+    """Return `value`, the service of a release, and refuse one that is empty or blank: it names
+    no release, so a hash computed under it matches none that a release stores."""
+    if not value.strip():
+        raise argparse.ArgumentTypeError("the service must not be empty or blank")
+    return value
 
 
 def _posix(path: Path) -> str:
@@ -244,6 +252,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     validate.add_argument(
         "--service",
+        type=_service,
         help=(
             "the service of the release: a `service` property that names another one is an "
             "issue. Without it that check is skipped"
@@ -264,6 +273,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     hash_.add_argument(
         "--service",
+        type=_service,
         required=True,
         help="the service of the release that carries the contract",
     )

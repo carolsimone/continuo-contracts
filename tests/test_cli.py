@@ -186,6 +186,18 @@ def test_a_usage_error_exits_2_through_argparse(argv, capsys):
     assert capsys.readouterr().out == ""
 
 
+@pytest.mark.parametrize("service", ["", " ", "\t"])
+@pytest.mark.parametrize("command", ["validate", "hash"])
+def test_an_empty_or_blank_service_is_a_usage_error(command, service, tmp_path, capsys):
+    path = _put(tmp_path, "py_daily_kpis.odcs.yaml", _demo_text())
+    with pytest.raises(SystemExit) as exit_:
+        main([command, str(path), "--service", service])
+    assert exit_.value.code == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "--service" in captured.err and "empty or blank" in captured.err
+
+
 def test_hash_prints_the_vector_hash(tmp_path, capsys):
     case = _case("demo_py_daily_kpis")
     path = _put(tmp_path, "py_daily_kpis.odcs.yaml", case["text"])
@@ -284,15 +296,16 @@ def test_validate_logs_how_many_files_it_checked(bad_folder, caplog):
 
 
 def test_json_mode_prints_only_json_on_stdout(tmp_path, capsys):
-    path = _put(tmp_path, "py_daily_kpis.odcs.yaml", _demo_text())
-    for argv in (
-        ["validate", str(path), "--json"],
-        ["validate", str(tmp_path / "nothing"), "--json"],
-        ["hash", str(path), "--service", "service-py", "--json"],
+    valid = _put(tmp_path, "py_daily_kpis.odcs.yaml", _demo_text())
+    invalid = _put(tmp_path, "wrong_name.odcs.yaml", _demo_text())
+    for argv, status in (
+        (["validate", str(valid), "--json"], 0),
+        (["validate", str(invalid), "--json"], 1),
+        (["hash", str(valid), "--service", "service-py", "--json"], 0),
     ):
-        main(argv)
-        out = capsys.readouterr().out
-        assert out == "" or json.loads(out) is not None, argv
+        assert main(argv) == status, argv
+        document = json.loads(capsys.readouterr().out)
+        assert isinstance(document, dict), argv
 
 
 def _run(*args):

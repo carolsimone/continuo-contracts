@@ -226,11 +226,14 @@ def normalise_python(
     by code point and listed once. The result is then written in the canonical form that the module
     describes.
 
-    Raises `HashInputError` when `reads` is a string or lists a table that is not a string of at
-    least two non-empty parts joined by dots, or that has whitespace at either end, and
-    `CanonicalJsonError` when an item of a set-like list holds a value that canonical JSON cannot
-    write, which a document that `yaml_strict.load` read never holds.
+    Raises `HashInputError` when `service` is empty or blank, when `reads` is a string or lists a
+    table that is not a string of at least two non-empty parts joined by dots, or that has
+    whitespace at either end, and `CanonicalJsonError` when an item of a set-like list holds a
+    value that canonical JSON cannot write, which a document that `yaml_strict.load` read never
+    holds.
     """
+    if not service.strip():
+        raise HashInputError(f"service {service!r}: the service of a release is not empty or blank")
     tables = _reads(reads)
     stored: dict[str, Any] = _as_written(doc)
     stored["version"] = _STORED_VERSION

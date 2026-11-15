@@ -626,6 +626,12 @@ def test_reads_given_as_one_string_is_refused():
         normalise_python(_kpis(), service="service-py", reads="analytics.t")
 
 
+@pytest.mark.parametrize("service", ["", " ", "\t\n", "\u00a0", "\u2003"])
+def test_an_empty_or_blank_service_is_refused(service):
+    with pytest.raises(HashInputError, match="service"):
+        normalise_python(_kpis(), service=service, reads=["analytics.t"])
+
+
 # the input is not changed
 
 
