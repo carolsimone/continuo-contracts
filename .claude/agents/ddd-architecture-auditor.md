@@ -120,12 +120,8 @@ Package root: `continuo_contracts/`.
    a dependency, the wheel stays pure (`py3-none-any`), and `yaml` is imported
    only in `fingerprints.py`. Flag any other third-party import in the package
    and any added dependency.
-4. **Python 3.12 and later.** Every module and script must import and pass on
-   3.12. Flag syntax or standard-library names added in 3.13 or 3.14 (for
-   example `typing.ReadOnly`, `typing.TypeIs`, `warnings.deprecated`,
-   `copy.replace`, `annotationlib`, template strings, an unparenthesised
-   multi-exception `except`). `requires-python` stays `>=3.12`, and the CI
-   matrix keeps 3.12, 3.13 and 3.14.
+4. **Python 3.14 and later.** Every module and script must import and pass on
+   3.14. `requires-python` stays `>=3.14`, and the CI matrix keeps 3.14 alone.
 5. **Hash stability.** The byte formats are pinned by tests and by every file
    in `continuo_contracts/vectors/`: the RFC 8785 serialisation, the text
    normaliser, `fold3`/`fold4`, the shared fold's line format and sort order, the projection keys and their order, the
@@ -156,10 +152,9 @@ Package root: `continuo_contracts/`.
    documented range. A loose phrase such as "Unicode whitespace" is a finding if
    the code strips more or fewer characters than the text names: the text must
    name the exact set or count. When a rule depends on interpreter tables
-   (`str.strip`, `isspace`, `re` classes), run the probe on the oldest and the
-   newest Python that the CI matrix names and report both, for example
-   `uv --directory <repo> run --isolated --python 3.14 --locked python -B -c "..."`
-   and the same with `--python 3.12`.
+   (`str.strip`, `isspace`, `re` classes), run the probe on the Python that the
+   CI matrix names and report it, for example
+   `uv --directory <repo> run --isolated --python 3.14 --locked python -B -c "..."`.
 7. **Error conventions.** Every error class the package defines derives from
    `ContractsError`. A refusal names where it happened: the JSON path in
    `canonical`, `<schema>.<table>: ` in `python`, the YAML location in
@@ -212,7 +207,7 @@ Package root: `continuo_contracts/`.
     - The wheel ships `fingerprints.yaml`, every file in
       `continuo_contracts/vectors/` and `py.typed`;
       `scripts/check_wheel.py` `REQUIRED_MEMBERS` matches the package files.
-    - `.github/workflows/ci.yml`: jobs `test` (3.12, 3.13, 3.14), `wheel` and
+    - `.github/workflows/ci.yml`: jobs `test` (3.14), `wheel` and
       `ci`, with `ci` needing both and failing on a skipped or cancelled job.
     - `.github/workflows/publish-pypi.yml`: `id-token: write` only on the upload
       job; that job runs no repository code and uploads only the artifact the

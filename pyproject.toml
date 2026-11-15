@@ -3,15 +3,13 @@ name = "continuo-contracts"
 version = "0.1.0"
 description = "Canonical JSON, the Python code projection, the content_hash folds and the fingerprint field declaration that continuo and its producers share."
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "Simone Carolini" }]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Typing :: Typed",
 ]
@@ -27,9 +25,11 @@ Changelog = "https://github.com/carolsimone/continuo-contracts/blob/main/CHANGEL
 [dependency-groups]
 dev = [
     "pytest==9.1.1",
-    "ruff==0.17.1",
+    "pytest-cov==7.1.0",
+    "ruff==0.17.2",
     "mypy==2.4.0",
-    "types-PyYAML==6.0.12.20250915",
+    "import-linter==2.15",
+    "types-PyYAML==6.0.12.20260906",
     "types-jsonschema==4.26.0.20261006",
 ]
 
@@ -41,14 +41,14 @@ build-backend = "hatchling.build"
 packages = ["continuo_contracts"]
 
 [tool.ruff]
-target-version = "py312"
+target-version = "py314"
 line-length = 100
 
 [tool.ruff.lint]
 select = ["E4", "E501", "E7", "E9", "F", "I", "B", "UP"]
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.14"
 strict = true
 
 [tool.pytest.ini_options]

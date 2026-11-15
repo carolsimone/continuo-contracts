@@ -451,10 +451,9 @@ def test_the_id_lower_cases_only_the_ascii_letters_of_the_table():
 
 
 @pytest.mark.parametrize("letter", ["\u00c4", "\u0130", "\ua7cb", "\u1e9e"])
-def test_a_capital_letter_outside_ascii_is_kept_in_the_id_on_every_python(letter):
-    # U+A7CB has a lower case only from Unicode 16, which Python 3.14 has and 3.12 has not, so a
-    # rule that lower-cases beyond ASCII would accept this id on one Python and refuse it on the
-    # other.
+def test_a_capital_letter_outside_ascii_is_kept_in_the_id(letter):
+    # U+A7CB has a lower case only from Unicode 16, so a rule that lower-cases beyond ASCII would
+    # accept this id on a Python with older Unicode tables and refuse it on one with newer tables.
     doc = _kpis()
     doc["id"] = f"analytics{letter}.py_daily_kpis"
     assert _check(doc) == []

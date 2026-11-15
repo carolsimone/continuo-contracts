@@ -12,7 +12,7 @@ than the seven core ones, a second document, and a value that canonical JSON can
 import math
 import re
 from collections.abc import Callable, Hashable
-from typing import Any, Final
+from typing import Any, ClassVar, Final
 
 import yaml
 from yaml.reader import ReaderError
@@ -75,7 +75,7 @@ def load(text: str) -> object:
         try:
             value: object = loader.get_single_data()
         finally:
-            loader.dispose()  # type: ignore[no-untyped-call]
+            loader.dispose()
     except yaml.MarkedYAMLError as error:
         raise _from_yaml(error) from error
     except ReaderError as error:
@@ -121,7 +121,7 @@ class _Loader(yaml.SafeLoader):
     # An empty table of resolvers and one of constructors replace the YAML 1.1 ones that
     # `SafeLoader` carries, so only what is registered below exists.
     yaml_implicit_resolvers: dict[Any, Any] = {}
-    yaml_constructors: dict[Any, Any] = {}
+    yaml_constructors: ClassVar[dict[Any, Any]] = {}
 
     def __init__(self, stream: str) -> None:
         super().__init__(stream)
@@ -171,10 +171,10 @@ class _Loader(yaml.SafeLoader):
             raise _error(key_node.start_mark, f"mapping key {key!r} is not a string")
         return key
 
-    # PyYAML ships no type hints for the methods below, so each is called through one typed
-    # wrapper.
+    # PyYAML's stubs leave some of the methods below untyped, so each is called through one
+    # typed wrapper.
     def _next_is(self, *events: type[yaml.Event]) -> bool:
-        return bool(self.check_event(*events))  # type: ignore[no-untyped-call]
+        return bool(self.check_event(*events))
 
     def _next_event(self) -> Any:
         return self.peek_event()  # type: ignore[no-untyped-call]
@@ -184,7 +184,7 @@ class _Loader(yaml.SafeLoader):
         return mark
 
     def _construct(self, node: yaml.Node, deep: bool) -> object:
-        return self.construct_object(node, deep=deep)  # type: ignore[no-untyped-call]
+        return self.construct_object(node, deep=deep)
 
 
 def _kind(node: yaml.Node) -> str:
@@ -250,7 +250,7 @@ def _refuse_tag(loader: _Loader, node: yaml.Node) -> object:
 
 def _register() -> None:
     for tag, pattern, first in _RESOLVERS:
-        _Loader.add_implicit_resolver(tag, pattern, first)  # type: ignore[no-untyped-call]
+        _Loader.add_implicit_resolver(tag, pattern, first)
     constructors: dict[str | None, Callable[[_Loader, Any], object]] = {
         _NULL_TAG: _construct_null,
         _BOOL_TAG: _construct_bool,

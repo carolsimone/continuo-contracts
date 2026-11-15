@@ -1,8 +1,8 @@
 """Refuse a built distribution that would install without part of the package.
 
 Run it on a dist directory that holds one wheel and one sdist:
-`uv run --no-project --python 3.12 scripts/check_wheel.py dist`. It uses the standard library
-only, so any Python 3.12 runs it. The wheel must be pure Python, carry every module and data file
+`uv run --no-project --python 3.14 scripts/check_wheel.py dist`. It uses the standard library
+only, so any Python 3.14 runs it. The wheel must be pure Python, carry every module and data file
 the package reads at run time, carry the licence files, and declare the metadata and the
 console script the package promises. Exit status 0 means the wheel passed, 1 means at least one
 problem was logged.
@@ -24,7 +24,7 @@ PACKAGE = "continuo_contracts"
 WHEEL_SUFFIX = "-py3-none-any.whl"
 SDIST_SUFFIX = ".tar.gz"
 DIST_INFO_SUFFIX = ".dist-info"
-REQUIRES_PYTHON = ">=3.12"
+REQUIRES_PYTHON = ">=3.14"
 LICENSE_EXPRESSION = "Apache-2.0"
 REQUIRES_DIST = ["jsonschema>=4.26", "pyyaml>=6.0"]
 LICENSE_FILES = ("LICENSE", "NOTICE")

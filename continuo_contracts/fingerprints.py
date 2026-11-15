@@ -240,7 +240,7 @@ class _StrictLoader(yaml.SafeLoader):
                     merged_by.setdefault(id(key_node), []).append(merge_key)
             first: dict[Hashable, yaml.Node] = {}
             for key_node, _ in node.value:
-                key = self.construct_object(key_node, deep=True)  # type: ignore[no-untyped-call]
+                key = self.construct_object(key_node, deep=True)
                 if not isinstance(key, Hashable):
                     continue
                 if key in first:

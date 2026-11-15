@@ -77,15 +77,15 @@ def _ascii_lower(text: str) -> str:
     """Return `text` with its ASCII letters in lower case and every other character as it is.
 
     `str.lower` follows the Unicode tables of the running Python, which differ between versions
-    (U+A7CB has a lower case from Unicode 16, which Python 3.14 has and 3.12 has not), so every
+    (U+A7CB has a lower case from Unicode 16 and none before it), so every
     lower-casing that decides what continuo accepts or hashes goes through this function instead.
     """
     return text.translate(_ASCII_LOWER)
 
 
 def _has_whitespace(text: str) -> bool:
-    """Say whether `text` holds a character that `str.isspace` reads as whitespace, the same 29
-    code points on Python 3.12, 3.13 and 3.14 (see `python.canonical_sql_type`)."""
+    """Say whether `text` holds a character that `str.isspace` reads as whitespace: the 29
+    code points that `python.canonical_sql_type` lists."""
     return any(character.isspace() for character in text)
 
 

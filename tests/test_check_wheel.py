@@ -13,7 +13,7 @@ METADATA = (
     "Metadata-Version: 2.4\n"
     "Name: continuo-contracts\n"
     "Version: 0.1.0\n"
-    "Requires-Python: >=3.12\n"
+    "Requires-Python: >=3.14\n"
     "License-Expression: Apache-2.0\n"
     "Requires-Dist: jsonschema>=4.26\n"
     "Requires-Dist: PyYAML>=6.0\n"

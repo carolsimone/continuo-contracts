@@ -123,10 +123,10 @@ def canonical_sql_type(raw: str) -> str:
     Outer whitespace is stripped and case is ignored. The whitespace that is stripped is exactly
     these 29 code points and no other character: U+0009 to U+000D, U+001C to U+001F, U+0020,
     U+0085, U+00A0, U+1680, U+2000 to U+200A, U+2028, U+2029, U+202F, U+205F and U+3000. They
-    are the code points that `str.strip()` removes, the same on Python 3.12, 3.13 and 3.14, so
-    a zero width space (U+200B) around a type is refused. `normalise_text`, by contrast, removes
-    only the six ASCII whitespace characters. After the comma of `NUMERIC(p, s)` any run of ASCII
-    whitespace is accepted.
+    are the code points that `str.strip()` removes on Python 3.14, so a zero width space (U+200B)
+    around a type is refused. `normalise_text`, by contrast, removes only the six ASCII
+    whitespace characters. After the comma of `NUMERIC(p, s)` any run of ASCII whitespace is
+    accepted.
 
     The supported types are `BIGINT`, `INT`, `INTEGER`, `DOUBLE PRECISION` (with one space),
     `TEXT`, `TIMESTAMP`, `DATE`, `BOOLEAN`, `NUMERIC(p,s)`, `DECIMAL(p,s)`, `VARCHAR(n)` and

@@ -31,14 +31,14 @@ repository; please do not add headers to new files.
 
 ## Development setup
 
-Prerequisites: Python 3.12 or later and [uv](https://docs.astral.sh/uv/).
+Prerequisites: Python 3.14 or later and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 uv sync
 ```
 
-`uv sync` installs the package and the `dev` group (pytest, ruff, mypy and the PyYAML type
-stubs) into `.venv`.
+`uv sync` installs the package and the `dev` group (pytest, pytest-cov, ruff, mypy, import-linter
+and the PyYAML and jsonschema type stubs) into `.venv`.
 
 ## Before you open a pull request
 
@@ -48,7 +48,7 @@ uv run mypy continuo_contracts scripts
 uv run pytest
 ```
 
-These are the checks `.github/workflows/ci.yml` runs on Python 3.12, 3.13 and 3.14.
+These are the checks `.github/workflows/ci.yml` runs on Python 3.14.
 
 ## Conventions
 
