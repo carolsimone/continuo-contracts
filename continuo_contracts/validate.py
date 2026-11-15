@@ -373,7 +373,7 @@ class _Contract:
         return name if isinstance(name, str) and _identifier_fault(name) is None else None
 
     @property
-    def id_parts(self) -> str | None:
+    def written_id_schema(self) -> str | None:
         """The schema part of the id as `python._id_schema` reads it, whatever it holds, or
         `None` when there is no table or the id does not end in a dot and the table."""
         table = self.table
@@ -383,7 +383,7 @@ class _Contract:
     def id_schema(self) -> str | None:
         """The schema part of the id, or `None` when the id does not end in a dot and the table
         or its schema part is not a name that a schema can have."""
-        part = self.id_parts
+        part = self.written_id_schema
         return part if part is not None and _identifier_fault(part) is None else None
 
     @cached_property
@@ -482,7 +482,7 @@ def _identity(contract: _Contract) -> Iterator[Issue]:
     if table is None:
         return
     if isinstance(identifier, str) and contract.id_schema is None:
-        part = contract.id_parts
+        part = contract.written_id_schema
         why = "" if part is None else f": its schema part {_shown(part)} {_identifier_fault(part)}"
         yield _issue(
             "id",
