@@ -93,7 +93,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (`validate`: `valid` and the `issues` of each file, `hash`: `contract_hash` and the `stored`
   form), and the log goes to stderr in either mode. Exit status 0 is valid, 1 is an issue and 2 is
   a usage error (a `--service` that is empty or blank among them), a path that names no contract
-  file, a file that cannot be read or a `--read` value that is not `<schema>.<table>`.
+  file, a path that cannot be looked up (one below a folder the process may not search), a folder
+  or a file that cannot be read or a `--read` value that is not `<schema>.<table>`.
 - `errors.SchemaFileError` and `errors.StrictYamlError`, each a `ContractsError`.
 
 ### Changed

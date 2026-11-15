@@ -178,6 +178,98 @@ def test_validate_refuses_a_file_it_cannot_read(tmp_path, monkeypatch, caplog):
     assert "Permission denied" in _errors(caplog)[0]
 
 
+def _without_access(folder, mode):
+    """Set `mode` on `folder` and skip the test when the system still lets the process look into
+    it, as it does for root and on file systems that ignore the mode."""
+    folder.chmod(mode)
+    try:
+        next(folder.iterdir()).stat()
+    except PermissionError:
+        return
+    folder.chmod(0o755)
+    pytest.skip("the system ignores the folder mode for this process")
+
+
+@pytest.fixture
+def locked(tmp_path):
+    """A folder without read or search permission that holds a contract file."""
+    folder = tmp_path / "locked"
+    folder.mkdir()
+    _put(folder, "py_daily_kpis.odcs.yaml", _demo_text())
+    _without_access(folder, 0o000)
+    yield folder
+    folder.chmod(0o755)
+
+
+@pytest.fixture
+def unsearchable(tmp_path):
+    """A folder that lists its contract file but lets no one look the file up."""
+    folder = tmp_path / "unsearchable"
+    folder.mkdir()
+    _put(folder, "py_daily_kpis.odcs.yaml", _demo_text())
+    _without_access(folder, 0o444)
+    yield folder
+    folder.chmod(0o755)
+
+
+def _argv(command, path, *flags):
+    service = ["--service", "service-py"] if command == "hash" else []
+    return [command, str(path), *service, *flags]
+
+
+@pytest.mark.parametrize("flags", [[], ["--json"]])
+@pytest.mark.parametrize("command", ["validate", "hash"])
+def test_a_file_below_a_folder_without_access_is_a_usage_error(
+    command, flags, locked, capsys, caplog
+):
+    path = locked / "py_daily_kpis.odcs.yaml"
+    assert main(_argv(command, path, *flags)) == 2
+    assert capsys.readouterr().out == ""
+    (message,) = _errors(caplog)
+    assert message.startswith(f"{path.as_posix()}: cannot look up the path: ")
+    assert "Permission denied" in message
+
+
+def test_validate_refuses_a_folder_it_cannot_read(locked, capsys, caplog):
+    assert main(["validate", str(locked), "--json"]) == 2
+    assert capsys.readouterr().out == ""
+    (message,) = _errors(caplog)
+    assert message.startswith(f"{locked.as_posix()}: cannot read the folder: ")
+    assert "Permission denied" in message
+
+
+def test_hash_refuses_a_folder_it_cannot_read_as_a_folder(locked, capsys, caplog):
+    assert main(["hash", str(locked), "--service", "service-py"]) == 2
+    assert capsys.readouterr().out == ""
+    assert _errors(caplog) == [f"{locked.as_posix()}: hash takes one contract file, not a folder"]
+
+
+def test_validate_refuses_a_listed_file_it_cannot_look_up(unsearchable, capsys, caplog):
+    path = unsearchable / "py_daily_kpis.odcs.yaml"
+    assert main(["validate", str(unsearchable), "--json"]) == 2
+    assert capsys.readouterr().out == ""
+    (message,) = _errors(caplog)
+    assert message.startswith(f"{path.as_posix()}: cannot look up the path: ")
+
+
+def test_a_lookup_error_is_named_with_the_other_bad_paths(locked, tmp_path, capsys, caplog):
+    inside = locked / "py_daily_kpis.odcs.yaml"
+    missing = tmp_path / "missing.odcs.yaml"
+    assert main(["validate", str(inside), str(DEMO), str(missing)]) == 2
+    assert capsys.readouterr().out == ""
+    assert [m.split(": ")[0] for m in _errors(caplog)] == [inside.as_posix(), missing.as_posix()]
+
+
+def test_validate_reads_a_hidden_contract_file_of_a_folder(tmp_path, capsys):
+    _put(tmp_path, ".py_daily_kpis.odcs.yaml", _demo_text())
+    _put(tmp_path, "py_daily_kpis.ODCS.YAML", _demo_text())
+    assert main(["validate", str(tmp_path), "--json"]) == 1
+    report = json.loads(capsys.readouterr().out)
+    assert [file["path"] for file in report["files"]] == [
+        (tmp_path / ".py_daily_kpis.odcs.yaml").as_posix()
+    ]
+
+
 @pytest.mark.parametrize("argv", [[], ["validate"], ["hash"], ["hash", "x.odcs.yaml"]])
 def test_a_usage_error_exits_2_through_argparse(argv, capsys):
     with pytest.raises(SystemExit) as exit_:

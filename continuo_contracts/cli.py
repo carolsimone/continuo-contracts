@@ -11,7 +11,8 @@ machine-read result: with `--json` one JSON document, and for `hash` without it 
 When a command finds nothing to print, as a usage error does, stdout stays empty. Exit status 0
 means the contracts are valid, 1 means a contract has an issue, and 2 means the command could not
 run: a usage error (a `--service` that is empty or blank among them), a path that names no contract
-file, a file that cannot be read, or a `--read` value that is not a table.
+file, a path that cannot be looked up, a folder or a file that cannot be read, or a `--read` value
+that is not a table.
 
 `main` configures logging when it runs, not when the module is imported, and returns the exit
 status. The console script `continuo-contracts` calls it.
@@ -20,6 +21,7 @@ status. The console script `continuo-contracts` calls it.
 import argparse
 import json
 import logging
+import stat
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -44,7 +46,8 @@ exit status:
   0  every contract is valid
   1  a contract has an issue
   2  a usage error (an empty or blank --service among them), a path that names no contract
-     file, a file that cannot be read, or a --read value that is not a table
+     file, a path that cannot be looked up, a folder or a file that cannot be read, or a
+     --read value that is not a table
 """
 
 _VALIDATE_DESCRIPTION: Final = """\
@@ -89,23 +92,68 @@ def _posix(path: Path) -> str:
     return path.as_posix()
 
 
+def _cannot(path: Path, action: str, error: OSError) -> str:
+    """Write the problem of an `action` on `path` that the system refused with `error`."""
+    return f"{_posix(path)}: cannot {action}: {error.strerror or error}"
+
+
+def _mode(path: Path) -> int | None:
+    """Return the `st_mode` of what `path` names, following symbolic links, or `None` when
+    nothing is there.
+
+    Raises the `OSError` of any other failure to look the path up, such as a folder on the way
+    that the process may not search, so the caller reports it instead of reading it as a missing
+    path.
+    """
+    try:
+        return path.stat().st_mode
+    except (FileNotFoundError, NotADirectoryError):
+        return None
+
+
+def _folder_files(folder: Path) -> tuple[list[Path], list[str]]:
+    """Return the regular `*.odcs.yaml` files directly in `folder`, in name order, and the
+    problems of the folder and of the entries that cannot be looked up."""
+    try:
+        entries = sorted(item for item in folder.iterdir() if item.name.endswith(_FILE_SUFFIX))
+    except OSError as error:
+        return [], [_cannot(folder, "read the folder", error)]
+    files: list[Path] = []
+    problems: list[str] = []
+    for entry in entries:
+        try:
+            mode = _mode(entry)
+        except OSError as error:
+            problems.append(_cannot(entry, "look up the path", error))
+            continue
+        if mode is not None and stat.S_ISREG(mode):
+            files.append(entry)
+    return files, problems
+
+
 def _contract_files(paths: Sequence[Path]) -> list[Path]:
     """Return the contract files that `paths` name: each file as it is, and for each folder its
     `*.odcs.yaml` files in name order, without looking into folders below it.
 
-    Raises `_UsageError` naming each path that is missing, is a file with another name or is a
-    folder with no contract file.
+    Raises `_UsageError` naming each path that is missing, is a file with another name, is a
+    folder with no contract file, or cannot be looked up or read as a folder, such as a path below
+    a folder that the process may not search.
     """
     files: list[Path] = []
     problems: list[str] = []
     for path in paths:
-        if path.is_dir():
-            found = sorted(item for item in path.glob(f"*{_FILE_SUFFIX}") if item.is_file())
-            if found:
-                files.extend(found)
-            else:
+        try:
+            mode = _mode(path)
+        except OSError as error:
+            problems.append(_cannot(path, "look up the path", error))
+            continue
+        if mode is not None and stat.S_ISDIR(mode):
+            found, unreadable = _folder_files(path)
+            files.extend(found)
+            problems.extend(unreadable)
+            if not found and not unreadable:
                 problems.append(f"{_posix(path)}: the folder has no *{_FILE_SUFFIX} file")
-        elif not path.is_file():
+        elif mode is None or not stat.S_ISREG(mode):
             problems.append(f"{_posix(path)}: no such file or folder")
         elif path.name.endswith(_FILE_SUFFIX):
             files.append(path)
@@ -195,7 +243,11 @@ def _validate(args: argparse.Namespace) -> int:
 
 def _hash(args: argparse.Namespace) -> int:
     path: Path = args.file
-    if path.is_dir():
+    try:
+        mode = _mode(path)
+    except OSError as error:
+        raise _UsageError(_cannot(path, "look up the path", error)) from error
+    if mode is not None and stat.S_ISDIR(mode):
         raise _UsageError(f"{_posix(path)}: hash takes one contract file, not a folder")
     ((path, text),) = _read_texts(_contract_files([path]))
     doc, issues = _check(path, text, args.service)

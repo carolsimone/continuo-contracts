@@ -827,7 +827,7 @@ it whole. When the command cannot run, stdout is empty.
 |---|---|
 | 0 | every contract is valid, or `hash` printed its hash |
 | 1 | a contract has an issue |
-| 2 | a usage error of the arguments (a `--service` that is empty or blank among them), a path that names no contract file (a folder with no `*.odcs.yaml` file, a path that does not exist, a file not named `*.odcs.yaml`), a file that is not UTF-8 text or cannot be read, or a `--read` value that is not a table |
+| 2 | a usage error of the arguments (a `--service` that is empty or blank among them), a path that names no contract file (a folder with no `*.odcs.yaml` file, a path that does not exist, a file not named `*.odcs.yaml`), a path that cannot be looked up (one below a folder the process may not search, among them), a folder that cannot be listed, a file that is not UTF-8 text or cannot be read, or a `--read` value that is not a table. An ERROR line names each such path and what the system refused |
 
 Nothing is checked when one path of the command is refused with status 2.
 
