@@ -46,6 +46,7 @@ and the PyYAML and jsonschema type stubs) into `.venv`.
 uv run ruff check .
 uv run ruff format --check .
 uv run mypy continuo_contracts scripts
+uv run lint-imports
 uv run pytest -q --cov --cov-report=term-missing
 ```
 
@@ -101,13 +102,31 @@ not a service, and layers would add indirection without a second implementation.
 `errors` and `vocabulary` import nothing from the package. `canonical`, `hashing`, `fingerprints`
 and `schema` import only `errors` (`fingerprints` also PyYAML), `yaml_strict` imports `canonical`,
 `errors` and PyYAML, `python` imports `canonical`, `errors`, `hashing`, `fingerprints` and
-`vocabulary`, `validate` imports `contract`, `errors`, `python`, `schema`, `vocabulary` and
-jsonschema, `contract` imports `canonical`, `errors`, `fingerprints`, `hashing`, `python` and
-`vocabulary`, `cli` imports `contract`, `errors`, `validate` and `yaml_strict`, and nothing imports
-`scripts` or `tests`. The only files the package reads are the packaged `fingerprints.yaml`, in
-`fingerprints.load()`, the packaged ODCS schema, in `schema.load()`, and the contract files that
-the arguments of `cli` name. A split into layers is proposed only when a module gets a second
-reason to change.
+`vocabulary`, `validate` imports `canonical`, `contract`, `errors`, `python`, `schema`,
+`vocabulary` and jsonschema, `contract` imports `canonical`, `errors`, `fingerprints`, `hashing`,
+`python` and `vocabulary`, `cli` imports `contract`, `errors`, `validate` and `yaml_strict`, and
+nothing imports `scripts` or `tests`. The only files the package reads are the packaged
+`fingerprints.yaml`, in `fingerprints.load()`, the packaged ODCS schema, in `schema.load()`, and the
+contract files that the arguments of `cli` name. A split into layers is proposed only when a module
+gets a second reason to change.
+
+import-linter enforces the graph (`uv run lint-imports`), with the contracts under
+`[tool.importlinter]` in `pyproject.toml` and no `ignore_imports` on any of them:
+
+- `import-graph` orders the flat modules in layers, top to bottom: `cli`, then `validate`, then
+  `contract`, then `python` and `yaml_strict`, then `canonical`, `hashing`, `schema` and
+  `fingerprints`, then `errors` and `vocabulary`. A module imports only from the layers below its
+  own, and the modules of one layer import none of each other, so nothing imports `cli` and
+  `errors` and `vocabulary` import nothing from the package. The contract is exhaustive: a module
+  that no layer names fails it.
+- `jsonschema-is-confined-to-validate` and `yaml-is-confined-to-fingerprints-and-yaml-strict` keep
+  each library to the modules that use it, and `only-cli-logs` keeps `logging` to `cli`, so the
+  library modules log nothing.
+
+`tests/test_architecture.py` holds the contracts to the code: it fails on an `ignore_imports`, on a
+module that a layer or a confinement does not name, and on an import of `scripts` or `tests`, which
+import-linter does not see. It also plants an import that breaks each contract in a copy of the
+package and checks that `lint-imports` fails.
 
 ## Releasing
 

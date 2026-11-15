@@ -77,6 +77,86 @@ addopts = "--import-mode=importlib --strict-markers"
 testpaths = ["tests"]
 filterwarnings = ["error"]
 
+[tool.importlinter]
+root_package = "continuo_contracts"
+include_external_packages = true
+
+# The import graph of CONTRIBUTING.md. A module imports only from the layers below its own, so
+# nothing imports `cli`, and `errors` and `vocabulary`, the bottom layer, import nothing from
+# the package. The modules of one layer, separated by `|`, import none of each other, directly
+# or through another module. `exhaustive` makes a module that no layer names fail the check.
+[[tool.importlinter.contracts]]
+name = "import-graph"
+type = "layers"
+containers = ["continuo_contracts"]
+layers = [
+    "cli",
+    "validate",
+    "contract",
+    "python | yaml_strict",
+    "canonical | hashing | schema | fingerprints",
+    "errors | vocabulary",
+]
+exhaustive = true
+
+# The libraries are confined to the modules that use them, and `source_modules` names every
+# other module, because a contract on the whole package would flag the modules that use the
+# library too. A module that imports the library through one of these modules is allowed, so
+# `allow_indirect_imports` is on.
+[[tool.importlinter.contracts]]
+name = "jsonschema-is-confined-to-validate"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = [
+    "continuo_contracts.canonical",
+    "continuo_contracts.cli",
+    "continuo_contracts.contract",
+    "continuo_contracts.errors",
+    "continuo_contracts.fingerprints",
+    "continuo_contracts.hashing",
+    "continuo_contracts.python",
+    "continuo_contracts.schema",
+    "continuo_contracts.vocabulary",
+    "continuo_contracts.yaml_strict",
+]
+forbidden_modules = ["jsonschema"]
+
+[[tool.importlinter.contracts]]
+name = "yaml-is-confined-to-fingerprints-and-yaml-strict"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = [
+    "continuo_contracts.canonical",
+    "continuo_contracts.cli",
+    "continuo_contracts.contract",
+    "continuo_contracts.errors",
+    "continuo_contracts.hashing",
+    "continuo_contracts.python",
+    "continuo_contracts.schema",
+    "continuo_contracts.validate",
+    "continuo_contracts.vocabulary",
+]
+forbidden_modules = ["yaml"]
+
+# The library modules log nothing; `cli` logs from `main`.
+[[tool.importlinter.contracts]]
+name = "only-cli-logs"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = [
+    "continuo_contracts.canonical",
+    "continuo_contracts.contract",
+    "continuo_contracts.errors",
+    "continuo_contracts.fingerprints",
+    "continuo_contracts.hashing",
+    "continuo_contracts.python",
+    "continuo_contracts.schema",
+    "continuo_contracts.validate",
+    "continuo_contracts.vocabulary",
+    "continuo_contracts.yaml_strict",
+]
+forbidden_modules = ["logging"]
+
 [tool.coverage.run]
 branch = true
 source = ["continuo_contracts"]

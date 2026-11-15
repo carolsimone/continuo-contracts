@@ -119,8 +119,8 @@ jobs:
           fi
       - name: Test before publishing
         # The gate in front of the immutable upload. `--locked` fails when uv.lock does not
-        # match pyproject.toml.
-        run: uv sync --locked && uv run --locked pytest
+        # match pyproject.toml, and `--cov` applies the coverage floor ci.yml applies.
+        run: uv sync --locked && uv run --locked pytest --cov
       - name: Rewrite the version to a unique dev release (rehearsal only)
         if: steps.mode.outputs.mode != 'real'
         # TestPyPI never replaces a file, so each rehearsal needs a version of its own. `--frozen`
