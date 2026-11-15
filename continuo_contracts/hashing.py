@@ -24,6 +24,7 @@ units that swap their contents change the hash. An empty set of units folds to `
 
 import hashlib
 import re
+
 from collections.abc import Mapping
 
 from continuo_contracts.errors import HashInputError

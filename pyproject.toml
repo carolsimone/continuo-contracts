@@ -3,15 +3,13 @@ name = "continuo-contracts"
 version = "0.1.0"
 description = "Canonical JSON, the Python code projection, the content_hash folds and the fingerprint field declaration that continuo and its producers share."
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "Simone Carolini" }]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Typing :: Typed",
 ]
@@ -27,9 +25,11 @@ Changelog = "https://github.com/carolsimone/continuo-contracts/blob/main/CHANGEL
 [dependency-groups]
 dev = [
     "pytest==9.1.1",
-    "ruff==0.17.1",
+    "pytest-cov==7.1.0",
+    "ruff==0.17.2",
     "mypy==2.4.0",
-    "types-PyYAML==6.0.12.20250915",
+    "import-linter==2.15",
+    "types-PyYAML==6.0.12.20260906",
     "types-jsonschema==4.26.0.20261006",
 ]
 
@@ -40,18 +40,148 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["continuo_contracts"]
 
+# Hatchling reads only the root `.gitignore`, and not at all when the project sits under an
+# ignored folder such as `.worktrees/`, so the sdist names the local files it must not ship.
+[tool.hatch.build.targets.sdist]
+exclude = [
+    ".coverage",
+    ".coverage.*",
+    ".grimp_cache",
+    ".import_linter_cache",
+    ".superpowers",
+]
+
 [tool.ruff]
-target-version = "py312"
-line-length = 100
+target-version = "py314"
+line-length = 82
 
 [tool.ruff.lint]
-select = ["E4", "E501", "E7", "E9", "F", "I", "B", "UP"]
+# T20 forbids print: diagnostics go through logging to stderr. D checks docstrings.
+select = ["E", "F", "I", "B", "UP", "SIM", "T20", "D"]
+ignore = [
+    "D104", # Ignore missing docstring in __init__.py files
+    "E501", # ruff format owns line length; long string literals are not wrapped
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ruff.lint.isort]
+section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
+known-first-party = ["continuo_contracts"]
+lines-between-types = 1
+
+[tool.ruff.format]
+quote-style = "double"
+line-ending = "auto"
+indent-style = "space"
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.14"
+files = ["continuo_contracts", "scripts"]
 strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+check_untyped_defs = true
 
 [tool.pytest.ini_options]
 addopts = "--import-mode=importlib --strict-markers"
 testpaths = ["tests"]
 filterwarnings = ["error"]
+
+[tool.importlinter]
+root_package = "continuo_contracts"
+include_external_packages = true
+
+# The ordering of the import graph in CONTRIBUTING.md, not each edge of it. A module imports
+# only from the layers below its own, so nothing imports `cli`, and `errors` and `vocabulary`,
+# the bottom layer, import nothing from the package. The modules of one layer, separated by
+# `|`, import none of each other, directly or through another module. `exhaustive` makes a
+# module that no layer names fail the check.
+[[tool.importlinter.contracts]]
+name = "import-graph"
+type = "layers"
+containers = ["continuo_contracts"]
+layers = [
+    "cli",
+    "validate",
+    "contract",
+    "python | yaml_strict",
+    "canonical | hashing | schema | fingerprints",
+    "errors | vocabulary",
+]
+exhaustive = true
+
+# The libraries are confined to the modules that use them, and `source_modules` names every
+# other module, because a contract on the whole package would flag the modules that use the
+# library too. A module that imports the library through one of these modules is allowed, so
+# `allow_indirect_imports` is on.
+[[tool.importlinter.contracts]]
+name = "jsonschema-is-confined-to-validate"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = [
+    "continuo_contracts.canonical",
+    "continuo_contracts.cli",
+    "continuo_contracts.contract",
+    "continuo_contracts.errors",
+    "continuo_contracts.fingerprints",
+    "continuo_contracts.hashing",
+    "continuo_contracts.python",
+    "continuo_contracts.schema",
+    "continuo_contracts.vocabulary",
+    "continuo_contracts.yaml_strict",
+]
+forbidden_modules = ["jsonschema"]
+
+[[tool.importlinter.contracts]]
+name = "yaml-is-confined-to-fingerprints-and-yaml-strict"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = [
+    "continuo_contracts.canonical",
+    "continuo_contracts.cli",
+    "continuo_contracts.contract",
+    "continuo_contracts.errors",
+    "continuo_contracts.hashing",
+    "continuo_contracts.python",
+    "continuo_contracts.schema",
+    "continuo_contracts.validate",
+    "continuo_contracts.vocabulary",
+]
+forbidden_modules = ["yaml"]
+
+# The library modules log nothing; `cli` logs from `main`.
+[[tool.importlinter.contracts]]
+name = "only-cli-logs"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = [
+    "continuo_contracts.canonical",
+    "continuo_contracts.contract",
+    "continuo_contracts.errors",
+    "continuo_contracts.fingerprints",
+    "continuo_contracts.hashing",
+    "continuo_contracts.python",
+    "continuo_contracts.schema",
+    "continuo_contracts.validate",
+    "continuo_contracts.vocabulary",
+    "continuo_contracts.yaml_strict",
+]
+forbidden_modules = ["logging"]
+
+[tool.coverage.run]
+branch = true
+source = ["continuo_contracts"]
+
+[tool.coverage.report]
+fail_under = 100
+show_missing = true
+exclude_also = ["if __name__ == .__main__.:"]

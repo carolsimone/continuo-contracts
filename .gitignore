@@ -7,3 +7,7 @@ dist/
 .worktrees/
 .DS_Store
 docs/ddd-violations/
+.coverage
+.coverage.*
+.grimp_cache/
+.import_linter_cache/

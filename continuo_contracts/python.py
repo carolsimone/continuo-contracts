@@ -24,11 +24,17 @@ bytes.
 """
 
 import re
+
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, fields
 from typing import Any, Final, Self
 
-from continuo_contracts.canonical import MAX_DEPTH, _ascii_lower, canonical_json, normalise_text
+from continuo_contracts.canonical import (
+    MAX_DEPTH,
+    _ascii_lower,
+    canonical_json,
+    normalise_text,
+)
 from continuo_contracts.errors import CanonicalJsonError, ProjectionError
 from continuo_contracts.fingerprints import projection_keys
 from continuo_contracts.hashing import sha256_hex
@@ -59,8 +65,11 @@ _PARAMETERISED_SQL_TYPE = re.compile(
 
 @dataclass(frozen=True)
 class PythonColumn:
-    """An output column of a Python node: its name, its SQL type as declared and whether it
-    accepts NULL."""
+    """An output column of a Python node.
+
+    It holds the name of the column, its SQL type as declared and whether it
+    accepts NULL.
+    """
 
     name: str
     type: str
@@ -108,8 +117,14 @@ class PythonNode:
             )
         for required in ("schema", "table"):
             if required not in entry:
-                raise ProjectionError(f"a python node entry has no {required!r} field")
-        values = {item.name: entry[item.name] for item in fields(cls) if item.name in entry}
+                raise ProjectionError(
+                    f"a python node entry has no {required!r} field"
+                )
+        values = {
+            item.name: entry[item.name]
+            for item in fields(cls)
+            if item.name in entry
+        }
         try:
             _convert_containers(values)
         except ProjectionError as error:
@@ -123,10 +138,10 @@ def canonical_sql_type(raw: str) -> str:
     Outer whitespace is stripped and case is ignored. The whitespace that is stripped is exactly
     these 29 code points and no other character: U+0009 to U+000D, U+001C to U+001F, U+0020,
     U+0085, U+00A0, U+1680, U+2000 to U+200A, U+2028, U+2029, U+202F, U+205F and U+3000. They
-    are the code points that `str.strip()` removes, the same on Python 3.12, 3.13 and 3.14, so
-    a zero width space (U+200B) around a type is refused. `normalise_text`, by contrast, removes
-    only the six ASCII whitespace characters. After the comma of `NUMERIC(p, s)` any run of ASCII
-    whitespace is accepted.
+    are the code points that `str.strip()` removes on Python 3.14, so a zero width space (U+200B)
+    around a type is refused. `normalise_text`, by contrast, removes only the six ASCII
+    whitespace characters. After the comma of `NUMERIC(p, s)` any run of ASCII whitespace is
+    accepted.
 
     The supported types are `BIGINT`, `INT`, `INTEGER`, `DOUBLE PRECISION` (with one space),
     `TEXT`, `TIMESTAMP`, `DATE`, `BOOLEAN`, `NUMERIC(p,s)`, `DECIMAL(p,s)`, `VARCHAR(n)` and
@@ -153,7 +168,11 @@ def canonical_sql_type(raw: str) -> str:
     precision, scale = _plain_integer(first), _plain_integer(second)
     # A number of more than two digits is above 38, and checking the length first keeps a very
     # long digit string from reaching `int`, which refuses it.
-    if len(precision) > 2 or len(scale) > 2 or not _numeric_in_range(int(precision), int(scale)):
+    if (
+        len(precision) > 2
+        or len(scale) > 2
+        or not _numeric_in_range(int(precision), int(scale))
+    ):
         raise ProjectionError(
             f"NUMERIC({precision},{scale}) is out of range: the precision is 1 to "
             f"{_NUMERIC_MAX_PRECISION} and the scale is 0 up to the precision"
@@ -162,8 +181,10 @@ def canonical_sql_type(raw: str) -> str:
 
 
 def code_projection(node: PythonNode) -> dict[str, Any]:
-    """Return the code projection of `node`: one entry for each key of
-    `fingerprints.projection_keys()`, in that order.
+    """Return the code projection of `node`.
+
+    It has one entry for each key of `fingerprints.projection_keys()`, in that
+    order.
 
     `config` is copied with every mapping as a `dict` and every list or tuple as a `list`, down to
     level `canonical.MAX_DEPTH` (the config itself is level 1), so changing the result does not
@@ -228,13 +249,19 @@ def node_from_odcs(doc: Mapping[str, Any]) -> PythonNode:
     `config` or `assets` are not the containers they must be.
     """
     if not isinstance(doc, Mapping):
-        raise ProjectionError(f"an ODCS contract must be a mapping, not {type(doc).__name__}")
+        raise ProjectionError(
+            f"an ODCS contract must be a mapping, not {type(doc).__name__}"
+        )
     table_object = _table_object(doc)
     table = _table_name(table_object)
     properties = _properties(table_object)
     values = continuo_values(doc.get("customProperties"))
     declared = values.get("kind", "python-node")
-    kind = KIND_ALIASES.get(declared, declared) if isinstance(declared, str) else declared
+    kind = (
+        KIND_ALIASES.get(declared, declared)
+        if isinstance(declared, str)
+        else declared
+    )
     reads = values.get("readQueries", {})
     if kind == "python-csv":
         reads = {"csv": values["csvSource"]} if "csvSource" in values else {}
@@ -276,7 +303,11 @@ def _refusal(relation: str, error: Exception) -> ProjectionError:
 
 def _table_object(doc: Mapping[str, Any]) -> Mapping[str, Any]:
     objects = doc.get("schema")
-    if not isinstance(objects, list) or len(objects) != 1 or not isinstance(objects[0], Mapping):
+    if (
+        not isinstance(objects, list)
+        or len(objects) != 1
+        or not isinstance(objects[0], Mapping)
+    ):
         raise ProjectionError("the contract must have exactly one schema object")
     return objects[0]
 
@@ -289,9 +320,11 @@ def _table_name(table_object: Mapping[str, Any]) -> str:
 
 
 def _id_schema(identifier: object, table: str) -> str | None:
-    """Return the schema part of the id `identifier`: the id without the `.<table>` that ends it,
-    as written, or `None` when the id is not a string that ends in a dot and the table after a
-    schema part that is not empty.
+    """Return the schema part of the id `identifier`.
+
+    That is the id without the `.<table>` that ends it, as written, or `None` when
+    the id is not a string that ends in a dot and the table after a schema part
+    that is not empty.
 
     The id and the table are compared with their ASCII letters in lower case and every other
     character as written, so the id `analytics.k\u00c4se` names the table `K\u00c4SE`. The
@@ -301,7 +334,9 @@ def _id_schema(identifier: object, table: str) -> str | None:
     if not isinstance(identifier, str):
         return None
     tail = "." + _ascii_lower(table)
-    if len(identifier) <= len(tail) or not _ascii_lower(identifier).endswith(tail):
+    if len(identifier) <= len(tail) or not _ascii_lower(identifier).endswith(
+        tail
+    ):
         return None
     return identifier[: -len(tail)]
 
@@ -310,20 +345,28 @@ def _schema_name(identifier: object, table: str) -> str:
     """Return the schema part of the id `identifier`, which names the table `table`."""
     schema = _id_schema(identifier, table)
     if schema is None:
-        raise ProjectionError(f"the id {identifier!r} is not <schema>.{_ascii_lower(table)}")
+        raise ProjectionError(
+            f"the id {identifier!r} is not <schema>.{_ascii_lower(table)}"
+        )
     return schema
 
 
 def _properties(table_object: Mapping[str, Any]) -> list[Mapping[str, Any]]:
-    """Return the columns of the schema object, each checked to be a mapping with a name and a
-    `physicalType`."""
+    """Return the columns of the schema object.
+
+    Each column is checked to be a mapping with a name and a `physicalType`.
+    """
     properties = table_object.get("properties", [])
     if not isinstance(properties, list):
-        raise ProjectionError(f"properties must be a list, not {type(properties).__name__}")
+        raise ProjectionError(
+            f"properties must be a list, not {type(properties).__name__}"
+        )
     for index, column in enumerate(properties):
         where = f"properties[{index}]"
         if not isinstance(column, Mapping):
-            raise ProjectionError(f"{where} must be a mapping, not {type(column).__name__}")
+            raise ProjectionError(
+                f"{where} must be a mapping, not {type(column).__name__}"
+            )
         for required in ("name", "physicalType"):
             if required not in column:
                 raise ProjectionError(f"{where} has no {required!r} field")
@@ -331,9 +374,12 @@ def _properties(table_object: Mapping[str, Any]) -> list[Mapping[str, Any]]:
 
 
 def _key_position(value: object) -> int | None:
-    """Return `value` as a position in a key, a whole number from 1 (`1.0` is 1), or `None` when
-    it is not one. The validator reads the positions of an upsert key through this function, so
-    that it and `node_from_odcs` order a key the same way."""
+    """Return `value` as a position in a key, or `None` when it is not one.
+
+    A position is a whole number from 1 (`1.0` is 1). The validator reads the
+    positions of an upsert key through this function, so that it and
+    `node_from_odcs` order a key the same way.
+    """
     if isinstance(value, bool):
         return None
     if isinstance(value, int):
@@ -346,8 +392,11 @@ def _key_position(value: object) -> int | None:
 
 
 def _key_names(properties: Sequence[Mapping[str, Any]]) -> list[Any]:
-    """Return the names of the columns with `primaryKey: true`: those with a position first, by
-    position, then the others, and a tie by file order."""
+    """Return the names of the columns with `primaryKey: true`.
+
+    The columns with a position come first, by position, then the others, and a
+    tie goes by file order.
+    """
     keyed = []
     for index, column in enumerate(properties):
         if column.get("primaryKey") is True:
@@ -365,7 +414,9 @@ def _convert_containers(values: dict[str, Any]) -> None:
             values[name] = tuple(_list(values[name], name))
     if "output_columns" in values:
         columns = _list(values["output_columns"], "output_columns")
-        values["output_columns"] = tuple(_column(index, item) for index, item in enumerate(columns))
+        values["output_columns"] = tuple(
+            _column(index, item) for index, item in enumerate(columns)
+        )
 
 
 def _column(index: int, item: object) -> PythonColumn:
@@ -374,18 +425,24 @@ def _column(index: int, item: object) -> PythonColumn:
     for required in ("name", "type"):
         if required not in column:
             raise ProjectionError(f"{where} has no {required!r} field")
-    return PythonColumn(column["name"], column["type"], column.get("nullable", True))
+    return PythonColumn(
+        column["name"], column["type"], column.get("nullable", True)
+    )
 
 
 def _mapping(value: object, what: str) -> Mapping[Any, Any]:
     if not isinstance(value, Mapping):
-        raise ProjectionError(f"{what} must be a mapping, not {type(value).__name__}")
+        raise ProjectionError(
+            f"{what} must be a mapping, not {type(value).__name__}"
+        )
     return value
 
 
 def _list(value: object, what: str) -> Sequence[Any]:
     if not isinstance(value, list | tuple):
-        raise ProjectionError(f"{what} must be a list, not {type(value).__name__}")
+        raise ProjectionError(
+            f"{what} must be a list, not {type(value).__name__}"
+        )
     return value
 
 
@@ -421,7 +478,9 @@ def _kind(node: PythonNode) -> str:
 
 def _text(value: object, what: str, *, allow_empty: bool = False) -> str:
     if not isinstance(value, str):
-        raise ProjectionError(f"{what} must be a string, not {type(value).__name__}")
+        raise ProjectionError(
+            f"{what} must be a string, not {type(value).__name__}"
+        )
     if not value and not allow_empty:
         raise ProjectionError(f"{what} must not be empty")
     return value
@@ -429,7 +488,9 @@ def _text(value: object, what: str, *, allow_empty: bool = False) -> str:
 
 def _one_of(value: object, allowed: Sequence[str], what: str) -> str:
     if not isinstance(value, str) or value not in allowed:
-        raise ProjectionError(f"{what} {value!r} is not one of {', '.join(allowed)}")
+        raise ProjectionError(
+            f"{what} {value!r} is not one of {', '.join(allowed)}"
+        )
     return value
 
 
@@ -469,7 +530,9 @@ def _reads(node: PythonNode, kind: str) -> dict[str, str]:
         return {name: normalise_text(source) for name, source in reads.items()}
     if kind == "python-csv":
         if set(reads) != {"csv"}:
-            raise ProjectionError("reads must hold exactly the key 'csv' on a python-csv node")
+            raise ProjectionError(
+                "reads must hold exactly the key 'csv' on a python-csv node"
+            )
         return dict(reads)
     if reads:
         raise ProjectionError("reads must be empty on a python-api node")
@@ -481,7 +544,9 @@ def _output_columns(node: PythonNode, kind: str) -> list[dict[str, Any]]:
     for index, column in enumerate(_list(node.output_columns, "output_columns")):
         where = f"output_columns[{index}]"
         if not isinstance(column, PythonColumn):
-            raise ProjectionError(f"{where} must be a PythonColumn, not {type(column).__name__}")
+            raise ProjectionError(
+                f"{where} must be a PythonColumn, not {type(column).__name__}"
+            )
         name = _text(column.name, f"{where}.name")
         if not isinstance(column.nullable, bool):
             raise ProjectionError(
@@ -491,7 +556,9 @@ def _output_columns(node: PythonNode, kind: str) -> list[dict[str, Any]]:
             sql_type = canonical_sql_type(column.type)
         except ProjectionError as error:
             raise ProjectionError(f"{where} ({name}): {error}") from None
-        columns.append({"name": name, "type": sql_type, "nullable": column.nullable})
+        columns.append(
+            {"name": name, "type": sql_type, "nullable": column.nullable}
+        )
     return columns
 
 
@@ -507,9 +574,11 @@ def _config(node: PythonNode, kind: str) -> dict[str, Any]:
 
 
 def _json_copy(value: object, on_path: dict[int, object], depth: int) -> object:
-    """Copy `value`, a container on level `depth` of `config`, by its JSON shape: a mapping
-    becomes a `dict`, a list or tuple becomes a `list`, and anything else is returned as it is,
-    for `canonical_json` to accept or to refuse with the path of the value.
+    """Copy `value`, a container on level `depth` of `config`, by its JSON shape.
+
+    A mapping becomes a `dict`, a list or tuple becomes a `list`, and anything
+    else is returned as it is, for `canonical_json` to accept or to refuse with
+    the path of the value.
 
     `on_path` maps each container that is being copied, from the root down to `value`, to its
     copy. A container that contains itself is copied as a copy that contains itself, so the copy
@@ -540,7 +609,9 @@ def _copy_mapping(
     return copied
 
 
-def _copy_list(source: Sequence[Any], on_path: dict[int, object], depth: int) -> list[Any]:
+def _copy_list(
+    source: Sequence[Any], on_path: dict[int, object], depth: int
+) -> list[Any]:
     copied: list[Any] = []
     on_path[id(source)] = copied
     for item in source:
@@ -560,7 +631,9 @@ def _secret_ref(node: PythonNode, kind: str) -> str:
 def _mode_type(node: PythonNode, kind: str) -> str:
     mode = _one_of(node.mode_type, MODE_TYPES, "mode_type")
     if kind == "python-csv" and mode != "replace":
-        raise ProjectionError(f"mode_type must be replace on a python-csv node, not {mode}")
+        raise ProjectionError(
+            f"mode_type must be replace on a python-csv node, not {mode}"
+        )
     return mode
 
 

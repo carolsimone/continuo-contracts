@@ -2,6 +2,7 @@
 
 import json
 import time
+
 from importlib import resources
 from pathlib import Path
 
@@ -20,9 +21,12 @@ INVALID = [case for case in CASES if "issues" in case]
 
 # Each valid case whose text is a fixture of this repository, with that fixture.
 FIXTURE_OF = {
-    "demo_py_daily_kpis": FIXTURES / "demo/service-py/contracts/py_daily_kpis.odcs.yaml",
-    "demo_orders_csv": FIXTURES / "demo/service-py/contracts/demo_orders_csv.odcs.yaml",
-    "demo_fx_eur_usd_rates": FIXTURES / "demo/service-py/contracts/fx_eur_usd_rates.odcs.yaml",
+    "demo_py_daily_kpis": FIXTURES
+    / "demo/service-py/contracts/py_daily_kpis.odcs.yaml",
+    "demo_orders_csv": FIXTURES
+    / "demo/service-py/contracts/demo_orders_csv.odcs.yaml",
+    "demo_fx_eur_usd_rates": FIXTURES
+    / "demo/service-py/contracts/fx_eur_usd_rates.odcs.yaml",
     "full_python_node": FIXTURES / "full/python_node.odcs.yaml",
     "full_python_csv": FIXTURES / "full/python_csv.odcs.yaml",
     "full_python_api": FIXTURES / "full/python_api.odcs.yaml",
@@ -35,9 +39,15 @@ def _run(case):
         doc = yaml_strict.load(case["text"])
     except StrictYamlError:
         return {"issues": [{"path": "$", "reason": "strict_yaml"}]}
-    issues = validate_python_contract(doc, path=case["path"], service=case["service"])
+    issues = validate_python_contract(
+        doc, path=case["path"], service=case["service"]
+    )
     if issues:
-        return {"issues": [{"path": issue.path, "reason": issue.reason} for issue in issues]}
+        return {
+            "issues": [
+                {"path": issue.path, "reason": issue.reason} for issue in issues
+            ]
+        }
     stored = normalise_python(doc, service=case["service"], reads=case["reads"])
     return {"stored": stored, "contract_hash": contract_hash(stored)}
 
@@ -86,18 +96,35 @@ REFUSED = {
 
 
 def test_the_file_holds_the_valid_and_the_refused_cases():
-    assert sorted(case["name"] for case in VALID) == sorted([*FIXTURE_OF, MESSY, MESSY_TYPES])
-    assert {case["name"]: [i["reason"] for i in case["issues"]] for case in INVALID} == REFUSED
+    assert sorted(case["name"] for case in VALID) == sorted(
+        [*FIXTURE_OF, MESSY, MESSY_TYPES]
+    )
+    assert {
+        case["name"]: [i["reason"] for i in case["issues"]] for case in INVALID
+    } == REFUSED
     assert len({case["name"] for case in CASES}) == len(CASES)
 
 
 def test_every_case_has_the_documented_fields():
     for case in VALID:
         assert set(case) == {
-            "name", "path", "service", "reads", "text", "stored", "contract_hash"
+            "name",
+            "path",
+            "service",
+            "reads",
+            "text",
+            "stored",
+            "contract_hash",
         }, case["name"]
     for case in INVALID:
-        assert set(case) == {"name", "path", "service", "reads", "text", "issues"}, case["name"]
+        assert set(case) == {
+            "name",
+            "path",
+            "service",
+            "reads",
+            "text",
+            "issues",
+        }, case["name"]
 
 
 @pytest.mark.parametrize("case", VALID, ids=lambda case: case["name"])
@@ -128,7 +155,12 @@ def test_no_invalid_case_is_refused_by_the_json_schema():
     reasons = {issue["reason"] for case in INVALID for issue in case["issues"]}
     assert "odcs_schema" not in reasons
     assert reasons == {
-        "column_type", "refused_field", "file_name", "strict_yaml", "identity", "value"
+        "column_type",
+        "refused_field",
+        "file_name",
+        "strict_yaml",
+        "identity",
+        "value",
     }
 
 
@@ -171,7 +203,11 @@ MESSY_TYPES = "messy_column_types"
 
 def test_the_messy_types_case_writes_each_type_in_another_spelling():
     text = _case(MESSY_TYPES)["text"]
-    for spelling in ('physicalType: " Date"', "physicalType: int,", '"decimal(012, 02)"'):
+    for spelling in (
+        'physicalType: " Date"',
+        "physicalType: int,",
+        '"decimal(012, 02)"',
+    ):
         assert spelling in text, spelling
     for canonical in ("DATE", "INTEGER", "NUMERIC"):
         assert canonical not in text.split("properties:")[1], canonical
@@ -187,7 +223,11 @@ def test_the_messy_types_case_stores_and_hashes_like_the_demo_node():
 def test_the_one_key_column_of_the_csv_contract_is_stored_without_its_position():
     case = _case("full_python_csv")
     assert "primaryKeyPosition: 1" in case["text"]
-    (key,) = [c for c in case["stored"]["schema"][0]["properties"] if c.get("primaryKey")]
+    (key,) = [
+        c
+        for c in case["stored"]["schema"][0]["properties"]
+        if c.get("primaryKey")
+    ]
     assert "primaryKeyPosition" not in key
 
 
@@ -200,5 +240,9 @@ def test_the_demo_node_is_stored_with_its_reads():
     case = next(case for case in VALID if case["name"] == "demo_py_daily_kpis")
     assert case["reads"] == ["analytics.daily_transactions"]
     assert case["stored"]["schema"][0]["customProperties"] == [
-        {"property": "reads", "value": ["analytics.daily_transactions"], "vendor": "continuo"}
+        {
+            "property": "reads",
+            "value": ["analytics.daily_transactions"],
+            "vendor": "continuo",
+        }
     ]

@@ -42,8 +42,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (`value`): no empty, `.` or `..` part, no `\`, and no `/`, `~` or drive letter at the start, so
   `./a.json`, `a//b`, `a\..\etc` and `C:/x` are refused.
 - The id and the table are compared with their ASCII letters in lower case and every other
-  character as written, so a Python contract is accepted or refused alike on Python 3.12, 3.13
-  and 3.14, whose Unicode tables lower-case different letters.
+  character as written, so a Python contract is accepted or refused alike whatever Unicode tables
+  the Python that runs it has, which lower-case different letters.
 - The rules also check what depends on the kind of the node (`kind_rule`): each property has a
   value of its kind (`timeoutMinutes` is 1 to 10080, `secretRef` is a `continuo-api-` Secret name
   of at most 253 characters, `csvSource` is `s3://<bucket>/<key>` or `https://<host>`,
@@ -99,6 +99,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- The library requires Python 3.14 or later (`requires-python` is `>=3.14`). Python 3.12 and 3.13
+  are no longer supported.
 - `jsonschema>=4.26` is a runtime dependency, next to PyYAML. The wheel stays pure Python.
 - `parse_fingerprints()` refuses a file without `lists.contract_hash_exclusions`, and a `rule`
   entry is either `outside_denylist` (a dbt family) or `standard_field` (a Python family).

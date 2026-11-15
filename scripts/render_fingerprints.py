@@ -6,6 +6,7 @@ from this script's own location.
 
 import logging
 import sys
+
 from pathlib import Path
 
 from continuo_contracts.fingerprints import load, render_markdown
@@ -24,5 +25,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(stream=sys.stderr, level=logging.INFO, format="%(levelname)s %(message)s")
+    logging.basicConfig(
+        stream=sys.stderr, level=logging.INFO, format="%(levelname)s %(message)s"
+    )
     raise SystemExit(main())

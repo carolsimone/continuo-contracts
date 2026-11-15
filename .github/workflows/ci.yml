@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.12", "3.13", "3.14"]
+        python: ["3.14"]
     env:
       # Overrides .python-version, so each leg runs its own interpreter.
       UV_PYTHON: ${{ matrix.python }}
@@ -29,26 +29,26 @@ jobs:
           EXPECTED_PYTHON: ${{ matrix.python }}
         run: uv run --locked python -c "import sys; assert sys.version.startswith(sys.argv[1] + '.'), sys.version" "$EXPECTED_PYTHON"
       - run: uv run --locked ruff check .
-      - run: uv run --locked mypy continuo_contracts scripts
-      - run: uv run --locked pytest
+      - run: uv run --locked ruff format --check .
+      - run: uv run --locked mypy
+      - run: uv run --locked lint-imports
+      - run: uv run --locked pytest -q --cov --cov-report=term-missing
 
   # Builds the distributions, refuses a wheel that lacks a module or a data file, and runs the
-  # installed wheel from outside the checkout on the oldest and the newest supported Python.
+  # installed wheel from outside the checkout on Python 3.14.
   wheel:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
       - run: uv build -o dist
-      - run: uv run --no-project --python 3.12 scripts/check_wheel.py dist
-      - name: Install the wheel in clean environments and run the smoke test
+      - run: uv run --no-project --python 3.14 scripts/check_wheel.py dist
+      - name: Install the wheel in a clean environment and run the smoke test
         run: |
           set -euo pipefail
-          for py in 3.12 3.14; do
-            uv venv -q --python "$py" "$RUNNER_TEMP/venv-$py"
-            uv pip install -q --python "$RUNNER_TEMP/venv-$py/bin/python" dist/*.whl
-            (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/venv-$py/bin/python" -I "$GITHUB_WORKSPACE/scripts/smoke_installed.py")
-          done
+          uv venv -q --python 3.14 "$RUNNER_TEMP/venv"
+          uv pip install -q --python "$RUNNER_TEMP/venv/bin/python" dist/*.whl
+          (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/venv/bin/python" -I "$GITHUB_WORKSPACE/scripts/smoke_installed.py")
 
   # The one check a ruleset requires, with dco. always() makes a failed test or wheel job fail
   # this job instead of skipping it, because a skipped check reads as passing.

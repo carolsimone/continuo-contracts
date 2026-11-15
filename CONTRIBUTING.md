@@ -31,24 +31,31 @@ repository; please do not add headers to new files.
 
 ## Development setup
 
-Prerequisites: Python 3.12 or later and [uv](https://docs.astral.sh/uv/).
+Prerequisites: Python 3.14 or later and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 uv sync
 ```
 
-`uv sync` installs the package and the `dev` group (pytest, ruff, mypy and the PyYAML type
-stubs) into `.venv`.
+`uv sync` installs the package and the `dev` group (pytest, pytest-cov, ruff, mypy, import-linter
+and the PyYAML and jsonschema type stubs) into `.venv`.
 
 ## Before you open a pull request
 
 ```bash
 uv run ruff check .
-uv run mypy continuo_contracts scripts
-uv run pytest
+uv run ruff format --check .
+uv run mypy
+uv run lint-imports
+uv run pytest -q --cov --cov-report=term-missing
 ```
 
-These are the checks `.github/workflows/ci.yml` runs on Python 3.12, 3.13 and 3.14.
+These are the checks `.github/workflows/ci.yml` runs on Python 3.14.
+
+The test run measures line and branch coverage of `continuo_contracts` and fails under 100%
+(`fail_under` in `pyproject.toml`); the report lists each line and branch that no test reaches. The
+only exclusion is the `if __name__ == "__main__":` guard, and `# pragma: no cover` is not used: reach
+a line with a test through the public functions, or delete it when no input can reach it.
 
 ## Conventions
 
@@ -57,7 +64,11 @@ These are the checks `.github/workflows/ci.yml` runs on Python 3.12, 3.13 and 3.
 - **Python logging.** Use the standard `logging` module for diagnostic output, written to
   stderr, never `print`. The library modules log nothing, and `cli` logs from `main`, not at
   import. The only exception is a machine-read stdout value, such as the JSON or the hash that
-  `cli` prints, which stays an explicit `print`.
+  `cli` prints, which stays an explicit `print` with a `# noqa: T201` that says why.
+- **Formatting and lint.** `uv run ruff format .` formats the code at 82 columns, and
+  `ruff check` enforces the rules `pyproject.toml` selects. A docstring follows the numpy
+  convention: a one-line summary, a blank line, then the description. A test needs no
+  docstring.
 - **Fingerprint declaration.** Change `continuo_contracts/fingerprints.yaml`, never
   `docs/fingerprints.md`; then run `uv run python scripts/render_fingerprints.py`. The test
   `test_the_docs_are_the_rendered_file` fails until you do.
@@ -91,13 +102,36 @@ not a service, and layers would add indirection without a second implementation.
 `errors` and `vocabulary` import nothing from the package. `canonical`, `hashing`, `fingerprints`
 and `schema` import only `errors` (`fingerprints` also PyYAML), `yaml_strict` imports `canonical`,
 `errors` and PyYAML, `python` imports `canonical`, `errors`, `hashing`, `fingerprints` and
-`vocabulary`, `validate` imports `contract`, `errors`, `python`, `schema`, `vocabulary` and
-jsonschema, `contract` imports `canonical`, `errors`, `fingerprints`, `hashing`, `python` and
-`vocabulary`, `cli` imports `contract`, `errors`, `validate` and `yaml_strict`, and nothing imports
-`scripts` or `tests`. The only files the package reads are the packaged `fingerprints.yaml`, in
-`fingerprints.load()`, the packaged ODCS schema, in `schema.load()`, and the contract files that
-the arguments of `cli` name. A split into layers is proposed only when a module gets a second
-reason to change.
+`vocabulary`, `validate` imports `canonical`, `contract`, `errors`, `python`, `schema`,
+`vocabulary` and jsonschema, `contract` imports `canonical`, `errors`, `fingerprints`, `hashing`,
+`python` and `vocabulary`, `cli` imports `contract`, `errors`, `validate` and `yaml_strict`, and
+nothing imports `scripts` or `tests`. The only files the package reads are the packaged
+`fingerprints.yaml`, in `fingerprints.load()`, the packaged ODCS schema, in `schema.load()`, and the
+contract files that the arguments of `cli` name. A split into layers is proposed only when a module
+gets a second reason to change.
+
+import-linter (`uv run lint-imports`) enforces the ordering of these modules and the confinement of
+the libraries, with the contracts under `[tool.importlinter]` in `pyproject.toml` and no
+`ignore_imports` on any of them. The lists of imports above describe the graph and are not checked
+edge by edge: the layers allow, for example, `canonical` to import `vocabulary` and `cli` to import
+`hashing`.
+
+- `import-graph` puts the modules in layers (an ordering of the flat modules, not a split of the
+  package), top to bottom: `cli`, then `validate`, then `contract`, then `python` and
+  `yaml_strict`, then `canonical`, `hashing`, `schema` and `fingerprints`, then `errors` and
+  `vocabulary`. A module imports only from the layers below its own, and the modules of one layer
+  import none of each other, so nothing imports `cli` and `errors` and `vocabulary` import nothing
+  from the package. The contract is exhaustive: a module that no layer names fails it.
+- `jsonschema-is-confined-to-validate` and `yaml-is-confined-to-fingerprints-and-yaml-strict` keep
+  each library to the modules that use it, and `only-cli-logs` keeps `logging` to `cli`, so the
+  library modules log nothing.
+
+`tests/test_architecture.py` holds the contracts to the code. It fails on an `ignore_imports`, on a
+module that a layer or a confinement does not name, on an import of `scripts` or `tests`, which sit
+outside the package, and on an import of `cli`, `logging`, `jsonschema` or `yaml` from a file that
+may not make it. That last check covers `__init__.py`, which no contract can name without naming
+every module. The test also plants an import that breaks each contract in a copy of the package and
+checks that `lint-imports` fails.
 
 ## Releasing
 

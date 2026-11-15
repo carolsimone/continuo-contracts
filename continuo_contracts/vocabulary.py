@@ -31,7 +31,9 @@ class ContinuoProperty:
 
 
 def _rows(sits_on: str, python: str, names: str) -> tuple[ContinuoProperty, ...]:
-    return tuple(ContinuoProperty(name, sits_on, python) for name in names.split())
+    return tuple(
+        ContinuoProperty(name, sits_on, python) for name in names.split()
+    )
 
 
 _ROWS: Final = (

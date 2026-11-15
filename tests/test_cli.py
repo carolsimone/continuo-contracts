@@ -5,6 +5,7 @@ import json
 import logging
 import subprocess
 import sys
+
 from importlib import resources
 from pathlib import Path
 
@@ -16,7 +17,9 @@ from continuo_contracts.cli import main
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 DEMO = FIXTURES / "demo" / "service-py" / "contracts"
 VECTORS = json.loads(
-    (resources.files("continuo_contracts") / "vectors" / "contracts.json").read_text("utf-8")
+    (
+        resources.files("continuo_contracts") / "vectors" / "contracts.json"
+    ).read_text("utf-8")
 )
 FAMILY_LINE = "this release checks Python contracts"
 
@@ -51,7 +54,11 @@ def _log_level(caplog):
 @pytest.fixture
 def bad_folder(tmp_path):
     """A folder with one valid file, one with a wrong file name and one with a repeated key."""
-    _put(tmp_path, "fx_eur_usd_rates.odcs.yaml", _demo_text("fx_eur_usd_rates.odcs.yaml"))
+    _put(
+        tmp_path,
+        "fx_eur_usd_rates.odcs.yaml",
+        _demo_text("fx_eur_usd_rates.odcs.yaml"),
+    )
     _put(tmp_path, "a_wrong_name.odcs.yaml", _demo_text())
     _put(tmp_path, "z_repeated.odcs.yaml", "id: a\nid: b\n")
     _put(tmp_path, "ignored.yaml", "not a contract file")
@@ -75,10 +82,14 @@ def test_validate_reports_every_issue_as_json(bad_folder, capsys, caplog):
     )
     # The files come in name order, and a valid file is listed with no issues.
     assert [file["path"] for file in report["files"]] == [
-        wrong.as_posix(), valid.as_posix(), repeated.as_posix()
+        wrong.as_posix(),
+        valid.as_posix(),
+        repeated.as_posix(),
     ]
     by_path = {file["path"]: file["issues"] for file in report["files"]}
-    assert [(i["path"], i["reason"]) for i in by_path[wrong.as_posix()]] == [("$", "file_name")]
+    assert [(i["path"], i["reason"]) for i in by_path[wrong.as_posix()]] == [
+        ("$", "file_name")
+    ]
     assert by_path[valid.as_posix()] == []
     (strict,) = by_path[repeated.as_posix()]
     assert (strict["path"], strict["reason"]) == ("$", "strict_yaml")
@@ -100,7 +111,17 @@ def test_validate_reads_a_file_and_a_folder_together(tmp_path, capsys):
     other = tmp_path / "other"
     other.mkdir()
     _put(other, "py_daily_kpis.odcs.yaml", _demo_text())
-    assert main(["validate", str(DEMO / "demo_orders_csv.odcs.yaml"), str(other), "--json"]) == 0
+    assert (
+        main(
+            [
+                "validate",
+                str(DEMO / "demo_orders_csv.odcs.yaml"),
+                str(other),
+                "--json",
+            ]
+        )
+        == 0
+    )
     report = json.loads(capsys.readouterr().out)
     assert report["valid"] is True
     assert [file["path"] for file in report["files"]] == [
@@ -109,14 +130,19 @@ def test_validate_reads_a_file_and_a_folder_together(tmp_path, capsys):
     ]
 
 
-def test_validate_checks_the_service_only_when_it_is_given(tmp_path, capsys, caplog):
+def test_validate_checks_the_service_only_when_it_is_given(
+    tmp_path, capsys, caplog
+):
     text = _demo_text().replace(
         "customProperties:\n",
         "customProperties:\n  - {vendor: continuo, property: service, value: other-service}\n",
     )
     _put(tmp_path, "py_daily_kpis.odcs.yaml", text)
     assert main(["validate", str(tmp_path)]) == 0
-    assert main(["validate", str(tmp_path), "--service", "service-py", "--json"]) == 1
+    assert (
+        main(["validate", str(tmp_path), "--service", "service-py", "--json"])
+        == 1
+    )
     issues = json.loads(capsys.readouterr().out)["files"][0]["issues"]
     assert [issue["reason"] for issue in issues] == ["service"]
 
@@ -135,11 +161,26 @@ def test_validate_refuses_an_empty_folder(tmp_path, capsys, caplog):
     assert tmp_path.as_posix() in message and "*.odcs.yaml" in message
 
 
-def test_validate_does_not_read_a_folder_below_the_one_it_is_given(tmp_path, caplog):
+def test_validate_does_not_read_a_folder_below_the_one_it_is_given(
+    tmp_path, caplog
+):
     below = tmp_path / "below"
     below.mkdir()
     _put(below, "py_daily_kpis.odcs.yaml", _demo_text())
     assert main(["validate", str(tmp_path)]) == 2
+
+
+def test_validate_skips_a_folder_entry_that_is_not_a_regular_file(
+    tmp_path, capsys
+):
+    _put(tmp_path, "py_daily_kpis.odcs.yaml", _demo_text())
+    (tmp_path / "a_folder.odcs.yaml").mkdir()
+    (tmp_path / "a_dangling_link.odcs.yaml").symlink_to(tmp_path / "nothing_here")
+    assert main(["validate", str(tmp_path), "--json"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert [file["path"] for file in report["files"]] == [
+        (tmp_path / "py_daily_kpis.odcs.yaml").as_posix()
+    ]
 
 
 def test_validate_refuses_a_missing_path(tmp_path, caplog):
@@ -154,7 +195,12 @@ def test_validate_refuses_a_file_that_is_not_named_odcs_yaml(tmp_path, caplog):
 
 
 def test_one_bad_path_stops_the_check_of_every_path(tmp_path, capsys, caplog):
-    assert main(["validate", str(DEMO), str(tmp_path / "missing.odcs.yaml"), "--json"]) == 2
+    assert (
+        main(
+            ["validate", str(DEMO), str(tmp_path / "missing.odcs.yaml"), "--json"]
+        )
+        == 2
+    )
     assert capsys.readouterr().out == ""
 
 
@@ -241,10 +287,14 @@ def test_validate_refuses_a_folder_it_cannot_read(locked, capsys, caplog):
 def test_hash_refuses_a_folder_it_cannot_read_as_a_folder(locked, capsys, caplog):
     assert main(["hash", str(locked), "--service", "service-py"]) == 2
     assert capsys.readouterr().out == ""
-    assert _errors(caplog) == [f"{locked.as_posix()}: hash takes one contract file, not a folder"]
+    assert _errors(caplog) == [
+        f"{locked.as_posix()}: hash takes one contract file, not a folder"
+    ]
 
 
-def test_validate_refuses_a_listed_file_it_cannot_look_up(unsearchable, capsys, caplog):
+def test_validate_refuses_a_listed_file_it_cannot_look_up(
+    unsearchable, capsys, caplog
+):
     path = unsearchable / "py_daily_kpis.odcs.yaml"
     assert main(["validate", str(unsearchable), "--json"]) == 2
     assert capsys.readouterr().out == ""
@@ -252,16 +302,23 @@ def test_validate_refuses_a_listed_file_it_cannot_look_up(unsearchable, capsys, 
     assert message.startswith(f"{path.as_posix()}: cannot look up the path: ")
 
 
-def test_a_lookup_error_is_named_with_the_other_bad_paths(locked, tmp_path, capsys, caplog):
+def test_a_lookup_error_is_named_with_the_other_bad_paths(
+    locked, tmp_path, capsys, caplog
+):
     inside = locked / "py_daily_kpis.odcs.yaml"
     missing = tmp_path / "missing.odcs.yaml"
     assert main(["validate", str(inside), str(DEMO), str(missing)]) == 2
     assert capsys.readouterr().out == ""
-    assert [m.split(": ")[0] for m in _errors(caplog)] == [inside.as_posix(), missing.as_posix()]
+    assert [m.split(": ")[0] for m in _errors(caplog)] == [
+        inside.as_posix(),
+        missing.as_posix(),
+    ]
 
 
 @pytest.mark.parametrize("command", ["validate", "hash"])
-def test_a_path_with_a_nul_character_is_a_usage_error(command, tmp_path, capsys, caplog):
+def test_a_path_with_a_nul_character_is_a_usage_error(
+    command, tmp_path, capsys, caplog
+):
     path = tmp_path / "py_daily\0kpis.odcs.yaml"
     assert main(_argv(command, path)) == 2
     assert capsys.readouterr().out == ""
@@ -280,7 +337,9 @@ def test_validate_reads_a_hidden_contract_file_of_a_folder(tmp_path, capsys):
     ]
 
 
-@pytest.mark.parametrize("argv", [[], ["validate"], ["hash"], ["hash", "x.odcs.yaml"]])
+@pytest.mark.parametrize(
+    "argv", [[], ["validate"], ["hash"], ["hash", "x.odcs.yaml"]]
+)
 def test_a_usage_error_exits_2_through_argparse(argv, capsys):
     with pytest.raises(SystemExit) as exit_:
         main(argv)
@@ -290,7 +349,9 @@ def test_a_usage_error_exits_2_through_argparse(argv, capsys):
 
 @pytest.mark.parametrize("service", ["", " ", "\t"])
 @pytest.mark.parametrize("command", ["validate", "hash"])
-def test_an_empty_or_blank_service_is_a_usage_error(command, service, tmp_path, capsys):
+def test_an_empty_or_blank_service_is_a_usage_error(
+    command, service, tmp_path, capsys
+):
     path = _put(tmp_path, "py_daily_kpis.odcs.yaml", _demo_text())
     with pytest.raises(SystemExit) as exit_:
         main([command, str(path), "--service", service])
@@ -330,7 +391,9 @@ def test_hash_without_a_read_hashes_a_stored_form_with_no_reads(tmp_path, capsys
     assert "customProperties" not in printed["stored"]["schema"][0]
 
 
-def test_hash_a_messy_spelling_prints_the_hash_of_the_clean_file(tmp_path, capsys):
+def test_hash_a_messy_spelling_prints_the_hash_of_the_clean_file(
+    tmp_path, capsys
+):
     clean, messy = _case("full_python_api"), _case("messy_python_api")
     path = _put(tmp_path, Path(messy["path"]).name, messy["text"])
     argv = ["hash", str(path), "--service", messy["service"]]
@@ -340,7 +403,9 @@ def test_hash_a_messy_spelling_prints_the_hash_of_the_clean_file(tmp_path, capsy
     assert capsys.readouterr().out == clean["contract_hash"] + "\n"
 
 
-def test_hash_exits_1_for_an_invalid_file_and_prints_nothing(tmp_path, capsys, caplog):
+def test_hash_exits_1_for_an_invalid_file_and_prints_nothing(
+    tmp_path, capsys, caplog
+):
     path = _put(tmp_path, "wrong_name.odcs.yaml", _demo_text())
     for flags in ([], ["--json"]):
         assert main(["hash", str(path), "--service", "service-py", *flags]) == 1
@@ -357,18 +422,25 @@ def test_hash_reports_a_strict_yaml_error_as_an_issue(tmp_path, capsys, caplog):
 
 def test_hash_refuses_a_read_value_that_is_not_a_table(tmp_path, capsys, caplog):
     path = _put(tmp_path, "py_daily_kpis.odcs.yaml", _demo_text())
-    assert main(["hash", str(path), "--service", "service-py", "--read", "daily"]) == 2
+    assert (
+        main(["hash", str(path), "--service", "service-py", "--read", "daily"])
+        == 2
+    )
     assert capsys.readouterr().out == ""
     (message,) = _errors(caplog)
     assert "'daily'" in message and "<schema>.<table>" in message
 
 
-@pytest.mark.parametrize("table", ["db.analytics.x", "analytics. x", "analytics.x\x00"])
+@pytest.mark.parametrize(
+    "table", ["db.analytics.x", "analytics. x", "analytics.x\x00"]
+)
 def test_hash_refuses_a_read_value_that_is_not_exactly_a_schema_and_a_table(
     tmp_path, capsys, caplog, table
 ):
     path = _put(tmp_path, "py_daily_kpis.odcs.yaml", _demo_text())
-    assert main(["hash", str(path), "--service", "service-py", "--read", table]) == 2
+    assert (
+        main(["hash", str(path), "--service", "service-py", "--read", table]) == 2
+    )
     assert capsys.readouterr().out == ""
     (message,) = _errors(caplog)
     assert "exactly two parts" in message
@@ -392,7 +464,9 @@ def test_hash_refuses_a_file_that_is_not_utf_8(tmp_path, caplog):
 @pytest.mark.parametrize("command", ["validate", "hash"])
 def test_both_commands_name_the_family_they_check(command, tmp_path, caplog):
     path = _put(tmp_path, "py_daily_kpis.odcs.yaml", _demo_text())
-    argv = [command, str(path)] + (["--service", "service-py"] if command == "hash" else [])
+    argv = [command, str(path)] + (
+        ["--service", "service-py"] if command == "hash" else []
+    )
     assert main(argv) == 0
     assert FAMILY_LINE in _infos(caplog)
     caplog.clear()
@@ -425,15 +499,24 @@ def _run(*args):
     """Run `main` in a new interpreter and return the finished process."""
     code = "import sys; from continuo_contracts.cli import main; sys.exit(main(sys.argv[1:]))"
     return subprocess.run(
-        [sys.executable, "-c", code, *args], capture_output=True, text=True, check=False
+        [sys.executable, "-c", code, *args],
+        capture_output=True,
+        text=True,
+        check=False,
     )
 
 
 def test_the_log_goes_to_stderr_and_stdout_stays_machine_readable(tmp_path):
     case = _case("demo_py_daily_kpis")
     path = _put(tmp_path, "py_daily_kpis.odcs.yaml", case["text"])
-    done = _run("hash", str(path), "--service", case["service"], "--read",
-                "analytics.daily_transactions")
+    done = _run(
+        "hash",
+        str(path),
+        "--service",
+        case["service"],
+        "--read",
+        "analytics.daily_transactions",
+    )
     assert done.returncode == 0
     assert done.stdout == case["contract_hash"] + "\n"
     assert done.stderr == f"INFO {FAMILY_LINE}\n"
@@ -449,8 +532,9 @@ def test_importing_the_module_configures_no_logging():
         "import logging; import continuo_contracts.cli; "
         "assert logging.getLogger().handlers == [], logging.getLogger().handlers"
     )
-    done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
-                          check=False)
+    done = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=False
+    )
     assert done.returncode == 0, done.stderr
 
 

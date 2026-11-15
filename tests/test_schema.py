@@ -1,4 +1,5 @@
 import hashlib
+
 from importlib import resources
 
 import pytest
@@ -17,7 +18,9 @@ def _fresh_cache():
 
 
 def test_the_schema_bytes_have_the_pinned_hash():
-    data = (resources.files("continuo_contracts") / schema.SCHEMA_FILE).read_bytes()
+    data = (
+        resources.files("continuo_contracts") / schema.SCHEMA_FILE
+    ).read_bytes()
     assert hashlib.sha256(data).hexdigest() == schema.SCHEMA_SHA256
 
 

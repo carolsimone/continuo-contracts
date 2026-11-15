@@ -46,6 +46,7 @@ holds with the same values.
 """
 
 import re
+
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from types import MappingProxyType
@@ -91,11 +92,20 @@ _MAX_LENGTH: Final = 2**53 - 1
 
 # The lists whose order says nothing: they are sorted by the canonical JSON of each item.
 _SET_LIKE: Final = frozenset(
-    {"customProperties", "tags", "roles", "quality", "relationships", "authoritativeDefinitions"}
+    {
+        "customProperties",
+        "tags",
+        "roles",
+        "quality",
+        "relationships",
+        "authoritativeDefinitions",
+    }
 )
 
 # The `continuo` properties whose value is continuo's default, which the stored form leaves out.
-_CONTINUO_DEFAULTS: Final = MappingProxyType({"modeType": "replace", "extraColumns": "raise"})
+_CONTINUO_DEFAULTS: Final = MappingProxyType(
+    {"modeType": "replace", "extraColumns": "raise"}
+)
 
 _COLUMN_DEFAULTS: Final = MappingProxyType(
     {
@@ -178,16 +188,23 @@ _SHAPES: Final = MappingProxyType(
         "map": _Shape(children={"key": "property", "value": "property"}),
         "quality": _Shape(
             defaults={"type": "library"},
-            free_form=frozenset({"implementation", "arguments", "mustBe", "mustNotBe"}),
+            free_form=frozenset(
+                {"implementation", "arguments", "mustBe", "mustNotBe"}
+            ),
             kept_empty=frozenset({"mustBe", "mustNotBe"}),
             lower_case=frozenset({"severity"}),
         ),
         "relationship": _Shape(defaults={"type": "foreignKey"}),
-        "custom_property": _Shape(free_form=frozenset({"value"}), kept_empty=frozenset({"value"})),
-        "service_level": _Shape(
-            free_form=frozenset({"value", "valueExt"}), kept_empty=frozenset({"value"})
+        "custom_property": _Shape(
+            free_form=frozenset({"value"}), kept_empty=frozenset({"value"})
         ),
-        "enum_value": _Shape(free_form=frozenset({"value"}), kept_empty=frozenset({"value"})),
+        "service_level": _Shape(
+            free_form=frozenset({"value", "valueExt"}),
+            kept_empty=frozenset({"value"}),
+        ),
+        "enum_value": _Shape(
+            free_form=frozenset({"value"}), kept_empty=frozenset({"value"})
+        ),
         "object": _Shape(),
     }
 )
@@ -213,14 +230,19 @@ def logical_type(physical_type: str) -> dict[str, Any] | None:
         length = _length(canonical)
         if length is None:
             return None
-        return {"logicalType": "string", "logicalTypeOptions": {"maxLength": length}}
+        return {
+            "logicalType": "string",
+            "logicalTypeOptions": {"maxLength": length},
+        }
     logical = _LOGICAL_TYPES.get(name)
     return {"logicalType": logical} if logical is not None else None
 
 
 def _length(canonical: str) -> int | None:
-    """Return the length `n` of the canonical type `VARCHAR(n)` or `CHAR(n)` when it is from 1 to
-    2**53 - 1, or `None` for a length outside that range and for any other type.
+    """Return the length `n` of the canonical type `VARCHAR(n)` or `CHAR(n)`.
+
+    The result is `n` when it is from 1 to 2**53 - 1, and `None` for a length
+    outside that range and for any other type.
 
     A length of more than 16 digits is above the range, and checking the number of digits first
     keeps a very long digit string from reaching `int`, which refuses it.
@@ -260,7 +282,9 @@ def normalise_python(
     never holds.
     """
     if not service.strip():
-        raise HashInputError(f"service {service!r}: the service of a release is not empty or blank")
+        raise HashInputError(
+            f"service {service!r}: the service of a release is not empty or blank"
+        )
     tables = _reads(reads)
     stored: dict[str, Any] = _as_written(doc)
     stored["version"] = _STORED_VERSION
@@ -312,10 +336,14 @@ def contract_hash(stored: Mapping[str, Any]) -> str:
 
 
 def _reads(reads: Sequence[str]) -> list[str]:
-    """Return the tables of `reads` with their ASCII letters in lower case, sorted by code point
-    and listed once."""
+    """Return the tables of `reads` with their ASCII letters in lower case.
+
+    The tables are sorted by code point and listed once.
+    """
     if isinstance(reads, str):
-        raise HashInputError(f"reads {reads!r}: reads is a list of tables, not one string")
+        raise HashInputError(
+            f"reads {reads!r}: reads is a list of tables, not one string"
+        )
     tables = set()
     for entry in reads:
         if (
@@ -334,10 +362,16 @@ def _reads(reads: Sequence[str]) -> list[str]:
 
 
 def _set_property(items: list[Any], name: str, value: str) -> None:
-    """Set the value of the `continuo` property `name` of the list `items`, adding it when the
-    list has none."""
+    """Set the value of the `continuo` property `name` of the list `items`.
+
+    The property is added when the list has none.
+    """
     for item in items:
-        if isinstance(item, dict) and item.get("vendor") == VENDOR and item.get("property") == name:
+        if (
+            isinstance(item, dict)
+            and item.get("vendor") == VENDOR
+            and item.get("property") == name
+        ):
             item["value"] = value
             return
     items.append({"vendor": VENDOR, "property": name, "value": value})
@@ -351,8 +385,11 @@ def _number(value: float) -> float | int:
 
 
 def _as_written(value: Any) -> Any:
-    """Copy `value` with each mapping as a `dict` and each list or tuple as a `list`, and each
-    float that is a whole number in the safe integer range as an integer. Nothing else changes."""
+    """Copy `value` with mappings as `dict`, lists and tuples as `list`.
+
+    Each float that is a whole number in the safe integer range becomes an
+    integer. Nothing else changes.
+    """
     if isinstance(value, Mapping):
         return {key: _as_written(item) for key, item in value.items()}
     if isinstance(value, list | tuple):
@@ -363,7 +400,9 @@ def _as_written(value: Any) -> Any:
 
 
 def _is_empty(value: object) -> bool:
-    return value is None or (isinstance(value, str | list | tuple | Mapping) and len(value) == 0)
+    return value is None or (
+        isinstance(value, str | list | tuple | Mapping) and len(value) == 0
+    )
 
 
 def _is_default(value: object, default: object) -> bool:
@@ -372,21 +411,31 @@ def _is_default(value: object, default: object) -> bool:
 
 
 def _clean(value: Any, shape: str) -> Any:
-    """Return `value`, an object or a list of objects of the ODCS type `shape`, or a scalar, in
-    the canonical form."""
+    """Return `value` in the canonical form.
+
+    `value` is an object or a list of objects of the ODCS type `shape`, or a
+    scalar.
+    """
     if isinstance(value, Mapping):
         return _clean_object(value, _SHAPES[shape])
     if isinstance(value, list | tuple):
         items = [_clean(item, shape) for item in value]
-        return [item for item in items if not _is_empty(item) and not _dropped(item, shape)]
+        return [
+            item
+            for item in items
+            if not _is_empty(item) and not _dropped(item, shape)
+        ]
     if isinstance(value, float):
         return _number(value)
     return value
 
 
 def _dropped(item: object, shape: str) -> bool:
-    """Say whether `item` is a custom property that the stored form leaves out: one whose value
-    is null or empty, or a `continuo` property that says continuo's default."""
+    """Say whether `item` is a custom property that the stored form leaves out.
+
+    It is one whose value is null or empty, or a `continuo` property that says
+    continuo's default.
+    """
     if shape != "custom_property" or not isinstance(item, Mapping):
         return False
     value = item.get("value")
@@ -415,7 +464,9 @@ def _clean_object(obj: Mapping[str, Any], shape: _Shape) -> dict[str, Any]:
                 item = normalise_text(item)
             if key in shape.lower_case:
                 item = _ascii_lower(item)
-        if _is_empty(item) or (key in shape.defaults and _is_default(item, shape.defaults[key])):
+        if _is_empty(item) or (
+            key in shape.defaults and _is_default(item, shape.defaults[key])
+        ):
             continue
         if key in _SET_LIKE and isinstance(item, list):
             item = _sorted_once(item)
@@ -430,7 +481,9 @@ def _clean_object(obj: Mapping[str, Any], shape: _Shape) -> dict[str, Any]:
 
 
 def _sorted_once(items: list[Any]) -> list[Any]:
-    """Return `items` sorted by the canonical JSON of each, with an item that equals an earlier
-    one left out."""
+    """Return `items` sorted by the canonical JSON of each.
+
+    An item that equals an earlier one is left out.
+    """
     by_bytes = {canonical_json(item): item for item in items}
     return [by_bytes[key] for key in sorted(by_bytes)]

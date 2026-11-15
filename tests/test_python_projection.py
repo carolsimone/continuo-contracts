@@ -1,4 +1,5 @@
 import threading
+
 from collections import OrderedDict
 from datetime import date
 from types import MappingProxyType
@@ -16,18 +17,31 @@ from continuo_contracts.python import (
     projection_hash,
 )
 
-DEMO = {"schema": "analytics", "table": "py_daily_kpis", "script": "scripts/py_daily_kpis.py",
-        "reads": {"daily": "select created_at, amount_eur from analytics.daily_transactions"},
-        "output_columns": [{"name": "day", "type": "DATE", "nullable": False},
-                           {"name": "tx_count", "type": "INTEGER", "nullable": False},
-                           {"name": "total_amount", "type": "NUMERIC(12,2)", "nullable": False}]}
+DEMO = {
+    "schema": "analytics",
+    "table": "py_daily_kpis",
+    "script": "scripts/py_daily_kpis.py",
+    "reads": {
+        "daily": "select created_at, amount_eur from analytics.daily_transactions"
+    },
+    "output_columns": [
+        {"name": "day", "type": "DATE", "nullable": False},
+        {"name": "tx_count", "type": "INTEGER", "nullable": False},
+        {"name": "total_amount", "type": "NUMERIC(12,2)", "nullable": False},
+    ],
+}
 DEMO_HASH = "a01d7d6065f055bb2d87959aaf178d08f5a3f96c86912099b9876239d84f6efe"
 CSV = {"kind": "python-csv", "script": "", "reads": {"csv": "s3://b/k.csv"}}
 
 
 def node(**changes):
-    base = dict(schema="analytics", table="t", script="scripts/t.py", reads={"r": "select 1 as x"},
-                output_columns=(PythonColumn("x", "INTEGER"),))
+    base = dict(
+        schema="analytics",
+        table="t",
+        script="scripts/t.py",
+        reads={"r": "select 1 as x"},
+        output_columns=(PythonColumn("x", "INTEGER"),),
+    )
     return PythonNode(**{**base, **changes})
 
 
@@ -36,32 +50,47 @@ def test_the_projection_has_exactly_the_declared_keys_in_order():
 
 
 def test_the_stored_kind_alias_hashes_as_python_node():
-    assert projection_hash(PythonNode.from_mapping({**DEMO, "kind": "python-model"})) == DEMO_HASH
+    assert (
+        projection_hash(PythonNode.from_mapping({**DEMO, "kind": "python-model"}))
+        == DEMO_HASH
+    )
 
 
 @pytest.mark.parametrize("mode", ["replace", "append"])
 def test_a_key_on_a_replace_or_append_node_stays_out_of_the_projection(mode):
-    with_key = PythonNode.from_mapping({**DEMO, "mode_type": mode, "primary_key": ["day"]})
+    with_key = PythonNode.from_mapping(
+        {**DEMO, "mode_type": mode, "primary_key": ["day"]}
+    )
     without = PythonNode.from_mapping({**DEMO, "mode_type": mode})
     assert code_projection(with_key)["primary_key"] == []
     assert projection_hash(with_key) == projection_hash(without)
 
 
-@pytest.mark.parametrize(("changes", "needle"), [
-    (dict(kind="python-sql"), "kind"),
-    (dict(CSV, script="scripts/t.py"), "script"),
-    (dict(CSV, reads={"r": "select 1"}), "reads"),
-    (dict(kind="python-api", reads={"r": "select 1"}), "reads"),
-    (dict(secret_ref="continuo-api-x"), "secret_ref"),
-    (dict(CSV, mode_type="upsert"), "mode_type"),
-    (dict(CSV, assets=("lib/a.csv",)), "assets"),
-    (dict(assets=("lib/a.csv", "lib/a.csv")), "assets"),
-    (dict(mode_type="merge"), "mode_type"),
-    (dict(extra_columns="ignore"), "extra_columns"),
-    (dict(output_columns=(PythonColumn("x", "INTEGER", nullable="false"),)), "nullable"),
-    (dict(output_columns=(PythonColumn("x", "FLOAT"),)), "type"),
-])
-def test_the_projection_refuses_what_it_cannot_hash_the_same_way_everywhere(changes, needle):
+@pytest.mark.parametrize(
+    ("changes", "needle"),
+    [
+        (dict(kind="python-sql"), "kind"),
+        (dict(CSV, script="scripts/t.py"), "script"),
+        (dict(CSV, reads={"r": "select 1"}), "reads"),
+        (dict(kind="python-api", reads={"r": "select 1"}), "reads"),
+        (dict(secret_ref="continuo-api-x"), "secret_ref"),
+        (dict(CSV, mode_type="upsert"), "mode_type"),
+        (dict(CSV, assets=("lib/a.csv",)), "assets"),
+        (dict(assets=("lib/a.csv", "lib/a.csv")), "assets"),
+        (dict(mode_type="merge"), "mode_type"),
+        (dict(extra_columns="ignore"), "extra_columns"),
+        (
+            dict(
+                output_columns=(PythonColumn("x", "INTEGER", nullable="false"),)
+            ),
+            "nullable",
+        ),
+        (dict(output_columns=(PythonColumn("x", "FLOAT"),)), "type"),
+    ],
+)
+def test_the_projection_refuses_what_it_cannot_hash_the_same_way_everywhere(
+    changes, needle
+):
     with pytest.raises(ProjectionError, match=needle) as err:
         code_projection(node(**changes))
     assert str(err.value).startswith("analytics.t: ")
@@ -74,10 +103,19 @@ def test_projection_hash_names_the_node_and_the_path_of_a_bad_value():
 
 
 def test_from_mapping_ignores_other_keys_and_fills_defaults():
-    built = PythonNode.from_mapping({"schema": "analytics", "table": "t", "owner": "team-a",
-                                     "output_columns": [{"name": "x", "type": "INT"}]})
+    built = PythonNode.from_mapping(
+        {
+            "schema": "analytics",
+            "table": "t",
+            "owner": "team-a",
+            "output_columns": [{"name": "x", "type": "INT"}],
+        }
+    )
     assert built == PythonNode(
-        schema="analytics", table="t", output_columns=(PythonColumn("x", "INT", True),))
+        schema="analytics",
+        table="t",
+        output_columns=(PythonColumn("x", "INT", True),),
+    )
 
 
 def test_from_mapping_refuses_a_missing_table():
@@ -85,25 +123,84 @@ def test_from_mapping_refuses_a_missing_table():
         PythonNode.from_mapping({"schema": "analytics"})
 
 
-@pytest.mark.parametrize(("entry", "needle"), [
-    ({"reads": ["select 1"]}, "reads must be a mapping"),
-    ({"config": "{}"}, "config must be a mapping"),
-    ({"assets": "lib/a.csv"}, "assets must be a list"),
-    ({"primary_key": "id"}, "primary_key must be a list"),
-    ({"output_columns": "x INTEGER"}, "output_columns must be a list"),
-    ({"output_columns": ["x INTEGER"]}, r"output_columns\[0\] must be a mapping"),
-    ({"output_columns": [{"name": "x"}]}, r"output_columns\[0\] has no 'type' field"),
-])
+def test_from_mapping_leaves_the_columns_empty_when_the_entry_has_none():
+    built = PythonNode.from_mapping({"schema": "analytics", "table": "t"})
+    assert built == PythonNode(schema="analytics", table="t")
+    assert built.output_columns == ()
+
+
+@pytest.mark.parametrize("entry", [None, ["analytics", "t"], "analytics.t"])
+def test_from_mapping_refuses_an_entry_that_is_not_a_mapping(entry):
+    with pytest.raises(ProjectionError, match="must be a mapping, not"):
+        PythonNode.from_mapping(entry)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("changes", "needle"),
+    [
+        ({"schema": ""}, "schema must not be empty"),
+        ({"table": ""}, "table must not be empty"),
+        ({"kind": ""}, "kind must not be empty"),
+        (
+            {"output_columns": (PythonColumn("", "INTEGER"),)},
+            r"output_columns\[0\]\.name must not be empty",
+        ),
+    ],
+)
+def test_an_empty_name_is_refused(changes, needle):
+    with pytest.raises(ProjectionError, match=needle) as err:
+        code_projection(node(**changes))
+    assert str(err.value).startswith(
+        f"{changes.get('schema', 'analytics')}.{changes.get('table', 't')}: "
+    )
+
+
+def test_a_column_that_is_not_a_python_column_is_refused():
+    with pytest.raises(
+        ProjectionError,
+        match=r"output_columns\[1\] must be a PythonColumn, not dict",
+    ):
+        code_projection(
+            node(
+                output_columns=(
+                    PythonColumn("x", "INTEGER"),
+                    {"name": "y", "type": "INTEGER"},
+                )
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    ("entry", "needle"),
+    [
+        ({"reads": ["select 1"]}, "reads must be a mapping"),
+        ({"config": "{}"}, "config must be a mapping"),
+        ({"assets": "lib/a.csv"}, "assets must be a list"),
+        ({"primary_key": "id"}, "primary_key must be a list"),
+        ({"output_columns": "x INTEGER"}, "output_columns must be a list"),
+        (
+            {"output_columns": ["x INTEGER"]},
+            r"output_columns\[0\] must be a mapping",
+        ),
+        (
+            {"output_columns": [{"name": "x"}]},
+            r"output_columns\[0\] has no 'type' field",
+        ),
+    ],
+)
 def test_from_mapping_refuses_a_field_of_the_wrong_container_type(entry, needle):
     with pytest.raises(ProjectionError, match=needle) as err:
         PythonNode.from_mapping({"schema": "analytics", "table": "t", **entry})
     assert str(err.value).startswith("analytics.t: ")
 
 
-@pytest.mark.parametrize("changes", [
-    dict(mode_type="upsert", primary_key="id"),
-    dict(assets="lib/a.csv"),
-])
+@pytest.mark.parametrize(
+    "changes",
+    [
+        dict(mode_type="upsert", primary_key="id"),
+        dict(assets="lib/a.csv"),
+    ],
+)
 def test_a_bare_string_is_not_read_as_a_list_of_characters(changes):
     with pytest.raises(ProjectionError, match="must be a list"):
         code_projection(node(**changes))
@@ -119,15 +216,21 @@ def test_the_projection_shares_nothing_with_the_node():
 
 
 def test_a_projection_key_without_a_rule_is_refused(monkeypatch):
-    monkeypatch.setattr("continuo_contracts.python.projection_keys",
-                        lambda: (*projection_keys(), "extra"))
-    with pytest.raises(ProjectionError, match="projection key extra has no rule") as err:
+    monkeypatch.setattr(
+        "continuo_contracts.python.projection_keys",
+        lambda: (*projection_keys(), "extra"),
+    )
+    with pytest.raises(
+        ProjectionError, match="projection key extra has no rule"
+    ) as err:
         code_projection(node())
     assert str(err.value).startswith("analytics.t: ")
 
 
 def test_a_type_that_is_not_text_is_refused_as_a_type():
-    with pytest.raises(ProjectionError, match="unsupported or invalid SQL type: 5"):
+    with pytest.raises(
+        ProjectionError, match="unsupported or invalid SQL type: 5"
+    ):
         canonical_sql_type(5)
 
 
@@ -135,8 +238,18 @@ def test_canonical_sql_type_strips_exactly_the_whitespace_code_points():
     """Try every code point on both sides of `int`: the ones accepted are the 29 written out in
     `listed`, which is the set that `canonical_sql_type` strips and no other character."""
     listed = [
-        *range(0x09, 0x0E), *range(0x1C, 0x20), 0x20, 0x85, 0xA0, 0x1680, *range(0x2000, 0x200B),
-        0x2028, 0x2029, 0x202F, 0x205F, 0x3000,
+        *range(0x09, 0x0E),
+        *range(0x1C, 0x20),
+        0x20,
+        0x85,
+        0xA0,
+        0x1680,
+        *range(0x2000, 0x200B),
+        0x2028,
+        0x2029,
+        0x202F,
+        0x205F,
+        0x3000,
     ]
     stripped = []
     for code in range(0x110000):
@@ -159,24 +272,39 @@ TABLE_NON_ASCII = "t" + chr(0xE4) + "ble" + chr(0x1F600)
 # canonical JSON cannot write, an unknown kind and a wire entry whose `primary_key` is not a list.
 REFUSALS = {
     "projection_hash": lambda schema, table: projection_hash(
-        node(schema=schema, table=table, config={"x": float("nan")})),
+        node(schema=schema, table=table, config={"x": float("nan")})
+    ),
     "code_projection": lambda schema, table: code_projection(
-        node(schema=schema, table=table, kind="python-sql")),
+        node(schema=schema, table=table, kind="python-sql")
+    ),
     "from_mapping": lambda schema, table: PythonNode.from_mapping(
-        {"schema": schema, "table": table, "primary_key": 5}),
+        {"schema": schema, "table": table, "primary_key": 5}
+    ),
 }
 
 
 @pytest.mark.parametrize("refuse", REFUSALS.values(), ids=list(REFUSALS))
-@pytest.mark.parametrize(("schema", "table", "shown"), [
-    ("analytics", "t" + LONE_SURROGATE, "analytics.t" + ESCAPED_SURROGATE),
-    ("s" + LONE_SURROGATE + "x", "t", "s" + ESCAPED_SURROGATE + "x.t"),
-    (SCHEMA_NON_ASCII, TABLE_NON_ASCII + LONE_SURROGATE,
-     SCHEMA_NON_ASCII + "." + TABLE_NON_ASCII + ESCAPED_SURROGATE),
-    (SCHEMA_NON_ASCII, TABLE_NON_ASCII, SCHEMA_NON_ASCII + "." + TABLE_NON_ASCII),
-], ids=["table", "schema", "non-ASCII letters stay", "no surrogate"])
+@pytest.mark.parametrize(
+    ("schema", "table", "shown"),
+    [
+        ("analytics", "t" + LONE_SURROGATE, "analytics.t" + ESCAPED_SURROGATE),
+        ("s" + LONE_SURROGATE + "x", "t", "s" + ESCAPED_SURROGATE + "x.t"),
+        (
+            SCHEMA_NON_ASCII,
+            TABLE_NON_ASCII + LONE_SURROGATE,
+            SCHEMA_NON_ASCII + "." + TABLE_NON_ASCII + ESCAPED_SURROGATE,
+        ),
+        (
+            SCHEMA_NON_ASCII,
+            TABLE_NON_ASCII,
+            SCHEMA_NON_ASCII + "." + TABLE_NON_ASCII,
+        ),
+    ],
+    ids=["table", "schema", "non-ASCII letters stay", "no surrogate"],
+)
 def test_the_error_prefix_writes_a_lone_surrogate_of_the_relation_as_an_escape(
-        refuse, schema, table, shown):
+    refuse, schema, table, shown
+):
     with pytest.raises(ProjectionError) as caught:
         refuse(schema, table)
     message = str(caught.value)
@@ -201,11 +329,16 @@ def test_a_very_long_number_in_a_type_does_not_reach_int():
 
 def test_a_nested_mapping_proxy_hashes_like_the_same_data_in_plain_containers():
     plain = node(config={"layout": {"a": 1}, "steps": [1, {"b": 2}]})
-    proxied = node(config={"layout": MappingProxyType({"a": 1}),
-                           "steps": (1, MappingProxyType({"b": 2}))})
+    proxied = node(
+        config={
+            "layout": MappingProxyType({"a": 1}),
+            "steps": (1, MappingProxyType({"b": 2})),
+        }
+    )
     assert projection_hash(proxied) == projection_hash(plain)
-    assert projection_hash(node(config=MappingProxyType({"a": 1}))) == projection_hash(
-        node(config={"a": 1}))
+    assert projection_hash(
+        node(config=MappingProxyType({"a": 1}))
+    ) == projection_hash(node(config={"a": 1}))
 
 
 def test_a_value_json_cannot_hold_is_refused_with_its_node_and_its_path():
@@ -215,7 +348,9 @@ def test_a_value_json_cannot_hold_is_refused_with_its_node_and_its_path():
 
 
 def test_config_comes_out_as_plain_dicts_and_lists_at_every_depth():
-    config = {"o": OrderedDict(a=OrderedDict(b=(1, MappingProxyType({"c": [2]}))))}
+    config = {
+        "o": OrderedDict(a=OrderedDict(b=(1, MappingProxyType({"c": [2]}))))
+    }
     copied = code_projection(node(config=config))["config"]
     assert type(copied) is dict
     assert type(copied["o"]) is dict
@@ -231,8 +366,9 @@ def test_a_container_that_appears_twice_without_a_cycle_is_copied_each_time():
     copied = code_projection(node(config={"a": shared, "b": shared}))["config"]
     assert copied == {"a": {"k": [1]}, "b": {"k": [1]}}
     assert copied["a"] is not copied["b"]
-    assert projection_hash(node(config={"a": shared, "b": shared})) == projection_hash(
-        node(config={"a": {"k": [1]}, "b": {"k": [1]}}))
+    assert projection_hash(
+        node(config={"a": shared, "b": shared})
+    ) == projection_hash(node(config={"a": {"k": [1]}, "b": {"k": [1]}}))
 
 
 def _mapping_in_a_mapping():
@@ -254,12 +390,17 @@ def _mapping_in_a_list_in_a_mapping():
     return {"c": outer}
 
 
-@pytest.mark.parametrize(("build", "path"), [
-    (_mapping_in_a_mapping, "$.config.c.self"),
-    (_list_in_a_list, "$.config.c[0]"),
-    (_mapping_in_a_list_in_a_mapping, "$.config.c[0].back"),
-])
-def test_a_config_that_contains_itself_is_refused_with_its_node_and_its_path(build, path):
+@pytest.mark.parametrize(
+    ("build", "path"),
+    [
+        (_mapping_in_a_mapping, "$.config.c.self"),
+        (_list_in_a_list, "$.config.c[0]"),
+        (_mapping_in_a_list_in_a_mapping, "$.config.c[0].back"),
+    ],
+)
+def test_a_config_that_contains_itself_is_refused_with_its_node_and_its_path(
+    build, path
+):
     with pytest.raises(ProjectionError) as err:
         projection_hash(node(config=build()))
     assert str(err.value) == f"analytics.t: {path}: circular reference"
@@ -274,7 +415,9 @@ def test_the_whole_config_that_contains_itself_is_refused_with_its_path():
 
 
 def test_a_key_that_is_not_a_string_is_refused_at_the_top_and_with_its_path_below():
-    with pytest.raises(ProjectionError, match="key of config must be a string") as err:
+    with pytest.raises(
+        ProjectionError, match="key of config must be a string"
+    ) as err:
         code_projection(node(config={1: "x"}))
     assert str(err.value).startswith("analytics.t: ")
     with pytest.raises(ProjectionError) as err:
@@ -287,7 +430,10 @@ def test_assets_are_sorted_by_code_point_not_by_utf_16_unit():
     # starts with 0xD83D. By code point (and by UTF-8 bytes) the tilde comes first, by UTF-16
     # unit the emoji does.
     tilde, emoji = chr(0xFF5E) + ".csv", chr(0x1F600) + ".csv"
-    assert code_projection(node(assets=(emoji, tilde)))["assets"] == [tilde, emoji]
+    assert code_projection(node(assets=(emoji, tilde)))["assets"] == [
+        tilde,
+        emoji,
+    ]
 
 
 TOO_DEEP = "nesting is too deep, a container may be at most 100 levels down"
@@ -314,7 +460,9 @@ def _config_path(level, segment):
 
 
 @pytest.mark.parametrize(("wrap", "segment"), NESTED_CONFIG_KINDS)
-def test_a_config_nested_so_the_projection_reaches_the_limit_hashes(wrap, segment):
+def test_a_config_nested_so_the_projection_reaches_the_limit_hashes(
+    wrap, segment
+):
     # The projection is a mapping on level 1 and `config` is its value on level 2.
     config = _nested_config(MAX_DEPTH - 1, wrap)
     assert len(projection_hash(node(config=config))) == 64
@@ -329,7 +477,10 @@ def test_a_config_nested_deeper_than_the_limit_is_refused_with_its_node_and_its_
     assert isinstance(code_projection(node(config=config)), dict)
     with pytest.raises(ProjectionError) as err:
         projection_hash(node(config=config))
-    assert str(err.value) == f"analytics.t: {_config_path(MAX_DEPTH, segment)}: {TOO_DEEP}"
+    assert (
+        str(err.value)
+        == f"analytics.t: {_config_path(MAX_DEPTH, segment)}: {TOO_DEEP}"
+    )
 
 
 def test_the_copy_of_a_config_stops_at_the_limit_and_leaves_the_deeper_container_in_place():

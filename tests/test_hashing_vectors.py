@@ -1,4 +1,5 @@
 import json
+
 from importlib import resources
 
 import pytest
@@ -24,14 +25,21 @@ def _run(case):
         case "shared_fold":
             return shared_fold(inputs["unit_digests"])
         case "shared_hash":
-            units = {key: bytes.fromhex(text) for key, text in inputs["units_hex"].items()}
+            units = {
+                key: bytes.fromhex(text)
+                for key, text in inputs["units_hex"].items()
+            }
             return shared_hash(units)
     raise AssertionError(f"{case['name']}: unknown function {case['function']!r}")
 
 
 def _keys(case):
     inputs = case["inputs"]
-    return list(inputs["unit_digests"] if "unit_digests" in inputs else inputs["units_hex"])
+    return list(
+        inputs["unit_digests"]
+        if "unit_digests" in inputs
+        else inputs["units_hex"]
+    )
 
 
 @pytest.mark.parametrize("case", HASHED, ids=lambda case: case["name"])
@@ -48,7 +56,12 @@ def test_an_error_vector_is_refused(case):
 def test_every_case_has_the_documented_fields_and_a_unique_name():
     for case in CASES:
         assert case["function"] in FUNCTIONS, case["name"]
-        wanted = {"name", "function", "inputs", "error" if case.get("error") else "expected"}
+        wanted = {
+            "name",
+            "function",
+            "inputs",
+            "error" if case.get("error") else "expected",
+        }
         assert set(case) == wanted, case["name"]
     assert len(BY_NAME) == len(CASES)
     assert HASHED and REFUSED
@@ -56,7 +69,11 @@ def test_every_case_has_the_documented_fields_and_a_unique_name():
 
 def test_every_function_has_cases_that_hash_and_the_fold4_cases_cover_both_compiled_parts():
     assert {case["function"] for case in HASHED} == set(FUNCTIONS)
-    compiled = [case["inputs"]["compiled"] for case in HASHED if case["function"] == "fold4"]
+    compiled = [
+        case["inputs"]["compiled"]
+        for case in HASHED
+        if case["function"] == "fold4"
+    ]
     assert "" in compiled
     assert any(compiled)
 
@@ -80,8 +97,12 @@ def test_the_key_order_trap_cases_sort_by_code_point_and_not_by_utf16_code_unit(
     ]
     for name in names:
         keys = _keys(BY_NAME[name])
-        assert sorted(keys, key=lambda key: key.encode("utf-16-be")) != sorted(keys), name
-        assert sorted(keys) == sorted(keys, key=lambda key: key.encode("utf-8")), name
+        assert sorted(keys, key=lambda key: key.encode("utf-16-be")) != sorted(
+            keys
+        ), name
+        assert sorted(keys) == sorted(
+            keys, key=lambda key: key.encode("utf-8")
+        ), name
 
 
 def test_the_trap_cases_list_their_keys_in_utf16_order_so_that_a_sort_must_move_them():

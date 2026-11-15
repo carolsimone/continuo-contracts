@@ -1,9 +1,11 @@
 import json
 import pickle
 import time
+
 from importlib import resources
 
 import pytest
+import yaml
 
 from continuo_contracts import yaml_strict
 from continuo_contracts.canonical import MAX_DEPTH
@@ -11,7 +13,11 @@ from continuo_contracts.errors import ContractsError, StrictYamlError
 
 
 def _vectors(name):
-    return json.loads((resources.files("continuo_contracts") / "vectors" / name).read_text("utf-8"))
+    return json.loads(
+        (resources.files("continuo_contracts") / "vectors" / name).read_text(
+            "utf-8"
+        )
+    )
 
 
 def _same(value):
@@ -19,7 +25,9 @@ def _same(value):
     return json.dumps(value, sort_keys=True)
 
 
-@pytest.mark.parametrize("case", _vectors("strict_yaml.json"), ids=lambda c: c["name"])
+@pytest.mark.parametrize(
+    "case", _vectors("strict_yaml.json"), ids=lambda c: c["name"]
+)
 def test_strict_yaml_vector(case):
     if case.get("error"):
         with pytest.raises(StrictYamlError):
@@ -44,7 +52,9 @@ def test_every_vector_text_is_a_whole_document():
 
 
 def test_an_alias_is_refused():
-    with pytest.raises(StrictYamlError, match=r"line 2, column \d+: YAML aliases are not allowed"):
+    with pytest.raises(
+        StrictYamlError, match=r"line 2, column \d+: YAML aliases are not allowed"
+    ):
         yaml_strict.load("a: &x 1\nb: *x\n")
 
 
@@ -75,7 +85,10 @@ def test_a_bom_and_crlf_read_like_plain_lf():
 def test_a_second_byte_order_mark_is_refused_with_its_position():
     with pytest.raises(StrictYamlError) as raised:
         yaml_strict.load("\ufeff\ufeffa: 1\n")
-    assert str(raised.value) == "line 1, column 1: a byte order mark may only start the text once"
+    assert (
+        str(raised.value)
+        == "line 1, column 1: a byte order mark may only start the text once"
+    )
     with pytest.raises(StrictYamlError):
         yaml_strict.load("\ufeff\ufeff\ufeffa: 1\n")
 
@@ -85,12 +98,23 @@ def test_a_byte_order_mark_inside_the_text_is_part_of_the_text():
 
 
 def test_a_scalar_after_a_lone_bang_is_a_string_whatever_its_form():
-    value = yaml_strict.load("a: ! 5\nb: ! \"5\"\nc: [! 1, ! 2.5, ! null]\nd: &x ! true\ne: !\n")
-    assert value == {"a": "5", "b": "5", "c": ["1", "2.5", "null"], "d": "true", "e": ""}
+    value = yaml_strict.load(
+        'a: ! 5\nb: ! "5"\nc: [! 1, ! 2.5, ! null]\nd: &x ! true\ne: !\n'
+    )
+    assert value == {
+        "a": "5",
+        "b": "5",
+        "c": ["1", "2.5", "null"],
+        "d": "true",
+        "e": "",
+    }
 
 
 def test_a_lone_bang_leaves_a_sequence_and_a_mapping_alone():
-    assert yaml_strict.load("a: ! [1, 2]\nb: ! {c: 1}\n") == {"a": [1, 2], "b": {"c": 1}}
+    assert yaml_strict.load("a: ! [1, 2]\nb: ! {c: 1}\n") == {
+        "a": [1, 2],
+        "b": {"c": 1},
+    }
 
 
 def test_a_lone_bang_on_a_key_makes_a_string_key():
@@ -122,6 +146,70 @@ def test_a_duplicate_key_after_a_crlf_names_the_line_of_the_second_key():
 def test_a_yaml_syntax_error_names_its_position():
     with pytest.raises(StrictYamlError, match=r"^line 2, column \d+: "):
         yaml_strict.load("a: [1, 2\nb: 3\n")
+
+
+def test_a_yaml_error_with_no_context_is_the_problem_alone():
+    with pytest.raises(StrictYamlError) as raised:
+        yaml_strict.load("a: b: c\n")
+    assert str(raised.value) == (
+        "line 1, column 5: mapping values are not allowed here"
+    )
+    with pytest.raises(StrictYamlError) as raised:
+        yaml_strict.load("a: 1\n...\nb\n")
+    assert str(raised.value).startswith(
+        "line 3, column 1: expected '<document start>'"
+    )
+
+
+@pytest.mark.parametrize(
+    ("context", "reason"),
+    [(None, "no position"), ("while testing", "while testing, no position")],
+)
+def test_a_pyyaml_error_with_no_position_is_an_error_at_line_0_column_0(
+    monkeypatch, context, reason
+):
+    def refuse(self):
+        raise yaml.MarkedYAMLError(context=context, problem="no position")
+
+    monkeypatch.setattr(yaml.SafeLoader, "get_single_data", refuse)
+    with pytest.raises(StrictYamlError) as raised:
+        yaml_strict.load("a: 1\n")
+    assert (raised.value.line, raised.value.column) == (0, 0)
+    assert str(raised.value) == f"line 0, column 0: {reason}"
+
+
+@pytest.mark.parametrize(
+    ("text", "kind"),
+    [
+        ("a: !!map foo\n", "scalar"),
+        ("a: !!map [1]\n", "sequence"),
+        ("a: !!map\n", "scalar"),
+    ],
+)
+def test_a_map_tag_on_something_that_is_not_a_mapping_is_refused(text, kind):
+    with pytest.raises(StrictYamlError) as raised:
+        yaml_strict.load(text)
+    assert str(raised.value) == (
+        f"line 1, column 4: expected a mapping, but found a {kind}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "kind"),
+    [
+        ("a: !!str [1]\n", "sequence"),
+        ("a: !!int {b: 1}\n", "mapping"),
+        ("a: !!null [1]\n", "sequence"),
+        ("a: !!bool {}\n", "mapping"),
+        ("a: !!float [1.5]\n", "sequence"),
+    ],
+)
+def test_a_scalar_tag_on_a_sequence_or_a_mapping_is_refused(text, kind):
+    with pytest.raises(StrictYamlError) as raised:
+        yaml_strict.load(text)
+    assert str(raised.value) == (
+        f"line 1, column 4: expected a scalar, but found a {kind}"
+    )
 
 
 def test_a_character_yaml_cannot_hold_names_its_position():

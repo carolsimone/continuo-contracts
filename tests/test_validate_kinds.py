@@ -3,13 +3,18 @@ its upsert key."""
 
 import json
 import time
+
 from pathlib import Path
 
 import pytest
 
 from continuo_contracts import yaml_strict
 from continuo_contracts.python import PYTHON_KINDS
-from continuo_contracts.validate import REASONS, rule_issues, validate_python_contract
+from continuo_contracts.validate import (
+    REASONS,
+    rule_issues,
+    validate_python_contract,
+)
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 DEMO = FIXTURES / "demo" / "service-py" / "contracts" / "py_daily_kpis.odcs.yaml"
@@ -19,7 +24,9 @@ FULL = ["python_node", "python_csv", "python_api"]
 # continuo's own list of the secret names a python-api node may name, copied byte for byte from
 # pkg/domain/model/testdata/secret_ref_cases.json in the continuo repository, where the Go rule
 # and topology-controller's rule are pinned to it too.
-SECRET_REF_CASES = json.loads((FIXTURES / "secret_ref_cases.json").read_text(encoding="utf-8"))
+SECRET_REF_CASES = json.loads(
+    (FIXTURES / "secret_ref_cases.json").read_text(encoding="utf-8")
+)
 
 
 def _load(path):
@@ -97,7 +104,12 @@ def test_the_full_fixtures_are_valid(fixture):
 
 @pytest.mark.parametrize("fixture", FULL)
 def test_the_full_fixtures_are_valid_when_the_service_is_not_known(fixture):
-    assert validate_python_contract(_full(fixture), path=_path_of(fixture), service=None) == []
+    assert (
+        validate_python_contract(
+            _full(fixture), path=_path_of(fixture), service=None
+        )
+        == []
+    )
 
 
 def test_the_full_fixtures_are_one_of_each_kind():
@@ -140,7 +152,8 @@ def test_a_schedule_of_another_vendor_is_not_the_schedule():
 
 
 @pytest.mark.parametrize(
-    "change", [lambda d: d["schema"][0].pop("properties"), lambda d: _columns(d).clear()]
+    "change",
+    [lambda d: d["schema"][0].pop("properties"), lambda d: _columns(d).clear()],
 )
 def test_a_contract_with_no_columns_is_refused(change):
     doc = _kpis()
@@ -154,7 +167,10 @@ def test_a_column_without_a_physical_type_is_refused():
     doc = _kpis()
     del _columns(doc)[1]["physicalType"]
     issue = _only(_check(doc))
-    assert (issue.path, issue.reason) == ("schema[0].properties[1].physicalType", "missing_field")
+    assert (issue.path, issue.reason) == (
+        "schema[0].properties[1].physicalType",
+        "missing_field",
+    )
     assert "tx_count" in issue.message
     assert "INTEGER" in issue.message
 
@@ -178,8 +194,12 @@ def test_each_criticality_is_accepted(value):
     assert _check(doc) == []
 
 
-@pytest.mark.parametrize("value", [0, 10081, -5, True, False, 1.5, 30.0, "30", None, [30]])
-def test_a_timeout_that_is_not_a_whole_number_of_minutes_up_to_a_week_is_refused(value):
+@pytest.mark.parametrize(
+    "value", [0, 10081, -5, True, False, 1.5, 30.0, "30", None, [30]]
+)
+def test_a_timeout_that_is_not_a_whole_number_of_minutes_up_to_a_week_is_refused(
+    value,
+):
     doc = _kpis()
     _set(doc, "timeoutMinutes", value)
     issue = _only(_check(doc))
@@ -225,7 +245,9 @@ def test_a_mode_type_that_is_refused_for_its_value_does_not_also_start_the_key_r
     _set(doc, "modeType", "merge")
     for column in _columns(doc):
         column.pop("primaryKey", None)
-    assert _found(_check(doc, path=_path_of("python_node"))) == [(_at(doc, "modeType"), "value")]
+    assert _found(_check(doc, path=_path_of("python_node"))) == [
+        (_at(doc, "modeType"), "value")
+    ]
 
 
 # Paths that are not a normalised POSIX path inside the project, each refused as a script and as
@@ -258,7 +280,9 @@ NOT_A_PROJECT_PATH = [
 ]
 
 
-@pytest.mark.parametrize("value", [5, None, ["a.py"], {"a": "b"}, *NOT_A_PROJECT_PATH])
+@pytest.mark.parametrize(
+    "value", [5, None, ["a.py"], {"a": "b"}, *NOT_A_PROJECT_PATH]
+)
 def test_a_script_that_is_not_a_path_inside_the_project_is_refused(value):
     doc = _kpis()
     _set(doc, "script", value)
@@ -285,7 +309,9 @@ def test_a_script_that_is_not_a_path_inside_the_project_is_refused(value):
         "d" * 51,
     ],
 )
-def test_a_schedule_that_is_not_a_name_of_at_most_fifty_characters_is_refused(value):
+def test_a_schedule_that_is_not_a_name_of_at_most_fifty_characters_is_refused(
+    value,
+):
     doc = _kpis()
     _set(doc, "schedule", value)
     issue = _only(_check(doc))
@@ -293,7 +319,9 @@ def test_a_schedule_that_is_not_a_name_of_at_most_fifty_characters_is_refused(va
     assert "`schedule`" in issue.message
 
 
-@pytest.mark.parametrize("value", ["daily", "d" * 50, "every-hour_2", "t\u00e4glich"])
+@pytest.mark.parametrize(
+    "value", ["daily", "d" * 50, "every-hour_2", "t\u00e4glich"]
+)
 def test_a_schedule_name_of_at_most_fifty_characters_is_accepted(value):
     doc = _kpis()
     _set(doc, "schedule", value)
@@ -307,7 +335,13 @@ def test_the_schedule_message_says_the_longest_name():
 
 
 def test_a_script_path_inside_the_project_is_accepted():
-    for value in ("x.py", "scripts/x.py", "a b/c d.py", "a..b/c.py", "scripts/.hidden.py"):
+    for value in (
+        "x.py",
+        "scripts/x.py",
+        "a b/c d.py",
+        "a..b/c.py",
+        "scripts/.hidden.py",
+    ):
         doc = _kpis()
         _set(doc, "script", value)
         assert _check(doc) == [], value
@@ -324,7 +358,11 @@ def test_a_config_that_is_not_a_mapping_is_refused(value):
 
 def test_a_config_mapping_is_accepted_whatever_it_holds():
     doc = _kpis()
-    _set(doc, "config", {"batch_size": 10, "tags": ["a", {"b": None}], "ratio": 0.5})
+    _set(
+        doc,
+        "config",
+        {"batch_size": 10, "tags": ["a", {"b": None}], "ratio": 0.5},
+    )
     assert _check(doc) == []
     _set(doc, "config", {})
     assert _check(doc) == []
@@ -373,7 +411,9 @@ def test_the_secret_cases_of_continuo_hold_the_edges_this_rule_needs():
         ["continuo-api-fx"],
     ],
 )
-def test_a_secret_name_with_the_wrong_prefix_length_or_type_is_refused(secret_ref):
+def test_a_secret_name_with_the_wrong_prefix_length_or_type_is_refused(
+    secret_ref,
+):
     doc = _api(secret_ref)
     issue = _only(_check(doc, path=_path_of("python_api")))
     assert (issue.path, issue.reason) == (_at(doc, "secretRef"), "value")
@@ -381,11 +421,16 @@ def test_a_secret_name_with_the_wrong_prefix_length_or_type_is_refused(secret_re
 
 def test_a_secret_name_of_253_characters_is_the_longest_accepted():
     assert len("continuo-api-" + "a" * 240) == 253
-    assert _check(_api("continuo-api-" + "a" * 240), path=_path_of("python_api")) == []
+    assert (
+        _check(_api("continuo-api-" + "a" * 240), path=_path_of("python_api"))
+        == []
+    )
 
 
 def test_a_long_secret_name_does_not_make_a_long_message():
-    issue = _only(_check(_api("continuo-api-" + "a" * 5000), path=_path_of("python_api")))
+    issue = _only(
+        _check(_api("continuo-api-" + "a" * 5000), path=_path_of("python_api"))
+    )
     assert len(issue.message) < 300
     assert "253" in issue.message
 
@@ -412,7 +457,9 @@ def _csv(source):
         "https://localhost/o.csv",
     ],
 )
-def test_a_csv_source_that_is_an_s3_object_or_an_https_address_is_accepted(source):
+def test_a_csv_source_that_is_an_s3_object_or_an_https_address_is_accepted(
+    source,
+):
     assert _check(_csv(source), path=_path_of("python_csv")) == []
 
 
@@ -443,7 +490,9 @@ def test_a_csv_source_that_is_an_s3_object_or_an_https_address_is_accepted(sourc
         ["s3://bucket/key"],
     ],
 )
-def test_a_csv_source_that_is_not_an_s3_object_or_an_https_address_is_refused(source):
+def test_a_csv_source_that_is_not_an_s3_object_or_an_https_address_is_refused(
+    source,
+):
     doc = _csv(source)
     issue = _only(_check(doc, path=_path_of("python_csv")))
     assert (issue.path, issue.reason) == (_at(doc, "csvSource"), "value")
@@ -455,7 +504,8 @@ def test_a_csv_source_that_is_not_an_s3_object_or_an_https_address_is_refused(so
 
 
 @pytest.mark.parametrize(
-    "kind", ["python-model2", "Python-Node", "", "dbt-model", 5, None, ["python-node"]]
+    "kind",
+    ["python-model2", "Python-Node", "", "dbt-model", 5, None, ["python-node"]],
 )
 def test_a_kind_that_is_not_a_python_kind_is_refused_once(kind):
     doc = _kpis()
@@ -596,7 +646,9 @@ def test_a_python_csv_that_appends_is_refused():
 def test_a_python_csv_that_upserts_is_refused():
     doc = _full("python_csv")
     _set(doc, "modeType", "upsert")
-    assert _found(_check(doc, path=_path_of("python_csv"))) == [(_at(doc, "modeType"), "kind_rule")]
+    assert _found(_check(doc, path=_path_of("python_csv"))) == [
+        (_at(doc, "modeType"), "kind_rule")
+    ]
 
 
 def test_a_python_csv_that_upserts_with_no_key_is_refused_once():
@@ -605,7 +657,9 @@ def test_a_python_csv_that_upserts_with_no_key_is_refused_once():
     for column in _columns(doc):
         column.pop("primaryKey", None)
         column.pop("primaryKeyPosition", None)
-    assert _found(_check(doc, path=_path_of("python_csv"))) == [(_at(doc, "modeType"), "kind_rule")]
+    assert _found(_check(doc, path=_path_of("python_csv"))) == [
+        (_at(doc, "modeType"), "kind_rule")
+    ]
 
 
 def test_a_python_csv_without_a_mode_type_replaces():
@@ -695,7 +749,9 @@ def test_a_kind_rule_message_says_why():
         {"orders": "select 1", "rates": ""},
     ],
 )
-def test_read_queries_that_are_not_a_mapping_of_names_to_queries_are_refused(queries):
+def test_read_queries_that_are_not_a_mapping_of_names_to_queries_are_refused(
+    queries,
+):
     doc = _kpis()
     _set(doc, "readQueries", queries)
     issue = _only(_check(doc))
@@ -709,12 +765,19 @@ def test_each_empty_query_gets_its_own_issue_and_names_the_query():
     issues = _check(doc)
     assert _found(issues) == [(_at(doc, "readQueries"), "value")] * 2
     assert sorted("'days'" in issue.message for issue in issues) == [False, True]
-    assert sorted("'orders'" in issue.message for issue in issues) == [False, True]
+    assert sorted("'orders'" in issue.message for issue in issues) == [
+        False,
+        True,
+    ]
 
 
 def test_read_queries_with_text_are_accepted():
     doc = _kpis()
-    _set(doc, "readQueries", {"a": "select 1", "b": "select\n  2 from t", "c d": "select 3"})
+    _set(
+        doc,
+        "readQueries",
+        {"a": "select 1", "b": "select\n  2 from t", "c d": "select 3"},
+    )
     assert _check(doc) == []
 
 
@@ -775,7 +838,14 @@ def test_an_asset_listed_twice_is_refused_because_the_projection_refuses_it():
 
 @pytest.mark.parametrize(
     "assets",
-    [[], ["a.csv"], ["assets/a.csv", "assets/b/c.json"], ["a..b/c"], ["a b.csv"], [".a.csv"]],
+    [
+        [],
+        ["a.csv"],
+        ["assets/a.csv", "assets/b/c.json"],
+        ["a..b/c"],
+        ["a b.csv"],
+        [".a.csv"],
+    ],
 )
 def test_assets_inside_the_project_are_accepted(assets):
     doc = _full("python_api")
@@ -805,7 +875,11 @@ def test_a_long_list_of_assets_is_checked_in_linear_time():
     started = time.perf_counter()
     assert _check(doc, path=_path_of("python_api")) == []
     assert time.perf_counter() - started < 1.0
-    _set(doc, "assets", [f"assets/file-{number}.csv" for number in range(50_000)] * 2)
+    _set(
+        doc,
+        "assets",
+        [f"assets/file-{number}.csv" for number in range(50_000)] * 2,
+    )
     started = time.perf_counter()
     issues = _check(doc, path=_path_of("python_api"))
     assert time.perf_counter() - started < 2.0
@@ -841,9 +915,12 @@ def test_column_names_that_differ_only_in_case_are_two_columns():
 
 
 @pytest.mark.parametrize(
-    "name", ["", " ", "\t", " day", "day ", "\u00a0day", "day\n", "d\x00ay", "d\x7fay"]
+    "name",
+    ["", " ", "\t", " day", "day ", "\u00a0day", "day\n", "d\x00ay", "d\x7fay"],
 )
-def test_a_column_name_that_is_blank_has_outer_whitespace_or_a_control_character_is_refused(name):
+def test_a_column_name_that_is_blank_has_outer_whitespace_or_a_control_character_is_refused(
+    name,
+):
     doc = _kpis()
     _columns(doc)[0]["name"] = name
     issue = _only(_check(doc))
@@ -851,13 +928,17 @@ def test_a_column_name_that_is_blank_has_outer_whitespace_or_a_control_character
 
 
 @pytest.mark.parametrize(
-    "raw", ["NUMERIC(12)", "NUMERIC(12, 2, 1)", "VARCHAR", "TEXT[]", "float", "", " "]
+    "raw",
+    ["NUMERIC(12)", "NUMERIC(12, 2, 1)", "VARCHAR", "TEXT[]", "float", "", " "],
 )
 def test_a_column_type_continuo_does_not_accept_is_refused(raw):
     doc = _kpis()
     _columns(doc)[2]["physicalType"] = raw
     issue = _only(_check(doc))
-    assert (issue.path, issue.reason) == ("schema[0].properties[2].physicalType", "column_type")
+    assert (issue.path, issue.reason) == (
+        "schema[0].properties[2].physicalType",
+        "column_type",
+    )
 
 
 def test_a_column_name_with_inner_whitespace_is_accepted():
@@ -866,12 +947,17 @@ def test_a_column_name_with_inner_whitespace_is_accepted():
     assert _check(doc) == []
 
 
-@pytest.mark.parametrize("raw", ["VARCHAR(0)", "CHAR(0)", "varchar(000)", " char(0) "])
+@pytest.mark.parametrize(
+    "raw", ["VARCHAR(0)", "CHAR(0)", "varchar(000)", " char(0) "]
+)
 def test_a_string_type_of_length_zero_is_refused(raw):
     doc = _kpis()
     _columns(doc)[2]["physicalType"] = raw
     issue = _only(_check(doc))
-    assert (issue.path, issue.reason) == ("schema[0].properties[2].physicalType", "column_type")
+    assert (issue.path, issue.reason) == (
+        "schema[0].properties[2].physicalType",
+        "column_type",
+    )
     assert "1 to" in issue.message
 
 
@@ -888,7 +974,9 @@ def test_a_numeric_out_of_range_says_the_range():
     _columns(doc)[2]["physicalType"] = "NUMERIC(39,2)"
     (issue,) = _check(doc)
     assert issue.reason == "column_type"
-    assert issue.message.startswith("'NUMERIC(39,2)' is not a type continuo accepts")
+    assert issue.message.startswith(
+        "'NUMERIC(39,2)' is not a type continuo accepts"
+    )
     assert "precision is 1 to 38" in issue.message
 
 
@@ -932,7 +1020,10 @@ def test_a_column_physical_name_other_than_its_name_is_refused():
     doc = _kpis()
     _columns(doc)[0]["physicalName"] = "d"
     issue = _only(_check(doc))
-    assert (issue.path, issue.reason) == ("schema[0].properties[0].physicalName", "refused_field")
+    assert (issue.path, issue.reason) == (
+        "schema[0].properties[0].physicalName",
+        "refused_field",
+    )
     assert "'day'" in issue.message
 
 
@@ -946,7 +1037,10 @@ def test_a_partitioned_column_is_refused():
     doc = _kpis()
     _columns(doc)[0]["partitioned"] = True
     issue = _only(_check(doc))
-    assert (issue.path, issue.reason) == ("schema[0].properties[0].partitioned", "refused_field")
+    assert (issue.path, issue.reason) == (
+        "schema[0].properties[0].partitioned",
+        "refused_field",
+    )
     assert "partition" in issue.message
 
 
@@ -1001,7 +1095,11 @@ def _upsert_check(doc):
 def test_the_upsert_fixture_has_two_key_columns_in_order():
     doc = _upsert()
     assert _check(doc, path=_path_of("python_node")) == []
-    keys = [(c["name"], c["primaryKeyPosition"]) for c in _columns(doc) if c.get("primaryKey")]
+    keys = [
+        (c["name"], c["primaryKeyPosition"])
+        for c in _columns(doc)
+        if c.get("primaryKey")
+    ]
     assert keys == [("order_id", 1), ("line_no", 2)]
 
 
@@ -1031,23 +1129,54 @@ def test_a_key_column_that_is_not_required_is_refused(drop):
     else:
         _columns(doc)[0]["required"] = False
     issue = _only(_upsert_check(doc))
-    assert (issue.path, issue.reason) == ("schema[0].properties[0].required", "primary_key")
+    assert (issue.path, issue.reason) == (
+        "schema[0].properties[0].required",
+        "primary_key",
+    )
     assert "order_id" in issue.message
 
 
-@pytest.mark.parametrize("raw", ["DOUBLE PRECISION", "double precision", " Double Precision "])
+@pytest.mark.parametrize(
+    "raw", ["DOUBLE PRECISION", "double precision", " Double Precision "]
+)
 def test_a_double_precision_key_column_is_refused(raw):
     doc = _upsert()
     _columns(doc)[1]["physicalType"] = raw
     issue = _only(_upsert_check(doc))
-    assert (issue.path, issue.reason) == ("schema[0].properties[1].physicalType", "primary_key")
+    assert (issue.path, issue.reason) == (
+        "schema[0].properties[1].physicalType",
+        "primary_key",
+    )
     assert "DOUBLE PRECISION" in issue.message
+
+
+@pytest.mark.parametrize("raw", [7, None, ["INTEGER"], 1.5, True])
+def test_a_column_type_that_is_not_a_string_is_refused_by_the_rule(raw):
+    doc = _kpis()
+    _columns(doc)[0]["physicalType"] = raw
+    issues = rule_issues(doc, path=KPIS_PATH, service=SERVICE)
+    assert _found(issues) == [
+        ("schema[0].properties[0].physicalType", "column_type")
+    ]
+    assert "is not a type continuo accepts" in issues[0].message
+
+
+@pytest.mark.parametrize("raw", [7, None, ["DOUBLE PRECISION"]])
+def test_a_key_column_whose_type_is_not_a_string_gets_only_the_type_issue(raw):
+    doc = _upsert()
+    _columns(doc)[1]["physicalType"] = raw
+    issues = rule_issues(doc, path=_path_of("python_node"), service=SERVICE)
+    assert _found(issues) == [
+        ("schema[0].properties[1].physicalType", "column_type")
+    ]
 
 
 def test_a_key_column_whose_type_is_refused_gets_only_the_type_issue():
     doc = _upsert()
     _columns(doc)[1]["physicalType"] = "float"
-    assert _found(_upsert_check(doc)) == [("schema[0].properties[1].physicalType", "column_type")]
+    assert _found(_upsert_check(doc)) == [
+        ("schema[0].properties[1].physicalType", "column_type")
+    ]
 
 
 def test_two_key_columns_in_the_same_position_are_refused_at_the_second():
@@ -1084,7 +1213,9 @@ def test_a_key_column_with_no_position_next_to_a_numbered_one_is_refused():
 
 
 @pytest.mark.parametrize("position", [0, -1, -3])
-def test_a_key_position_below_one_is_refused_in_a_key_of_several_columns(position):
+def test_a_key_position_below_one_is_refused_in_a_key_of_several_columns(
+    position,
+):
     doc = _upsert()
     _columns(doc)[1]["primaryKeyPosition"] = position
     issue = _only(_upsert_check(doc))
@@ -1113,12 +1244,18 @@ def test_a_float_position_that_differs_from_the_others_is_accepted():
     assert _upsert_check(doc) == []
 
 
-@pytest.mark.parametrize("position", [1.5, 0.0, -1.0, True, "1", None, [1], float("inf")])
-def test_a_position_that_is_not_a_whole_number_from_one_is_refused_by_the_rule(position):
+@pytest.mark.parametrize(
+    "position", [1.5, 0.0, -1.0, True, "1", None, [1], float("inf")]
+)
+def test_a_position_that_is_not_a_whole_number_from_one_is_refused_by_the_rule(
+    position,
+):
     doc = _upsert()
     _columns(doc)[1]["primaryKeyPosition"] = position
     issues = rule_issues(doc, path=_path_of("python_node"), service=SERVICE)
-    assert _found(issues) == [("schema[0].properties[1].primaryKeyPosition", "primary_key")]
+    assert _found(issues) == [
+        ("schema[0].properties[1].primaryKeyPosition", "primary_key")
+    ]
 
 
 def test_a_bool_is_not_a_position_even_when_no_other_key_column_has_a_one():
@@ -1126,7 +1263,9 @@ def test_a_bool_is_not_a_position_even_when_no_other_key_column_has_a_one():
     _columns(doc)[0]["primaryKeyPosition"] = 2
     _columns(doc)[1]["primaryKeyPosition"] = True
     issues = rule_issues(doc, path=_path_of("python_node"), service=SERVICE)
-    assert _found(issues) == [("schema[0].properties[1].primaryKeyPosition", "primary_key")]
+    assert _found(issues) == [
+        ("schema[0].properties[1].primaryKeyPosition", "primary_key")
+    ]
     assert "True" in issues[0].message
 
 
@@ -1216,7 +1355,9 @@ def test_a_node_with_no_mode_type_needs_no_key():
 def test_an_upsert_node_with_no_columns_misses_the_columns_and_not_the_key():
     doc = _upsert()
     _columns(doc).clear()
-    assert _found(_upsert_check(doc)) == [("schema[0].properties", "missing_field")]
+    assert _found(_upsert_check(doc)) == [
+        ("schema[0].properties", "missing_field")
+    ]
 
 
 def test_every_issue_of_these_rules_has_one_of_the_reasons():
@@ -1238,13 +1379,19 @@ def test_every_issue_of_these_rules_has_one_of_the_reasons():
 @pytest.mark.parametrize(
     ("field", "fields"),
     [
-        ("properties", {"logicalType": "object", "properties": [{"name": "inner"}]}),
+        (
+            "properties",
+            {"logicalType": "object", "properties": [{"name": "inner"}]},
+        ),
         ("items", {"logicalType": "array", "items": {"logicalType": "string"}}),
         (
             "map",
             {
                 "logicalType": "map",
-                "map": {"key": {"logicalType": "string"}, "value": {"logicalType": "string"}},
+                "map": {
+                    "key": {"logicalType": "string"},
+                    "value": {"logicalType": "string"},
+                },
             },
         ),
     ],
@@ -1253,13 +1400,18 @@ def test_a_column_with_nested_properties_items_or_a_map_is_refused(field, fields
     doc = _kpis()
     _columns(doc)[0].update(fields)
     issue = _only(_check(doc))
-    assert (issue.path, issue.reason) == (f"schema[0].properties[0].{field}", "refused_field")
+    assert (issue.path, issue.reason) == (
+        f"schema[0].properties[0].{field}",
+        "refused_field",
+    )
     assert "name, type and nullability" in issue.message
 
 
 def test_an_authored_logical_type_options_is_refused():
     doc = _kpis()
-    _columns(doc)[0].update(logicalType="date", logicalTypeOptions={"format": "yyyy-MM-dd"})
+    _columns(doc)[0].update(
+        logicalType="date", logicalTypeOptions={"format": "yyyy-MM-dd"}
+    )
     issue = _only(_check(doc))
     assert (issue.path, issue.reason) == (
         "schema[0].properties[0].logicalTypeOptions",
@@ -1276,13 +1428,20 @@ def test_an_authored_logical_type_is_accepted_because_continuo_replaces_it():
 
 @pytest.mark.parametrize(
     "raw",
-    ["VARCHAR(9007199254740992)", "char(99999999999999999999)", "VARCHAR(0009007199254740992)"],
+    [
+        "VARCHAR(9007199254740992)",
+        "char(99999999999999999999)",
+        "VARCHAR(0009007199254740992)",
+    ],
 )
 def test_a_length_above_the_safe_integer_range_is_refused_once(raw):
     doc = _kpis()
     _columns(doc)[0]["physicalType"] = raw
     issue = _only(_check(doc))
-    assert (issue.path, issue.reason) == ("schema[0].properties[0].physicalType", "column_type")
+    assert (issue.path, issue.reason) == (
+        "schema[0].properties[0].physicalType",
+        "column_type",
+    )
     assert "9007199254740991" in issue.message
 
 
@@ -1297,12 +1456,19 @@ def test_the_largest_safe_length_is_accepted():
     ("where", "path"),
     [
         (lambda doc: doc["schema"][0], "schema[0].quality[0].implementation"),
-        (lambda doc: _columns(doc)[1], "schema[0].properties[1].quality[0].implementation"),
+        (
+            lambda doc: _columns(doc)[1],
+            "schema[0].properties[1].quality[0].implementation",
+        ),
     ],
 )
-def test_an_empty_implementation_of_a_custom_quality_rule_is_refused(implementation, where, path):
+def test_an_empty_implementation_of_a_custom_quality_rule_is_refused(
+    implementation, where, path
+):
     doc = _kpis()
-    where(doc)["quality"] = [{"type": "custom", "engine": "soda", "implementation": implementation}]
+    where(doc)["quality"] = [
+        {"type": "custom", "engine": "soda", "implementation": implementation}
+    ]
     issue = _only(_check(doc))
     assert (issue.path, issue.reason) == (path, "value")
 

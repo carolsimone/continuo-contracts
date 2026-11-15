@@ -1,5 +1,7 @@
 import copy
+import datetime
 import time
+
 from pathlib import Path
 
 import pytest
@@ -58,7 +60,9 @@ def test_the_full_contracts_name_their_table_after_their_file():
         "python_node.odcs.yaml",
     ]
     for path in FULL:
-        assert _load(path)["schema"][0]["name"] == path.name.removesuffix(".odcs.yaml")
+        assert _load(path)["schema"][0]["name"] == path.name.removesuffix(
+            ".odcs.yaml"
+        )
 
 
 @pytest.mark.parametrize(
@@ -78,7 +82,11 @@ def test_the_full_contracts_name_their_table_after_their_file():
             "schema[0].physicalType",
             "identity",
         ),
-        (lambda d: d["schema"].append(dict(d["schema"][0])), "schema", "identity"),
+        (
+            lambda d: d["schema"].append(dict(d["schema"][0])),
+            "schema",
+            "identity",
+        ),
         (lambda d: d.pop("team"), "team.name", "missing_field"),
         (
             lambda d: d.update(
@@ -122,7 +130,9 @@ def test_the_full_contracts_name_their_table_after_their_file():
             "refused_property",
         ),
         (
-            lambda d: d["customProperties"].append(_continuo("entity", "Transaction")),
+            lambda d: d["customProperties"].append(
+                _continuo("entity", "Transaction")
+            ),
             "customProperties[4]",
             "unknown_property",
         ),
@@ -140,7 +150,10 @@ def test_one_change_gives_one_issue(change, path, reason):
 
 
 def test_the_issue_prints_its_path_and_its_message():
-    assert str(Issue("schema[0].name", "identity", "is wrong")) == "schema[0].name: is wrong"
+    assert (
+        str(Issue("schema[0].name", "identity", "is wrong"))
+        == "schema[0].name: is wrong"
+    )
 
 
 def test_an_issue_is_frozen():
@@ -171,12 +184,17 @@ def test_the_reasons_are_the_closed_set():
 def test_every_issue_has_one_of_the_reasons():
     bad_rules = _kpis()
     bad_rules.update(apiVersion="v3.1.0", tenant="t", id="Analytics.other")
-    bad_rules["customProperties"] += [_continuo("entity", 1), _continuo("provenance", 1)]
+    bad_rules["customProperties"] += [
+        _continuo("entity", 1),
+        _continuo("provenance", 1),
+    ]
     bad_schema = _kpis()
     bad_schema["schema"][0]["properties"][0]["name"] = 3
     issues = [
         *schema_issues(bad_schema),
-        *rule_issues(bad_rules, path="contracts/other.odcs.yaml", service=SERVICE),
+        *rule_issues(
+            bad_rules, path="contracts/other.odcs.yaml", service=SERVICE
+        ),
     ]
     assert len(issues) > 5
     assert all(issue.reason in REASONS for issue in issues)
@@ -186,10 +204,12 @@ def test_every_issue_has_one_of_the_reasons():
 
 
 def test_the_file_name_must_match_the_table():
-    assert [issue.reason for issue in _check(_kpis(), path="contracts/kpis.odcs.yaml")] == [
-        "file_name"
-    ]
-    assert _check(_kpis(), path="contracts/analytics.py_daily_kpis.odcs.yaml") == []
+    assert [
+        issue.reason for issue in _check(_kpis(), path="contracts/kpis.odcs.yaml")
+    ] == ["file_name"]
+    assert (
+        _check(_kpis(), path="contracts/analytics.py_daily_kpis.odcs.yaml") == []
+    )
 
 
 def test_the_file_name_issue_is_for_the_whole_file_and_names_both_spellings():
@@ -237,8 +257,12 @@ def test_a_table_with_capitals_names_its_file_as_written():
     doc["schema"][0]["name"] = "Py_Daily_KPIs"
     assert _check(doc, path="Py_Daily_KPIs.odcs.yaml") == []
     assert _check(doc, path="analytics.Py_Daily_KPIs.odcs.yaml") == []
-    assert _found(_check(doc, path="py_daily_kpis.odcs.yaml")) == [("$", "file_name")]
-    assert _found(_check(doc, path="analytics.py_daily_kpis.odcs.yaml")) == [("$", "file_name")]
+    assert _found(_check(doc, path="py_daily_kpis.odcs.yaml")) == [
+        ("$", "file_name")
+    ]
+    assert _found(_check(doc, path="analytics.py_daily_kpis.odcs.yaml")) == [
+        ("$", "file_name")
+    ]
 
 
 def test_a_file_name_with_the_schema_of_an_id_that_names_another_table_is_refused():
@@ -257,7 +281,9 @@ def test_service_none_skips_the_service_rule():
     doc = _kpis()
     doc["customProperties"].append(_continuo("service", "other"))
     assert _check(doc, service=None) == []
-    assert _found(_check(doc, service=SERVICE)) == [("customProperties[4]", "service")]
+    assert _found(_check(doc, service=SERVICE)) == [
+        ("customProperties[4]", "service")
+    ]
 
 
 def test_the_service_of_the_release_is_accepted():
@@ -279,7 +305,9 @@ def test_the_service_issue_names_both_services():
     assert SERVICE in issue.message
 
 
-@pytest.mark.parametrize("value", [5, None, "", " ", "\t", ["service-py"], {"a": "b"}])
+@pytest.mark.parametrize(
+    "value", [5, None, "", " ", "\t", ["service-py"], {"a": "b"}]
+)
 @pytest.mark.parametrize("service", [SERVICE, None])
 def test_a_service_value_that_is_not_text_is_refused_whether_or_not_the_service_is_known(
     value, service
@@ -343,7 +371,9 @@ def test_a_schema_object_without_a_physical_type_is_refused():
     assert _found(_check(doc)) == [("schema[0].physicalType", "identity")]
 
 
-@pytest.mark.parametrize("bad_id", [".py_daily_kpis", "py_daily_kpis", "analytics.py_daily", ""])
+@pytest.mark.parametrize(
+    "bad_id", [".py_daily_kpis", "py_daily_kpis", "analytics.py_daily", ""]
+)
 def test_the_id_is_a_schema_a_dot_and_the_table(bad_id):
     doc = _kpis()
     doc["id"] = bad_id
@@ -355,8 +385,12 @@ def test_a_table_with_no_name_is_refused():
     doc["schema"][0]["name"] = ""
     doc["name"] = ""
     doc["id"] = "analytics."
-    assert _found(_check(doc, path="analytics..odcs.yaml")) == [("schema[0].name", "identity")]
-    assert _found(_check(doc, path="contracts/x.odcs.yaml")) == [("schema[0].name", "identity")]
+    assert _found(_check(doc, path="analytics..odcs.yaml")) == [
+        ("schema[0].name", "identity")
+    ]
+    assert _found(_check(doc, path="contracts/x.odcs.yaml")) == [
+        ("schema[0].name", "identity")
+    ]
 
 
 def _rename_table(doc, name):
@@ -423,9 +457,15 @@ def test_each_table_name_fault_says_what_is_wrong():
 
 @pytest.mark.parametrize(
     "name, word",
-    [("kpis kpis", "whitespace"), ("a/b", "slash"), ("k\x00pis", "control character")],
+    [
+        ("kpis kpis", "whitespace"),
+        ("a/b", "slash"),
+        ("k\x00pis", "control character"),
+    ],
 )
-def test_a_table_name_with_inner_whitespace_a_slash_or_a_control_character_says_so(name, word):
+def test_a_table_name_with_inner_whitespace_a_slash_or_a_control_character_says_so(
+    name, word
+):
     doc = _kpis()
     doc["schema"][0]["name"] = name
     (issue,) = _check(doc)
@@ -433,7 +473,9 @@ def test_a_table_name_with_inner_whitespace_a_slash_or_a_control_character_says_
     assert word in issue.message
 
 
-@pytest.mark.parametrize("name", ["kpis_2", "Kpis", "k-pis", "k\u00e4se", "k\u00c4se"])
+@pytest.mark.parametrize(
+    "name", ["kpis_2", "Kpis", "k-pis", "k\u00e4se", "k\u00c4se"]
+)
 def test_a_table_name_with_inner_characters_is_not_refused_by_the_name_rule(name):
     doc = _kpis()
     _rename_table(doc, name)
@@ -447,14 +489,15 @@ def test_the_id_lower_cases_only_the_ascii_letters_of_the_table():
     doc["id"] = "analytics.k\u00c4se"
     assert _check(doc, path="contracts/K\u00c4SE.odcs.yaml") == []
     doc["id"] = "analytics.k\u00e4se"
-    assert _found(_check(doc, path="contracts/K\u00c4SE.odcs.yaml")) == [("id", "identity")]
+    assert _found(_check(doc, path="contracts/K\u00c4SE.odcs.yaml")) == [
+        ("id", "identity")
+    ]
 
 
 @pytest.mark.parametrize("letter", ["\u00c4", "\u0130", "\ua7cb", "\u1e9e"])
-def test_a_capital_letter_outside_ascii_is_kept_in_the_id_on_every_python(letter):
-    # U+A7CB has a lower case only from Unicode 16, which Python 3.14 has and 3.12 has not, so a
-    # rule that lower-cases beyond ASCII would accept this id on one Python and refuse it on the
-    # other.
+def test_a_capital_letter_outside_ascii_is_kept_in_the_id(letter):
+    # U+A7CB has a lower case only from Unicode 16, so a rule that lower-cases beyond ASCII would
+    # accept this id on a Python with older Unicode tables and refuse it on one with newer tables.
     doc = _kpis()
     doc["id"] = f"analytics{letter}.py_daily_kpis"
     assert _check(doc) == []
@@ -500,7 +543,9 @@ def test_the_schema_part_of_the_id_has_no_dot(bad_id):
         "ana\x85lytics.py_daily_kpis",
     ],
 )
-def test_the_schema_part_of_the_id_has_no_whitespace_slash_or_control_character(bad_id):
+def test_the_schema_part_of_the_id_has_no_whitespace_slash_or_control_character(
+    bad_id,
+):
     doc = _kpis()
     doc["id"] = bad_id
     assert _found(_check(doc)) == [("id", "identity")]
@@ -588,10 +633,21 @@ def test_a_filled_property_says_what_it_is_filled_from():
 
 @pytest.mark.parametrize(
     "name",
-    "filePath materialization contractEnforced access group deprecationDate freshnessBuildAfter "
-    "snapshot quoteColumns".split(),
+    [
+        "filePath",
+        "materialization",
+        "contractEnforced",
+        "access",
+        "group",
+        "deprecationDate",
+        "freshnessBuildAfter",
+        "snapshot",
+        "quoteColumns",
+    ],
 )
-def test_a_dbt_property_is_refused_because_it_says_nothing_about_a_python_node(name):
+def test_a_dbt_property_is_refused_because_it_says_nothing_about_a_python_node(
+    name,
+):
     doc = _kpis()
     doc["customProperties"].append(_continuo(name, "x"))
     (issue,) = _check(doc)
@@ -627,13 +683,25 @@ def test_a_repeated_property_says_why_it_is_refused():
 def test_a_refused_property_is_refused_on_any_level():
     doc = _kpis()
     doc["schema"][0]["customProperties"] = [_continuo("materialization", "view")]
-    assert _found(_check(doc)) == [("schema[0].customProperties[0]", "refused_property")]
+    assert _found(_check(doc)) == [
+        ("schema[0].customProperties[0]", "refused_property")
+    ]
 
 
 @pytest.mark.parametrize(
     "name",
-    "filePath materialization contractEnforced access group deprecationDate freshnessBuildAfter "
-    "snapshot quoteColumns provenance".split(),
+    [
+        "filePath",
+        "materialization",
+        "contractEnforced",
+        "access",
+        "group",
+        "deprecationDate",
+        "freshnessBuildAfter",
+        "snapshot",
+        "quoteColumns",
+        "provenance",
+    ],
 )
 def test_each_property_a_python_contract_does_not_carry_is_refused(name):
     doc = _kpis()
@@ -643,20 +711,38 @@ def test_each_property_a_python_contract_does_not_carry_is_refused(name):
 
 @pytest.mark.parametrize(
     "name",
-    "service kind schedule criticality timeoutMinutes script readQueries csvSource extraColumns "
-    "config secretRef modeType assets".split(),
+    [
+        "service",
+        "kind",
+        "schedule",
+        "criticality",
+        "timeoutMinutes",
+        "script",
+        "readQueries",
+        "csvSource",
+        "extraColumns",
+        "config",
+        "secretRef",
+        "modeType",
+        "assets",
+    ],
 )
 def test_an_authored_property_on_the_schema_object_is_on_the_wrong_level(name):
     doc = _kpis()
     doc["schema"][0]["customProperties"] = [_continuo(name, "x")]
-    assert _found(_check(doc)) == [("schema[0].customProperties[0]", "refused_property")]
+    assert _found(_check(doc)) == [
+        ("schema[0].customProperties[0]", "refused_property")
+    ]
 
 
 def test_a_continuo_property_on_the_wrong_level_is_refused():
     doc = _kpis()
     doc["schema"][0]["customProperties"] = [_continuo("schedule", "daily")]
     (issue,) = _check(doc)
-    assert (issue.path, issue.reason) == ("schema[0].customProperties[0]", "refused_property")
+    assert (issue.path, issue.reason) == (
+        "schema[0].customProperties[0]",
+        "refused_property",
+    )
     assert "schedule" in issue.message
     assert "contract" in issue.message
 
@@ -670,7 +756,10 @@ def test_a_quality_property_on_the_contract_is_on_the_wrong_level():
 def test_a_continuo_property_on_a_column_is_on_the_wrong_level_or_unknown():
     doc = _kpis()
     column = doc["schema"][0]["properties"][0]
-    column["customProperties"] = [_continuo("schedule", "daily"), _continuo("entity", "Day")]
+    column["customProperties"] = [
+        _continuo("schedule", "daily"),
+        _continuo("entity", "Day"),
+    ]
     assert _found(_check(doc)) == [
         ("schema[0].properties[0].customProperties[0]", "refused_property"),
         ("schema[0].properties[0].customProperties[1]", "unknown_property"),
@@ -704,21 +793,31 @@ def test_the_quality_properties_are_accepted_on_a_quality_rule(where):
 def test_an_authored_contract_property_on_a_quality_rule_is_on_the_wrong_level():
     doc = _kpis()
     doc["schema"][0]["quality"] = [
-        {"metric": "rowCount", "mustBeGreaterThan": 0, "customProperties": [_continuo("kind", "x")]}
+        {
+            "metric": "rowCount",
+            "mustBeGreaterThan": 0,
+            "customProperties": [_continuo("kind", "x")],
+        }
     ]
-    assert _found(_check(doc)) == [("schema[0].quality[0].customProperties[0]", "refused_property")]
+    assert _found(_check(doc)) == [
+        ("schema[0].quality[0].customProperties[0]", "refused_property")
+    ]
 
 
 def test_a_continuo_property_on_the_description_is_on_the_wrong_level():
     doc = _kpis()
     doc["description"]["customProperties"] = [_continuo("schedule", "daily")]
-    assert _found(_check(doc)) == [("description.customProperties[0]", "refused_property")]
+    assert _found(_check(doc)) == [
+        ("description.customProperties[0]", "refused_property")
+    ]
 
 
 def test_a_continuo_property_in_a_list_deep_in_the_contract_is_found():
     doc = _kpis()
     doc["team"]["customProperties"] = [_continuo("entity", "x")]
-    doc["roles"] = [{"role": "reader", "customProperties": [_continuo("entity", "x")]}]
+    doc["roles"] = [
+        {"role": "reader", "customProperties": [_continuo("entity", "x")]}
+    ]
     assert _found(_check(doc)) == [
         ("roles[0].customProperties[0]", "unknown_property"),
         ("team.customProperties[0]", "unknown_property"),
@@ -741,12 +840,18 @@ def test_a_value_that_looks_like_a_custom_property_list_is_not_walked():
 def test_another_vendors_property_with_a_continuo_name_is_kept_and_ignored():
     doc = _kpis()
     doc["customProperties"] += [
-        {"vendor": "lotse", "property": "secretRef", "value": "not-a-continuo-name"},
+        {
+            "vendor": "lotse",
+            "property": "secretRef",
+            "value": "not-a-continuo-name",
+        },
         {"vendor": "lotse", "property": "schedule", "value": "weekly"},
         {"property": "provenance", "value": {}},
         {"vendor": "Continuo", "property": "entity", "value": 1},
     ]
-    doc["schema"][0]["customProperties"] = [{"vendor": "lotse", "property": "reads", "value": 1}]
+    doc["schema"][0]["customProperties"] = [
+        {"vendor": "lotse", "property": "reads", "value": 1}
+    ]
     assert _check(doc) == []
 
 
@@ -761,7 +866,10 @@ def test_a_continuo_property_written_twice_is_refused():
 
 def test_a_continuo_property_written_three_times_is_refused_at_each_repeat():
     doc = _kpis()
-    doc["customProperties"] += [_continuo("schedule", "hourly"), _continuo("schedule", "daily")]
+    doc["customProperties"] += [
+        _continuo("schedule", "hourly"),
+        _continuo("schedule", "daily"),
+    ]
     assert _found(_check(doc)) == [
         ("customProperties[4]", "value"),
         ("customProperties[5]", "value"),
@@ -786,10 +894,15 @@ def test_a_quality_property_written_twice_on_a_rule_is_refused():
         {
             "metric": "rowCount",
             "mustBeGreaterThan": 0,
-            "customProperties": [_continuo("where", "a"), _continuo("where", "b")],
+            "customProperties": [
+                _continuo("where", "a"),
+                _continuo("where", "b"),
+            ],
         }
     ]
-    assert _found(_check(doc)) == [("schema[0].quality[0].customProperties[1]", "value")]
+    assert _found(_check(doc)) == [
+        ("schema[0].quality[0].customProperties[1]", "value")
+    ]
 
 
 def test_the_same_property_on_two_lists_is_not_a_repeat():
@@ -820,7 +933,10 @@ def test_an_unknown_property_written_twice_is_unknown_each_time():
 
 def test_a_repeated_service_that_is_also_wrong_gets_both_issues_at_the_repeat():
     doc = _kpis()
-    doc["customProperties"] += [_continuo("service", SERVICE), _continuo("service", "other")]
+    doc["customProperties"] += [
+        _continuo("service", SERVICE),
+        _continuo("service", "other"),
+    ]
     assert sorted(_found(_check(doc))) == [
         ("customProperties[5]", "service"),
         ("customProperties[5]", "value"),
@@ -854,13 +970,18 @@ def test_two_quality_operators_in_one_rule_fail_the_schema():
     issues = _check(doc)
     assert issues
     assert {issue.reason for issue in issues} == {"odcs_schema"}
-    assert all(issue.path.startswith("schema[0].properties[0].quality[0]") for issue in issues)
+    assert all(
+        issue.path.startswith("schema[0].properties[0].quality[0]")
+        for issue in issues
+    )
 
 
 @pytest.mark.parametrize("doc", [[1, 2], None, "text", 5, True])
 def test_a_document_that_is_not_a_mapping_fails_the_schema(doc):
     issues = _check(doc)
-    assert [(issue.path, issue.reason) for issue in issues] == [("$", "odcs_schema")]
+    assert [(issue.path, issue.reason) for issue in issues] == [
+        ("$", "odcs_schema")
+    ]
     assert schema_issues(doc) == issues
 
 
@@ -868,7 +989,9 @@ def test_a_missing_required_field_fails_the_schema_at_the_root():
     doc = _kpis()
     del doc["id"]
     issues = _check(doc)
-    assert [(issue.path, issue.reason) for issue in issues] == [("$", "odcs_schema")]
+    assert [(issue.path, issue.reason) for issue in issues] == [
+        ("$", "odcs_schema")
+    ]
     assert "id" in issues[0].message
 
 
@@ -895,7 +1018,9 @@ def test_a_schema_failure_hides_the_rules():
     doc = _kpis()
     doc["tenant"] = "t"
     doc["schema"][0]["properties"][0]["name"] = 3
-    assert _found(_check(doc)) == [("schema[0].properties[0].name", "odcs_schema")]
+    assert _found(_check(doc)) == [
+        ("schema[0].properties[0].name", "odcs_schema")
+    ]
     assert _found(rule_issues(doc, path=KPIS_PATH, service=SERVICE)) == [
         ("tenant", "refused_field")
     ]
@@ -938,7 +1063,9 @@ def _nesting(shape, levels):
     column = {"name": "payload", "physicalType": "TEXT"}
     current = column
     for level in range(levels):
-        field = shape if shape != "mix" else ("properties", "items", "map")[level % 3]
+        field = (
+            shape if shape != "mix" else ("properties", "items", "map")[level % 3]
+        )
         inner = {"name": f"n{level + 1}"}
         if field == "properties":
             current.update(logicalType="object", properties=[inner])
@@ -946,7 +1073,8 @@ def _nesting(shape, levels):
             current.update(logicalType="array", items=inner)
         else:
             current.update(
-                logicalType="map", map={"key": {"logicalType": "string"}, "value": inner}
+                logicalType="map",
+                map={"key": {"logicalType": "string"}, "value": inner},
             )
         current = inner
     return column
@@ -965,15 +1093,24 @@ def _timed(check, doc):
 
 
 # Where the issue of each shape is: the field the column itself carries.
-FIRST_FIELD = {"properties": "properties", "items": "items", "map": "map", "mix": "properties"}
+FIRST_FIELD = {
+    "properties": "properties",
+    "items": "items",
+    "map": "map",
+    "mix": "properties",
+}
 
 
 @pytest.mark.parametrize("shape", sorted(FIRST_FIELD))
-@pytest.mark.parametrize("check", [schema_issues, _check], ids=["schema_issues", "validate"])
+@pytest.mark.parametrize(
+    "check", [schema_issues, _check], ids=["schema_issues", "validate"]
+)
 def test_a_column_nested_thirty_levels_deep_is_refused_at_once(check, shape):
     issues, seconds = _timed(check, _with_nesting(shape))
     assert seconds < QUICK
-    assert _found(issues) == [(f"schema[0].properties[3].{FIRST_FIELD[shape]}", "refused_field")]
+    assert _found(issues) == [
+        (f"schema[0].properties[3].{FIRST_FIELD[shape]}", "refused_field")
+    ]
 
 
 @pytest.mark.parametrize("shape", sorted(FIRST_FIELD))
@@ -1002,20 +1139,31 @@ def test_a_nesting_in_any_schema_object_is_refused_before_the_json_schema():
     for check in (schema_issues, _check):
         issues, seconds = _timed(check, doc)
         assert seconds < QUICK
-        assert _found(issues) == [("schema[1].properties[0].map", "refused_field")]
+        assert _found(issues) == [
+            ("schema[1].properties[0].map", "refused_field")
+        ]
 
 
 def test_a_nesting_hides_the_other_schema_errors():
     doc = _with_nesting("properties")
     doc["schema"][0]["properties"][0]["name"] = 3
-    assert _found(schema_issues(doc)) == [("schema[0].properties[3].properties", "refused_field")]
+    assert _found(schema_issues(doc)) == [
+        ("schema[0].properties[3].properties", "refused_field")
+    ]
     del doc["schema"][0]["properties"][3]
-    assert _found(schema_issues(doc)) == [("schema[0].properties[0].name", "odcs_schema")]
+    assert _found(schema_issues(doc)) == [
+        ("schema[0].properties[0].name", "odcs_schema")
+    ]
 
 
 @pytest.mark.parametrize(
     "schema",
-    ["text", [1, "column"], [{"name": "t", "properties": "columns"}], [{"properties": [1, None]}]],
+    [
+        "text",
+        [1, "column"],
+        [{"name": "t", "properties": "columns"}],
+        [{"properties": [1, None]}],
+    ],
 )
 def test_a_schema_too_malformed_to_scan_is_left_to_the_json_schema(schema):
     doc = _kpis()
@@ -1048,9 +1196,9 @@ def test_schema_issues_put_array_indexes_in_numeric_order():
 def test_rule_issues_put_array_indexes_in_numeric_order():
     doc = _kpis()
     doc["customProperties"] += [_continuo("entity", n) for n in range(10)]
-    assert [issue.path for issue in rule_issues(doc, path=KPIS_PATH, service=SERVICE)] == [
-        f"customProperties[{n}]" for n in range(4, 14)
-    ]
+    assert [
+        issue.path for issue in rule_issues(doc, path=KPIS_PATH, service=SERVICE)
+    ] == [f"customProperties[{n}]" for n in range(4, 14)]
 
 
 def test_issues_are_in_path_order_and_then_message_order():
@@ -1073,7 +1221,10 @@ def test_issues_are_in_path_order_and_then_message_order():
 def test_the_same_document_gives_the_same_issues_every_time():
     doc = _kpis()
     doc.update(tenant="t", servers=[])
-    doc["customProperties"] += [_continuo("entity", 1), _continuo("schedule", "x")]
+    doc["customProperties"] += [
+        _continuo("entity", 1),
+        _continuo("schedule", "x"),
+    ]
     first = _check(doc)
     assert first == _check(copy.deepcopy(doc))
     assert first == _check(doc)
@@ -1105,15 +1256,54 @@ def test_validate_python_contract_gives_the_schema_issues_when_there_are_any():
     doc = _kpis()
     doc["tenant"] = "t"
     doc["schema"][0]["properties"][0]["name"] = 3
-    assert validate_python_contract(doc, path=KPIS_PATH, service=SERVICE) == schema_issues(doc)
+    assert validate_python_contract(
+        doc, path=KPIS_PATH, service=SERVICE
+    ) == schema_issues(doc)
 
 
 def test_validate_python_contract_gives_the_rule_issues_otherwise():
     doc = _kpis()
     doc["tenant"] = "t"
-    assert validate_python_contract(doc, path=KPIS_PATH, service=SERVICE) == rule_issues(
+    assert validate_python_contract(
         doc, path=KPIS_PATH, service=SERVICE
-    )
+    ) == rule_issues(doc, path=KPIS_PATH, service=SERVICE)
+
+
+def test_a_key_that_is_not_a_string_is_reported_with_each_error_it_causes():
+    # A key that `repr` writes as something other than a literal, such as the date key that a
+    # YAML 1.1 reader makes of `2026-11-14`, cannot be read back from the message, so the
+    # "Unevaluated properties" error next to the "Additional properties" one is not a repeat.
+    doc = _kpis()
+    doc[datetime.date(2026, 11, 14)] = "x"
+    issues = schema_issues(doc)
+    assert [issue.path for issue in issues] == ["$", "$"]
+    assert [issue.message.partition(" (")[0] for issue in issues] == [
+        "Additional properties are not allowed",
+        "Unevaluated properties are not allowed",
+    ]
+    assert all("datetime.date(2026, 11, 14)" in issue.message for issue in issues)
+
+
+@pytest.mark.parametrize("written", ["x", {"a": 1}, 7, None])
+def test_a_custom_properties_value_that_is_not_a_list_is_not_walked(written):
+    doc = _kpis()
+    doc["customProperties"] = written
+    issues = rule_issues(doc, path=KPIS_PATH, service=SERVICE)
+    assert issues
+    assert {issue.path for issue in issues} == {"customProperties"}
+    doc = _kpis()
+    doc["schema"][0]["customProperties"] = written
+    assert rule_issues(doc, path=KPIS_PATH, service=SERVICE) == []
+
+
+@pytest.mark.parametrize("name", [7, None, ["entity"]])
+def test_a_continuo_property_with_no_name_is_left_to_the_schema_check(name):
+    doc = _kpis()
+    doc["customProperties"].append(_continuo(name, "x"))
+    assert rule_issues(doc, path=KPIS_PATH, service=SERVICE) == []
+    assert [issue.path for issue in schema_issues(doc)] == [
+        "customProperties[4].property"
+    ]
 
 
 def test_a_comparison_value_of_a_quality_rule_is_data_and_not_walked():
@@ -1132,12 +1322,20 @@ def test_the_value_of_a_map_is_a_property_and_is_walked():
         logicalType="map",
         map={
             "key": {"logicalType": "string"},
-            "value": {"logicalType": "string", "customProperties": [_continuo("entity", "x")]},
+            "value": {
+                "logicalType": "string",
+                "customProperties": [_continuo("entity", "x")],
+            },
         },
     )
     assert _found(rule_issues(doc, path=KPIS_PATH, service=SERVICE)) == [
         ("schema[0].properties[0].map", "refused_field"),
-        ("schema[0].properties[0].map.value.customProperties[0]", "unknown_property"),
+        (
+            "schema[0].properties[0].map.value.customProperties[0]",
+            "unknown_property",
+        ),
     ]
     # The schema check refuses the map before anything walks it.
-    assert _found(_check(doc)) == [("schema[0].properties[0].map", "refused_field")]
+    assert _found(_check(doc)) == [
+        ("schema[0].properties[0].map", "refused_field")
+    ]

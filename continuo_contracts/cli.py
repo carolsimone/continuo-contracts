@@ -23,6 +23,7 @@ import json
 import logging
 import stat
 import sys
+
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, Final, cast
@@ -80,8 +81,11 @@ class _UsageError(Exception):
 
 
 def _service(value: str) -> str:
-    """Return `value`, the service of a release, and refuse one that is empty or blank: it names
-    no release, so a hash computed under it matches none that a release stores."""
+    """Return `value`, the service of a release, or refuse one that is blank.
+
+    An empty or blank service names no release, so a hash computed under it
+    matches none that a release stores.
+    """
     if not value.strip():
         raise argparse.ArgumentTypeError("the service must not be empty or blank")
     return value
@@ -98,8 +102,9 @@ def _cannot(path: Path, action: str, error: OSError | ValueError) -> str:
 
 
 def _mode(path: Path) -> int | None:
-    """Return the `st_mode` of what `path` names, following symbolic links, or `None` when
-    nothing is there.
+    """Return the `st_mode` of what `path` names, or `None` when nothing is there.
+
+    Symbolic links are followed.
 
     Raises the `OSError` of any other failure to look the path up, such as a folder on the way
     that the process may not search, and the `ValueError` of a path that no file can have, such
@@ -108,15 +113,20 @@ def _mode(path: Path) -> int | None:
     """
     try:
         return path.stat().st_mode
-    except (FileNotFoundError, NotADirectoryError):
+    except FileNotFoundError, NotADirectoryError:
         return None
 
 
 def _folder_files(folder: Path) -> tuple[list[Path], list[str]]:
-    """Return the regular `*.odcs.yaml` files directly in `folder`, in name order, and the
-    problems of the folder and of the entries that cannot be looked up."""
+    """Return the regular `*.odcs.yaml` files directly in `folder`, in name order.
+
+    The result also holds the problems of the folder and of the entries that
+    cannot be looked up.
+    """
     try:
-        entries = sorted(item for item in folder.iterdir() if item.name.endswith(_FILE_SUFFIX))
+        entries = sorted(
+            item for item in folder.iterdir() if item.name.endswith(_FILE_SUFFIX)
+        )
     except OSError as error:
         return [], [_cannot(folder, "read the folder", error)]
     files: list[Path] = []
@@ -133,8 +143,10 @@ def _folder_files(folder: Path) -> tuple[list[Path], list[str]]:
 
 
 def _contract_files(paths: Sequence[Path]) -> list[Path]:
-    """Return the contract files that `paths` name: each file as it is, and for each folder its
-    `*.odcs.yaml` files in name order, without looking into folders below it.
+    """Return the contract files that `paths` name.
+
+    A file stands for itself, and a folder for its `*.odcs.yaml` files in name
+    order, without looking into folders below it.
 
     Raises `_UsageError` naming each path that is missing, is a file with another name, is a
     folder with no contract file, or cannot be looked up or read as a folder, such as a path below
@@ -153,29 +165,38 @@ def _contract_files(paths: Sequence[Path]) -> list[Path]:
             files.extend(found)
             problems.extend(unreadable)
             if not found and not unreadable:
-                problems.append(f"{_posix(path)}: the folder has no *{_FILE_SUFFIX} file")
+                problems.append(
+                    f"{_posix(path)}: the folder has no *{_FILE_SUFFIX} file"
+                )
         elif mode is None or not stat.S_ISREG(mode):
             problems.append(f"{_posix(path)}: no such file or folder")
         elif path.name.endswith(_FILE_SUFFIX):
             files.append(path)
         else:
-            problems.append(f"{_posix(path)}: the file is not named *{_FILE_SUFFIX}")
+            problems.append(
+                f"{_posix(path)}: the file is not named *{_FILE_SUFFIX}"
+            )
     if problems:
         raise _UsageError(*problems)
     return files
 
 
 def _read_texts(files: Sequence[Path]) -> list[tuple[Path, str]]:
-    """Return each file with its text, decoded from UTF-8 and otherwise as written, so a byte
-    order mark and CRLF line endings reach the reader. Raises `_UsageError` naming each file
-    that cannot be read."""
+    """Return each file with its text, decoded from UTF-8 and left as written.
+
+    A byte order mark and CRLF line endings reach the reader.
+
+    Raises `_UsageError` naming each file that cannot be read.
+    """
     texts: list[tuple[Path, str]] = []
     problems: list[str] = []
     for path in files:
         try:
             texts.append((path, path.read_bytes().decode("utf-8")))
         except OSError as error:
-            problems.append(f"{_posix(path)}: cannot read the file: {error.strerror or error}")
+            problems.append(
+                f"{_posix(path)}: cannot read the file: {error.strerror or error}"
+            )
         except UnicodeDecodeError as error:
             problems.append(
                 f"{_posix(path)}: the file is not UTF-8 text ({error.reason} at byte {error.start})"
@@ -185,7 +206,9 @@ def _read_texts(files: Sequence[Path]) -> list[tuple[Path, str]]:
     return texts
 
 
-def _check(path: Path, text: str, service: str | None) -> tuple[object, list[Issue]]:
+def _check(
+    path: Path, text: str, service: str | None
+) -> tuple[object, list[Issue]]:
     """Read and check one contract file, and return the document and its issues.
 
     A text that `yaml_strict.load` refuses has no document and gives the one issue `strict_yaml`
@@ -204,8 +227,7 @@ def _log_issues(path: Path, issues: Sequence[Issue]) -> None:
 
 
 def _print_json(document: object) -> None:
-    # Stdout is the machine-read result of the command, so this is a print and not a log line.
-    print(json.dumps(document, indent=2))
+    print(json.dumps(document, indent=2))  # noqa: T201 - stdout carries the result
 
 
 def _validate(args: argparse.Namespace) -> int:
@@ -231,7 +253,11 @@ def _validate(args: argparse.Namespace) -> int:
                     {
                         "path": _posix(path),
                         "issues": [
-                            {"path": i.path, "reason": i.reason, "message": i.message}
+                            {
+                                "path": i.path,
+                                "reason": i.reason,
+                                "message": i.message,
+                            }
                             for i in issues
                         ],
                     }
@@ -249,7 +275,9 @@ def _hash(args: argparse.Namespace) -> int:
     except (OSError, ValueError) as error:
         raise _UsageError(_cannot(path, "look up the path", error)) from error
     if mode is not None and stat.S_ISDIR(mode):
-        raise _UsageError(f"{_posix(path)}: hash takes one contract file, not a folder")
+        raise _UsageError(
+            f"{_posix(path)}: hash takes one contract file, not a folder"
+        )
     ((path, text),) = _read_texts(_contract_files([path]))
     doc, issues = _check(path, text, args.service)
     if issues:
@@ -266,7 +294,7 @@ def _hash(args: argparse.Namespace) -> int:
     if args.json:
         _print_json({"contract_hash": result, "stored": stored})
     else:
-        print(result)
+        print(result)  # noqa: T201 - stdout carries the result
     return _VALID
 
 
@@ -277,7 +305,9 @@ def _parser() -> argparse.ArgumentParser:
         epilog=_EXIT_CODES,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    commands = parser.add_subparsers(dest="command", required=True, metavar="{validate,hash}")
+    commands = parser.add_subparsers(
+        dest="command", required=True, metavar="{validate,hash}"
+    )
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument(
         "--json",
@@ -322,7 +352,10 @@ def _parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     hash_.add_argument(
-        "file", type=Path, metavar="FILE", help=f"the contract file, named *{_FILE_SUFFIX}"
+        "file",
+        type=Path,
+        metavar="FILE",
+        help=f"the contract file, named *{_FILE_SUFFIX}",
     )
     hash_.add_argument(
         "--service",
@@ -354,7 +387,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser exits the process with status 2 through `argparse`, and so does `--help` with 0.
     """
     args = _parser().parse_args(argv)
-    logging.basicConfig(stream=sys.stderr, level=logging.INFO, format="%(levelname)s %(message)s")
+    logging.basicConfig(
+        stream=sys.stderr, level=logging.INFO, format="%(levelname)s %(message)s"
+    )
     _logger.info("%s", _FAMILY)
     try:
         status: int = args.handler(args)
