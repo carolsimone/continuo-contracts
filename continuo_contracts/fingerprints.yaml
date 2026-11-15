@@ -1,9 +1,10 @@
 # The fingerprint field declaration: which fingerprint each input of a node family moves, and the
-# two lists the hashing code applies. docs/fingerprints.md is generated from this file.
+# lists the hashing code applies. docs/fingerprints.md is generated from this file.
 version: 1
 lists:
   hashed_config_denylist: [access, description, docs, freshness, grants, group, meta, tags]
   projection_keys: [schema, table, kind, script, reads, output_columns, extra_columns, config, secret_ref, mode_type, primary_key, assets]
+  contract_hash_exclusions: [apiVersion, kind, status, version]
 families:
   every:
     - id: "upstream_edges"
@@ -596,14 +597,26 @@ families:
       fingerprint: "both"
       parts: ["config"]
       why: "content: its schema part, the projection's `schema`; contract: `id`"
-      inputs: ["projection.schema"]
+      inputs: ["projection.schema", "odcs.id"]
     - id: "table"
       field: "The table, `schema[0].name`, and `name`"
       source: "authored; `name` defaults to the table"
       fingerprint: "both"
       parts: ["config"]
       why: "content: the projection's `table`; contract: `schema[0].name`, `name`"
-      inputs: ["projection.table"]
+      inputs: ["projection.table", "odcs.schema.name", "odcs.name"]
+    - id: "physical_name"
+      field: "`physicalName`"
+      source: "defaulted to the table"
+      fingerprint: "contract"
+      why: "stored and hashed; any other value is refused, so it adds nothing beyond the table"
+      inputs: ["odcs.schema.physicalName"]
+    - id: "table_type"
+      field: "`schema[0].physicalType`"
+      source: "authored, must be `table`"
+      fingerprint: "contract"
+      why: "a constant for a Python node"
+      inputs: ["odcs.schema.physicalType"]
     - id: "script_bytes"
       field: "Script bytes"
       source: "the script file"
@@ -617,7 +630,7 @@ families:
       fingerprint: "both"
       parts: ["config"]
       why: "content: the projection's `script`; contract: `script`"
-      inputs: ["projection.script"]
+      inputs: ["projection.script", "odcs.custom.script"]
     - id: "import_closure"
       field: "In-repo import closure"
       source: "the files the script imports"
@@ -631,76 +644,222 @@ families:
       fingerprint: "both"
       parts: ["config", "shared"]
       why: "content: the list in the projection, the files' bytes in the shared part; contract: `assets`"
-      inputs: ["projection.assets"]
+      inputs: ["projection.assets", "odcs.custom.assets"]
     - id: "read_queries"
       field: "`readQueries`"
       source: "authored"
       fingerprint: "both"
       parts: ["config"]
       why: "content: the projection's `reads`, each query with LF line endings and no outer ASCII whitespace; contract: `readQueries`"
-      inputs: ["projection.reads"]
+      inputs: ["projection.reads", "odcs.custom.readQueries"]
     - id: "columns"
       field: "Columns: name and order"
       source: "`schema[0].properties`"
       fingerprint: "both"
       parts: ["config"]
       why: "content: the projection's `output_columns`; contract: `properties` in file order"
-      inputs: ["projection.output_columns"]
+      inputs: ["projection.output_columns", "odcs.schema.properties.name"]
     - id: "column_type"
       field: "Column `physicalType`"
       source: "authored"
       fingerprint: "both"
       parts: ["config"]
       why: "content: the canonical type, so `INT` and `INTEGER` hash alike; contract: the type as written"
-      inputs: []
+      inputs: ["odcs.schema.properties.physicalType"]
     - id: "column_required"
       field: "Column `required`"
       source: "authored"
       fingerprint: "both"
       parts: ["config"]
       why: "content: `nullable` in the projection; contract: `required`"
-      inputs: []
+      inputs: ["odcs.schema.properties.required"]
+    - id: "column_logical_type"
+      field: "Column `logicalType` and `logicalTypeOptions`"
+      source: "derived from `physicalType`"
+      fingerprint: "contract"
+      why: "stored and hashed; an authored `logicalType` is replaced and an authored `logicalTypeOptions` is refused"
+      inputs: ["odcs.schema.properties.logicalType", "odcs.schema.properties.logicalTypeOptions"]
+    - id: "column_unique"
+      field: "Column `unique`"
+      source: "authored"
+      fingerprint: "contract"
+      why: "descriptive: the runtime creates no constraint"
+      inputs: ["odcs.schema.properties.unique"]
     - id: "primary_key"
       field: "`primaryKey`, `primaryKeyPosition`"
       source: "authored"
       fingerprint: "contract"
       when: {condition: "upsert", fingerprint: "both", parts: ["config"]}
       why: "content: the projection's `primary_key`, `[]` unless `upsert`; contract: the key, descriptive on `replace` and `append`"
-      inputs: ["projection.primary_key"]
+      inputs: ["projection.primary_key", "odcs.schema.properties.primaryKey",
+               "odcs.schema.properties.primaryKeyPosition"]
     - id: "kind"
       field: "`kind`"
       source: "authored, default `python-node`"
       fingerprint: "both"
       parts: ["config"]
       why: "content: the projection's canonical kind; contract: `kind`"
-      inputs: ["projection.kind"]
+      inputs: ["projection.kind", "odcs.custom.kind"]
     - id: "mode_type"
       field: "`modeType`"
       source: "authored, default `replace`"
       fingerprint: "both"
       parts: ["config"]
       why: "content: the projection's `mode_type`; contract: `modeType`"
-      inputs: ["projection.mode_type"]
+      inputs: ["projection.mode_type", "odcs.custom.modeType"]
     - id: "extra_columns"
       field: "`extraColumns`"
       source: "authored, default `raise`"
       fingerprint: "both"
       parts: ["config"]
       why: "content: the projection's `extra_columns`; contract: `extraColumns`"
-      inputs: ["projection.extra_columns"]
+      inputs: ["projection.extra_columns", "odcs.custom.extraColumns"]
     - id: "config"
       field: "`config`"
       source: "authored"
       fingerprint: "both"
       parts: ["config"]
       why: "content: the projection's `config`; contract: `config`"
-      inputs: ["projection.config"]
+      inputs: ["projection.config", "odcs.custom.config"]
     - id: "refused_csv_secret"
       field: "`csvSource`, `secretRef`"
       source: "refused on a `python-node`"
       fingerprint: "neither"
       why: "the projection's `reads` holds the read queries, and its `secret_ref` is `\"\"`"
-      inputs: ["projection.secret_ref"]
+      inputs: ["projection.secret_ref", "odcs.custom.csvSource", "odcs.custom.secretRef"]
+    - id: "team_schedule"
+      field: "`team.name`, `schedule`, `criticality`"
+      source: "authored"
+      fingerprint: "contract"
+      why: "not code, so outside `content_hash`"
+      inputs: ["odcs.team.name", "odcs.custom.schedule", "odcs.custom.criticality"]
+    - id: "descriptions_tags"
+      field: "Descriptions, `tags`"
+      source: "authored"
+      fingerprint: "contract"
+      why: "not code, so outside `content_hash`"
+      inputs: ["odcs.description.purpose", "odcs.schema.description", "odcs.schema.properties.description",
+               "odcs.tags", "odcs.schema.tags", "odcs.schema.properties.tags"]
+    - id: "timeout_minutes"
+      field: "`timeoutMinutes`"
+      source: "authored"
+      fingerprint: "contract"
+      why: "not code, so outside `content_hash`"
+      inputs: ["odcs.custom.timeoutMinutes"]
+    - id: "service"
+      field: "`service`"
+      source: "the release, or authored and equal"
+      fingerprint: "contract"
+      why: "not code, so outside `content_hash`; the stored form always carries it"
+      inputs: ["odcs.custom.service"]
+    - id: "reads"
+      field: "`reads` on the schema object"
+      source: "filled from the tables the read queries name"
+      fingerprint: "contract"
+      why: "the tables the read queries name, which topology-controller lists; never authored"
+      inputs: ["odcs.schema.custom.reads"]
+    - id: "quality_rules"
+      field: "Quality rules"
+      source: "authored"
+      fingerprint: "contract"
+      why: "as written; the `where`, `warnIf`, `errorIf` and `failCalc` of a rule are `continuo` custom properties of the rule"
+      inputs: ["odcs.schema.quality.metric", "odcs.schema.quality.mustBe", "odcs.schema.quality.severity",
+               "odcs.schema.quality.custom.where", "odcs.schema.quality.custom.warnIf",
+               "odcs.schema.quality.custom.errorIf", "odcs.schema.quality.custom.failCalc",
+               "odcs.schema.properties.quality.metric", "odcs.schema.properties.quality.mustBe",
+               "odcs.schema.properties.quality.severity", "odcs.schema.properties.quality.custom.where",
+               "odcs.schema.properties.quality.custom.warnIf",
+               "odcs.schema.properties.quality.custom.errorIf",
+               "odcs.schema.properties.quality.custom.failCalc"]
+    - id: "relationships"
+      field: "`relationships`"
+      source: "authored"
+      fingerprint: "contract"
+      why: "as written"
+      inputs: ["odcs.schema.relationships.from", "odcs.schema.relationships.to",
+               "odcs.schema.properties.relationships.to"]
+    - id: "classification"
+      field: "`classification`"
+      source: "authored"
+      fingerprint: "contract"
+      why: "as written"
+      inputs: ["odcs.schema.properties.classification"]
+    - id: "roles"
+      field: "`roles`"
+      source: "authored"
+      fingerprint: "contract"
+      why: "as written"
+      inputs: ["odcs.roles.role", "odcs.roles.access", "odcs.roles.description"]
+    - id: "service_levels"
+      field: "`slaProperties`, `support`, `price`"
+      source: "authored"
+      fingerprint: "contract"
+      why: "hashed as written"
+      inputs: ["odcs.slaProperties.property", "odcs.slaProperties.value", "odcs.slaProperties.unit",
+               "odcs.slaProperties.description", "odcs.support.channel", "odcs.support.tool",
+               "odcs.support.url", "odcs.support.description", "odcs.price.priceAmount",
+               "odcs.price.priceCurrency", "odcs.price.priceUnit"]
+    - id: "other_vendors"
+      field: "Other vendors' custom properties"
+      source: "authored"
+      fingerprint: "contract"
+      why: "hashed as written"
+      inputs: ["odcs.customProperties", "odcs.schema.customProperties",
+               "odcs.schema.properties.customProperties"]
+    - id: "standard_field"
+      field: "Every other standard ODCS field the author writes: `description.usage` and `.limitations`, `domain`, `context`, `slaDefaultElement`, `authoritativeDefinitions`, a schema object's or column's `businessName`, `synonyms` or `deprecated`, and a column's `examples`, `enum`, `criticalDataElement` or `transformLogic`"
+      source: "authored"
+      fingerprint: "contract"
+      rule: "standard_field"
+      why: "hashed as written; every standard field that no entry names is classified by this rule"
+      inputs: ["odcs.*"]
+    - id: "refused_continuo_properties"
+      field: "The `continuo` properties that a Python node does not carry: `filePath`, `materialization`, `contractEnforced`, `access`, `group`, `deprecationDate`, `freshnessBuildAfter`, `snapshot`, `quoteColumns`, `provenance` and an authored `reads`"
+      source: "authored"
+      fingerprint: "neither"
+      why: "refused: the first nine describe how dbt builds or governs a node and nothing reads them on a Python node, `provenance` belongs to the published file and is never stored, and `reads` is filled from the read queries"
+      inputs: ["odcs.custom.filePath", "odcs.custom.materialization", "odcs.custom.contractEnforced",
+               "odcs.custom.access", "odcs.custom.group", "odcs.custom.deprecationDate",
+               "odcs.custom.freshnessBuildAfter", "odcs.custom.snapshot", "odcs.custom.quoteColumns",
+               "odcs.custom.provenance", "odcs.custom.reads"]
+    - id: "refused_root_fields"
+      field: "`servers`, `tenant`, `contractCreatedTs`"
+      source: "authored"
+      fingerprint: "neither"
+      why: "refused: the install decides where the table lives and which tenant owns it, and a clock value is no part of a contract"
+      inputs: ["odcs.servers", "odcs.tenant", "odcs.contractCreatedTs"]
+    - id: "refused_column_fields"
+      field: "A column's nested `properties`, `items` and `map`, `partitioned: true` and a `partitionKeyPosition` other than -1"
+      source: "authored"
+      fingerprint: "neither"
+      why: "refused: the column of a Python node has a name, a type and a nullability, and its table is not partitioned"
+      inputs: ["odcs.schema.properties.properties", "odcs.schema.properties.items",
+               "odcs.schema.properties.map", "odcs.schema.properties.partitioned",
+               "odcs.schema.properties.partitionKeyPosition"]
+    - id: "column_physical_name"
+      field: "A column's `physicalName`"
+      source: "authored"
+      fingerprint: "neither"
+      why: "left out of the stored form when it equals the column's `name`, and refused when it differs"
+      inputs: ["odcs.schema.properties.physicalName"]
+    - id: "labels"
+      field: "`version`, `status` as authored"
+      source: "authored"
+      fingerprint: "neither"
+      why: "ignored: the stored form always holds `version: \"0\"` and `status: active`, and `contract_hash` leaves both out"
+      inputs: ["odcs.version", "odcs.status"]
+    - id: "format_constants"
+      field: "`apiVersion` and the ODCS `kind`"
+      source: "`v3.2.0` and `DataContract`"
+      fingerprint: "neither"
+      why: "format constants, the same in every stored form, which `contract_hash` leaves out"
+      inputs: ["odcs.apiVersion", "odcs.kind"]
+    - id: "file_layout"
+      field: "The contract file's path and layout: comments, key order, quoting"
+      source: "the `.odcs.yaml` file"
+      fingerprint: "neither"
+      why: "the path is provenance, and the canonical form reads values, not text"
+      inputs: []
   python-csv:
     - id: "identity"
       field: "`id`, the table and `name`"
@@ -708,14 +867,26 @@ families:
       fingerprint: "both"
       parts: ["config"]
       why: "as for a `python-node`"
-      inputs: ["projection.schema", "projection.table"]
+      inputs: ["projection.schema", "projection.table", "odcs.id", "odcs.schema.name", "odcs.name"]
+    - id: "physical_name"
+      field: "`physicalName`"
+      source: "defaulted to the table"
+      fingerprint: "contract"
+      why: "as for a `python-node`"
+      inputs: ["odcs.schema.physicalName"]
+    - id: "table_type"
+      field: "`schema[0].physicalType`"
+      source: "authored, must be `table`"
+      fingerprint: "contract"
+      why: "as for a `python-node`"
+      inputs: ["odcs.schema.physicalType"]
     - id: "csv_uri"
       field: "CSV URI"
       source: "authored `csvSource`"
       fingerprint: "both"
       parts: ["source", "config"]
       why: "content: the source part, `sha256(uri)` computed by the producer's CI, and the projection's `reads.csv`; contract: `csvSource`"
-      inputs: ["projection.reads", "ci.source_hash"]
+      inputs: ["projection.reads", "ci.source_hash", "odcs.custom.csvSource"]
     - id: "csv_content"
       field: "The CSV's content at the URI"
       source: "the object"
@@ -727,41 +898,191 @@ families:
       source: "refused on a csv node"
       fingerprint: "neither"
       why: "the projection holds `script: \"\"`, `reads: {csv: <uri>}`, `secret_ref: \"\"` and `assets: []`, and the shared part is empty"
-      inputs: ["projection.script", "projection.secret_ref", "projection.assets", "ci.shared_code_hash"]
+      inputs: ["projection.script", "projection.secret_ref", "projection.assets", "ci.shared_code_hash",
+               "odcs.custom.script", "odcs.custom.readQueries", "odcs.custom.secretRef",
+               "odcs.custom.assets"]
     - id: "columns"
       field: "Columns, each column's `physicalType` and `required`"
       source: "authored"
       fingerprint: "both"
       parts: ["config"]
       why: "as for a `python-node`"
-      inputs: ["projection.output_columns"]
+      inputs: ["projection.output_columns", "odcs.schema.properties.name",
+               "odcs.schema.properties.physicalType", "odcs.schema.properties.required"]
+    - id: "column_logical_type"
+      field: "Column `logicalType` and `logicalTypeOptions`"
+      source: "derived from `physicalType`"
+      fingerprint: "contract"
+      why: "as for a `python-node`"
+      inputs: ["odcs.schema.properties.logicalType", "odcs.schema.properties.logicalTypeOptions"]
+    - id: "column_unique"
+      field: "Column `unique`"
+      source: "authored"
+      fingerprint: "contract"
+      why: "as for a `python-node`"
+      inputs: ["odcs.schema.properties.unique"]
     - id: "primary_key"
       field: "`primaryKey`, `primaryKeyPosition`"
       source: "authored"
       fingerprint: "contract"
       why: "descriptive: a csv node is `replace` only, so the projection's `primary_key` is `[]`"
-      inputs: ["projection.primary_key"]
+      inputs: ["projection.primary_key", "odcs.schema.properties.primaryKey",
+               "odcs.schema.properties.primaryKeyPosition"]
     - id: "kind"
       field: "`kind`"
       source: "authored, `python-csv`"
       fingerprint: "both"
       parts: ["config"]
       why: "as for a `python-node`"
-      inputs: ["projection.kind"]
+      inputs: ["projection.kind", "odcs.custom.kind"]
     - id: "mode_type"
       field: "`modeType`"
       source: "`replace` only, the default"
       fingerprint: "both"
       parts: ["config"]
       why: "the projection's `mode_type` is always `replace`"
-      inputs: ["projection.mode_type"]
+      inputs: ["projection.mode_type", "odcs.custom.modeType"]
     - id: "extra_columns_config"
       field: "`extraColumns`, `config`"
       source: "authored"
       fingerprint: "both"
       parts: ["config"]
       why: "as for a `python-node`"
-      inputs: ["projection.extra_columns", "projection.config"]
+      inputs: ["projection.extra_columns", "projection.config", "odcs.custom.extraColumns",
+               "odcs.custom.config"]
+    - id: "team_schedule"
+      field: "`team.name`, `schedule`, `criticality`"
+      source: "authored"
+      fingerprint: "contract"
+      why: "as for a `python-node`"
+      inputs: ["odcs.team.name", "odcs.custom.schedule", "odcs.custom.criticality"]
+    - id: "descriptions_tags"
+      field: "Descriptions, `tags`"
+      source: "authored"
+      fingerprint: "contract"
+      why: "as for a `python-node`"
+      inputs: ["odcs.description.purpose", "odcs.schema.description", "odcs.schema.properties.description",
+               "odcs.tags", "odcs.schema.tags", "odcs.schema.properties.tags"]
+    - id: "timeout_minutes"
+      field: "`timeoutMinutes`"
+      source: "authored"
+      fingerprint: "contract"
+      why: "as for a `python-node`"
+      inputs: ["odcs.custom.timeoutMinutes"]
+    - id: "service"
+      field: "`service`"
+      source: "the release, or authored and equal"
+      fingerprint: "contract"
+      why: "as for a `python-node`"
+      inputs: ["odcs.custom.service"]
+    - id: "reads"
+      field: "`reads` on the schema object"
+      source: "filled from the tables the read queries name"
+      fingerprint: "contract"
+      why: "as for a `python-node`; this kind has no read queries, so it lists no table"
+      inputs: ["odcs.schema.custom.reads"]
+    - id: "quality_rules"
+      field: "Quality rules"
+      source: "authored"
+      fingerprint: "contract"
+      why: "as for a `python-node`"
+      inputs: ["odcs.schema.quality.metric", "odcs.schema.quality.mustBe", "odcs.schema.quality.severity",
+               "odcs.schema.quality.custom.where", "odcs.schema.quality.custom.warnIf",
+               "odcs.schema.quality.custom.errorIf", "odcs.schema.quality.custom.failCalc",
+               "odcs.schema.properties.quality.metric", "odcs.schema.properties.quality.mustBe",
+               "odcs.schema.properties.quality.severity", "odcs.schema.properties.quality.custom.where",
+               "odcs.schema.properties.quality.custom.warnIf",
+               "odcs.schema.properties.quality.custom.errorIf",
+               "odcs.schema.properties.quality.custom.failCalc"]
+    - id: "relationships"
+      field: "`relationships`"
+      source: "authored"
+      fingerprint: "contract"
+      why: "as for a `python-node`"
+      inputs: ["odcs.schema.relationships.from", "odcs.schema.relationships.to",
+               "odcs.schema.properties.relationships.to"]
+    - id: "classification"
+      field: "`classification`"
+      source: "authored"
+      fingerprint: "contract"
+      why: "as for a `python-node`"
+      inputs: ["odcs.schema.properties.classification"]
+    - id: "roles"
+      field: "`roles`"
+      source: "authored"
+      fingerprint: "contract"
+      why: "as for a `python-node`"
+      inputs: ["odcs.roles.role", "odcs.roles.access", "odcs.roles.description"]
+    - id: "service_levels"
+      field: "`slaProperties`, `support`, `price`"
+      source: "authored"
+      fingerprint: "contract"
+      why: "as for a `python-node`"
+      inputs: ["odcs.slaProperties.property", "odcs.slaProperties.value", "odcs.slaProperties.unit",
+               "odcs.slaProperties.description", "odcs.support.channel", "odcs.support.tool",
+               "odcs.support.url", "odcs.support.description", "odcs.price.priceAmount",
+               "odcs.price.priceCurrency", "odcs.price.priceUnit"]
+    - id: "other_vendors"
+      field: "Other vendors' custom properties"
+      source: "authored"
+      fingerprint: "contract"
+      why: "as for a `python-node`"
+      inputs: ["odcs.customProperties", "odcs.schema.customProperties",
+               "odcs.schema.properties.customProperties"]
+    - id: "standard_field"
+      field: "Every other standard ODCS field the author writes: `description.usage` and `.limitations`, `domain`, `context`, `slaDefaultElement`, `authoritativeDefinitions`, a schema object's or column's `businessName`, `synonyms` or `deprecated`, and a column's `examples`, `enum`, `criticalDataElement` or `transformLogic`"
+      source: "authored"
+      fingerprint: "contract"
+      rule: "standard_field"
+      why: "hashed as written; every standard field that no entry names is classified by this rule"
+      inputs: ["odcs.*"]
+    - id: "refused_continuo_properties"
+      field: "The `continuo` properties that a Python node does not carry: `filePath`, `materialization`, `contractEnforced`, `access`, `group`, `deprecationDate`, `freshnessBuildAfter`, `snapshot`, `quoteColumns`, `provenance` and an authored `reads`"
+      source: "authored"
+      fingerprint: "neither"
+      why: "as for a `python-node`"
+      inputs: ["odcs.custom.filePath", "odcs.custom.materialization", "odcs.custom.contractEnforced",
+               "odcs.custom.access", "odcs.custom.group", "odcs.custom.deprecationDate",
+               "odcs.custom.freshnessBuildAfter", "odcs.custom.snapshot", "odcs.custom.quoteColumns",
+               "odcs.custom.provenance", "odcs.custom.reads"]
+    - id: "refused_root_fields"
+      field: "`servers`, `tenant`, `contractCreatedTs`"
+      source: "authored"
+      fingerprint: "neither"
+      why: "as for a `python-node`"
+      inputs: ["odcs.servers", "odcs.tenant", "odcs.contractCreatedTs"]
+    - id: "refused_column_fields"
+      field: "A column's nested `properties`, `items` and `map`, `partitioned: true` and a `partitionKeyPosition` other than -1"
+      source: "authored"
+      fingerprint: "neither"
+      why: "as for a `python-node`"
+      inputs: ["odcs.schema.properties.properties", "odcs.schema.properties.items",
+               "odcs.schema.properties.map", "odcs.schema.properties.partitioned",
+               "odcs.schema.properties.partitionKeyPosition"]
+    - id: "column_physical_name"
+      field: "A column's `physicalName`"
+      source: "authored"
+      fingerprint: "neither"
+      why: "as for a `python-node`"
+      inputs: ["odcs.schema.properties.physicalName"]
+    - id: "labels"
+      field: "`version`, `status` as authored"
+      source: "authored"
+      fingerprint: "neither"
+      why: "as for a `python-node`"
+      inputs: ["odcs.version", "odcs.status"]
+    - id: "format_constants"
+      field: "`apiVersion` and the ODCS `kind`"
+      source: "`v3.2.0` and `DataContract`"
+      fingerprint: "neither"
+      why: "as for a `python-node`"
+      inputs: ["odcs.apiVersion", "odcs.kind"]
+    - id: "file_layout"
+      field: "The contract file's path and layout: comments, key order, quoting"
+      source: "the `.odcs.yaml` file"
+      fingerprint: "neither"
+      why: "as for a `python-node`"
+      inputs: []
   python-api:
     - id: "identity"
       field: "`id`, the table and `name`"
@@ -769,7 +1090,19 @@ families:
       fingerprint: "both"
       parts: ["config"]
       why: "as for a `python-node`"
-      inputs: ["projection.schema", "projection.table"]
+      inputs: ["projection.schema", "projection.table", "odcs.id", "odcs.schema.name", "odcs.name"]
+    - id: "physical_name"
+      field: "`physicalName`"
+      source: "defaulted to the table"
+      fingerprint: "contract"
+      why: "as for a `python-node`"
+      inputs: ["odcs.schema.physicalName"]
+    - id: "table_type"
+      field: "`schema[0].physicalType`"
+      source: "authored, must be `table`"
+      fingerprint: "contract"
+      why: "as for a `python-node`"
+      inputs: ["odcs.schema.physicalType"]
     - id: "repo_inputs"
       field: "Script bytes, the in-repo import closure, the asset files' bytes"
       source: "the repository"
@@ -783,20 +1116,20 @@ families:
       fingerprint: "both"
       parts: ["config"]
       why: "as for a `python-node`"
-      inputs: ["projection.script", "projection.assets"]
+      inputs: ["projection.script", "projection.assets", "odcs.custom.script", "odcs.custom.assets"]
     - id: "refused_reads"
       field: "`readQueries`, `csvSource`"
       source: "refused on an api node"
       fingerprint: "neither"
       why: "the projection's `reads` is `{}`"
-      inputs: ["projection.reads"]
+      inputs: ["projection.reads", "odcs.custom.readQueries", "odcs.custom.csvSource"]
     - id: "secret_ref"
       field: "`secretRef`"
       source: "authored, optional"
       fingerprint: "both"
       parts: ["config"]
       why: "content: the projection's `secret_ref`, `\"\"` when none; contract: `secretRef`"
-      inputs: ["projection.secret_ref"]
+      inputs: ["projection.secret_ref", "odcs.custom.secretRef"]
     - id: "secret_values"
       field: "The Secret's values"
       source: "the cluster"
@@ -815,18 +1148,166 @@ families:
       fingerprint: "both"
       parts: ["config"]
       why: "as for a `python-node`"
-      inputs: ["projection.output_columns"]
+      inputs: ["projection.output_columns", "odcs.schema.properties.name",
+               "odcs.schema.properties.physicalType", "odcs.schema.properties.required"]
+    - id: "column_logical_type"
+      field: "Column `logicalType` and `logicalTypeOptions`"
+      source: "derived from `physicalType`"
+      fingerprint: "contract"
+      why: "as for a `python-node`"
+      inputs: ["odcs.schema.properties.logicalType", "odcs.schema.properties.logicalTypeOptions"]
+    - id: "column_unique"
+      field: "Column `unique`"
+      source: "authored"
+      fingerprint: "contract"
+      why: "as for a `python-node`"
+      inputs: ["odcs.schema.properties.unique"]
     - id: "primary_key"
       field: "`primaryKey`, `primaryKeyPosition`"
       source: "authored"
       fingerprint: "contract"
       when: {condition: "upsert", fingerprint: "both", parts: ["config"]}
       why: "as for a `python-node`"
-      inputs: ["projection.primary_key"]
+      inputs: ["projection.primary_key", "odcs.schema.properties.primaryKey",
+               "odcs.schema.properties.primaryKeyPosition"]
     - id: "run_settings"
       field: "`kind` (`python-api`), `modeType`, `extraColumns`, `config`"
       source: "authored or defaulted"
       fingerprint: "both"
       parts: ["config"]
       why: "as for a `python-node`"
-      inputs: ["projection.kind", "projection.mode_type", "projection.extra_columns", "projection.config"]
+      inputs: ["projection.kind", "projection.mode_type", "projection.extra_columns", "projection.config",
+               "odcs.custom.kind", "odcs.custom.modeType", "odcs.custom.extraColumns", "odcs.custom.config"]
+    - id: "team_schedule"
+      field: "`team.name`, `schedule`, `criticality`"
+      source: "authored"
+      fingerprint: "contract"
+      why: "as for a `python-node`"
+      inputs: ["odcs.team.name", "odcs.custom.schedule", "odcs.custom.criticality"]
+    - id: "descriptions_tags"
+      field: "Descriptions, `tags`"
+      source: "authored"
+      fingerprint: "contract"
+      why: "as for a `python-node`"
+      inputs: ["odcs.description.purpose", "odcs.schema.description", "odcs.schema.properties.description",
+               "odcs.tags", "odcs.schema.tags", "odcs.schema.properties.tags"]
+    - id: "timeout_minutes"
+      field: "`timeoutMinutes`"
+      source: "authored"
+      fingerprint: "contract"
+      why: "as for a `python-node`"
+      inputs: ["odcs.custom.timeoutMinutes"]
+    - id: "service"
+      field: "`service`"
+      source: "the release, or authored and equal"
+      fingerprint: "contract"
+      why: "as for a `python-node`"
+      inputs: ["odcs.custom.service"]
+    - id: "reads"
+      field: "`reads` on the schema object"
+      source: "filled from the tables the read queries name"
+      fingerprint: "contract"
+      why: "as for a `python-node`; this kind has no read queries, so it lists no table"
+      inputs: ["odcs.schema.custom.reads"]
+    - id: "quality_rules"
+      field: "Quality rules"
+      source: "authored"
+      fingerprint: "contract"
+      why: "as for a `python-node`"
+      inputs: ["odcs.schema.quality.metric", "odcs.schema.quality.mustBe", "odcs.schema.quality.severity",
+               "odcs.schema.quality.custom.where", "odcs.schema.quality.custom.warnIf",
+               "odcs.schema.quality.custom.errorIf", "odcs.schema.quality.custom.failCalc",
+               "odcs.schema.properties.quality.metric", "odcs.schema.properties.quality.mustBe",
+               "odcs.schema.properties.quality.severity", "odcs.schema.properties.quality.custom.where",
+               "odcs.schema.properties.quality.custom.warnIf",
+               "odcs.schema.properties.quality.custom.errorIf",
+               "odcs.schema.properties.quality.custom.failCalc"]
+    - id: "relationships"
+      field: "`relationships`"
+      source: "authored"
+      fingerprint: "contract"
+      why: "as for a `python-node`"
+      inputs: ["odcs.schema.relationships.from", "odcs.schema.relationships.to",
+               "odcs.schema.properties.relationships.to"]
+    - id: "classification"
+      field: "`classification`"
+      source: "authored"
+      fingerprint: "contract"
+      why: "as for a `python-node`"
+      inputs: ["odcs.schema.properties.classification"]
+    - id: "roles"
+      field: "`roles`"
+      source: "authored"
+      fingerprint: "contract"
+      why: "as for a `python-node`"
+      inputs: ["odcs.roles.role", "odcs.roles.access", "odcs.roles.description"]
+    - id: "service_levels"
+      field: "`slaProperties`, `support`, `price`"
+      source: "authored"
+      fingerprint: "contract"
+      why: "as for a `python-node`"
+      inputs: ["odcs.slaProperties.property", "odcs.slaProperties.value", "odcs.slaProperties.unit",
+               "odcs.slaProperties.description", "odcs.support.channel", "odcs.support.tool",
+               "odcs.support.url", "odcs.support.description", "odcs.price.priceAmount",
+               "odcs.price.priceCurrency", "odcs.price.priceUnit"]
+    - id: "other_vendors"
+      field: "Other vendors' custom properties"
+      source: "authored"
+      fingerprint: "contract"
+      why: "as for a `python-node`"
+      inputs: ["odcs.customProperties", "odcs.schema.customProperties",
+               "odcs.schema.properties.customProperties"]
+    - id: "standard_field"
+      field: "Every other standard ODCS field the author writes: `description.usage` and `.limitations`, `domain`, `context`, `slaDefaultElement`, `authoritativeDefinitions`, a schema object's or column's `businessName`, `synonyms` or `deprecated`, and a column's `examples`, `enum`, `criticalDataElement` or `transformLogic`"
+      source: "authored"
+      fingerprint: "contract"
+      rule: "standard_field"
+      why: "hashed as written; every standard field that no entry names is classified by this rule"
+      inputs: ["odcs.*"]
+    - id: "refused_continuo_properties"
+      field: "The `continuo` properties that a Python node does not carry: `filePath`, `materialization`, `contractEnforced`, `access`, `group`, `deprecationDate`, `freshnessBuildAfter`, `snapshot`, `quoteColumns`, `provenance` and an authored `reads`"
+      source: "authored"
+      fingerprint: "neither"
+      why: "as for a `python-node`"
+      inputs: ["odcs.custom.filePath", "odcs.custom.materialization", "odcs.custom.contractEnforced",
+               "odcs.custom.access", "odcs.custom.group", "odcs.custom.deprecationDate",
+               "odcs.custom.freshnessBuildAfter", "odcs.custom.snapshot", "odcs.custom.quoteColumns",
+               "odcs.custom.provenance", "odcs.custom.reads"]
+    - id: "refused_root_fields"
+      field: "`servers`, `tenant`, `contractCreatedTs`"
+      source: "authored"
+      fingerprint: "neither"
+      why: "as for a `python-node`"
+      inputs: ["odcs.servers", "odcs.tenant", "odcs.contractCreatedTs"]
+    - id: "refused_column_fields"
+      field: "A column's nested `properties`, `items` and `map`, `partitioned: true` and a `partitionKeyPosition` other than -1"
+      source: "authored"
+      fingerprint: "neither"
+      why: "as for a `python-node`"
+      inputs: ["odcs.schema.properties.properties", "odcs.schema.properties.items",
+               "odcs.schema.properties.map", "odcs.schema.properties.partitioned",
+               "odcs.schema.properties.partitionKeyPosition"]
+    - id: "column_physical_name"
+      field: "A column's `physicalName`"
+      source: "authored"
+      fingerprint: "neither"
+      why: "as for a `python-node`"
+      inputs: ["odcs.schema.properties.physicalName"]
+    - id: "labels"
+      field: "`version`, `status` as authored"
+      source: "authored"
+      fingerprint: "neither"
+      why: "as for a `python-node`"
+      inputs: ["odcs.version", "odcs.status"]
+    - id: "format_constants"
+      field: "`apiVersion` and the ODCS `kind`"
+      source: "`v3.2.0` and `DataContract`"
+      fingerprint: "neither"
+      why: "as for a `python-node`"
+      inputs: ["odcs.apiVersion", "odcs.kind"]
+    - id: "file_layout"
+      field: "The contract file's path and layout: comments, key order, quoting"
+      source: "the `.odcs.yaml` file"
+      fingerprint: "neither"
+      why: "as for a `python-node`"
+      inputs: []

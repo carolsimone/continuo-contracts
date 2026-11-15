@@ -5,6 +5,8 @@ topology service and the guards that check them agree on it. It holds `version: 
 
 - `lists.hashed_config_denylist`: the dbt `config` keys that stay out of the hashed config.
 - `lists.projection_keys`: the keys of the Python code projection, in projection order.
+- `lists.contract_hash_exclusions`: the root keys of a Python contract's stored form that
+  `contract_hash` leaves out.
 - `families`: one list of entries for each of the eight sections, `every` (what every family
   shares) and the seven node families in `FAMILIES`.
 
@@ -22,9 +24,19 @@ An entry classifies the `inputs` it names:
   holds (`enforced`, `upsert` or `sql_reads`): a `contract` entry widens to `both`, a `neither`
   entry to `content`.
 - `inputs`: the input names the entry classifies, unique across the section.
-- `rule`: `outside_denylist` marks the one entry of a dbt family that classifies every `config`
-  key outside `lists.hashed_config_denylist`. It has `inputs: ["config.*"]`, `fingerprint:
-  content` and `parts: [config]`.
+- `rule`: marks the one entry of a family that classifies every input no entry names:
+  `outside_denylist` in a dbt family, for every `config` key outside
+  `lists.hashed_config_denylist` (`inputs: ["config.*"]`, `fingerprint: content`, `parts:
+  [config]`), and `standard_field` in a Python family, for every standard ODCS field of the stored
+  form (`inputs: ["odcs.*"]`, `fingerprint: contract`, no `when`).
+
+An input name is `config.<key>` for a dbt config key, `projection.<key>` for a key of the Python
+code projection, one of `FIXED_INPUT_NAMES`, or `odcs.<path>` for a field of a Python contract's
+stored form: `odcs` and then the ODCS names of the path as written (camelCase allowed), with the
+array indexes dropped, such as `odcs.team.name` and `odcs.schema.properties.logicalType`. A
+`continuo` custom property is `odcs.custom.<property>` on the contract and
+`odcs.schema.custom.<property>` on the schema object, and `classify` leaves such a path to its
+entries: the `standard_field` rule never claims one.
 
 `parse_fingerprints` refuses a file that is not in this form with a `FingerprintsFileError` that
 names the location. A mapping that writes a key twice is refused too, naming the key and its line,
@@ -59,8 +71,9 @@ PYTHON_FAMILIES = FAMILIES[4:]
 EVERY = "every"
 SECTIONS = (EVERY, *FAMILIES)
 # The input names an entry may list that are written out in full. The rest of the closed
-# vocabulary is the pattern `config.<key>` (and `config.*`) for a dbt config key and
-# `projection.<key>` for a key of the Python code projection.
+# vocabulary is the pattern `config.<key>` (and `config.*`) for a dbt config key,
+# `projection.<key>` for a key of the Python code projection and `odcs.<path>` (and `odcs.*`) for a
+# field of a Python contract's stored form.
 FIXED_INPUT_NAMES = (
     "raw_code",
     "compiled_code",
@@ -87,12 +100,33 @@ _FINGERPRINTS = ("content", "contract", "both", "neither")
 _PARTS = ("source", "shared", "config", "compiled", "identity")
 _CONDITIONS = ("enforced", "upsert", "sql_reads")
 _WIDENS_TO = {"contract": "both", "neither": "content"}
-_RULE = "outside_denylist"
-_CONFIG_RULE_INPUT = "config.*"
+_OUTSIDE_DENYLIST = "outside_denylist"
+_STANDARD_FIELD = "standard_field"
+# The segment that marks a `continuo` custom property in an `odcs.<path>` name.
+_CUSTOM_SEGMENT = "custom"
 
 _ID = re.compile(r"[a-z][a-z0-9_]*")
 _INPUT = re.compile(r"[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*")
+_ODCS_INPUT = re.compile(r"odcs(\.([A-Za-z][A-Za-z0-9]*|\*))+")
 _KEY_NAME = re.compile(r"[^\s.]+")
+
+
+@dataclass(frozen=True)
+class _Rule:
+    """What an entry with a `rule` looks like: where it may sit, the fingerprint and parts it has
+    and the one input it names, which stands for every input that no entry names."""
+
+    families: tuple[str, ...]
+    where: str
+    fingerprint: str
+    parts: tuple[str, ...]
+    name: str
+
+
+_RULES = {
+    _OUTSIDE_DENYLIST: _Rule(DBT_FAMILIES, "a dbt family", "content", ("config",), "config.*"),
+    _STANDARD_FIELD: _Rule(PYTHON_FAMILIES, "a Python family", "contract", (), "odcs.*"),
+}
 
 
 @dataclass(frozen=True)
@@ -131,6 +165,7 @@ class Fingerprints:
     version: int
     hashed_config_denylist: frozenset[str]
     projection_keys: tuple[str, ...]
+    contract_hash_exclusions: frozenset[str]
     sections: Mapping[str, tuple[Entry, ...]]
 
     def entries(self, section: str) -> tuple[Entry, ...]:
@@ -144,7 +179,10 @@ class Fingerprints:
 
         The entries of the family come before those of `every`. In a dbt family a `config.<key>`
         that no entry names, and whose key is not in the denylist, belongs to the family's rule
-        entry. Raises `ValueError` when `family` is not one of `FAMILIES`.
+        entry. In a Python family an `odcs.<path>` that no entry names belongs to the family's
+        rule entry unless it is a `continuo` custom property (a path with a `custom` segment),
+        which only an entry can classify. Raises `ValueError` when `family` is not one of
+        `FAMILIES`.
         """
         if family not in FAMILIES:
             raise ValueError(f"unknown family {family!r}")
@@ -155,8 +193,17 @@ class Fingerprints:
         if family in DBT_FAMILIES and name.startswith("config."):
             key = name.split(".")[1]
             if key and key not in self.hashed_config_denylist:
-                return next((e for e in self.sections[family] if e.rule == _RULE), None)
+                return self._rule_entry(family, _OUTSIDE_DENYLIST)
+        if (
+            family in PYTHON_FAMILIES
+            and name.startswith("odcs.")
+            and _CUSTOM_SEGMENT not in name.split(".")
+        ):
+            return self._rule_entry(family, _STANDARD_FIELD)
         return None
+
+    def _rule_entry(self, family: str, rule: str) -> Entry | None:
+        return next((e for e in self.sections[family] if e.rule == rule), None)
 
     def unclassified(self, family: str, names: Iterable[str]) -> list[str]:
         """Return the distinct `names` that no entry classifies, sorted.
@@ -261,15 +308,21 @@ def parse_fingerprints(text: str) -> Fingerprints:
     version = root["version"]
     if type(version) is not int or version != _VERSION:
         raise _fail("version", f"must be the integer {_VERSION}, got {version!r}")
-    lists = _mapping(root["lists"], "lists", ("hashed_config_denylist", "projection_keys"))
+    lists = _mapping(
+        root["lists"],
+        "lists",
+        ("hashed_config_denylist", "projection_keys", "contract_hash_exclusions"),
+    )
     denylist = _key_names(lists["hashed_config_denylist"], "lists.hashed_config_denylist")
     projection = _key_names(lists["projection_keys"], "lists.projection_keys")
+    exclusions = _key_names(lists["contract_hash_exclusions"], "lists.contract_hash_exclusions")
     families = _mapping(root["families"], "families", SECTIONS)
     sections = {section: _section(section, families[section]) for section in SECTIONS}
     return Fingerprints(
         version=_VERSION,
         hashed_config_denylist=frozenset(denylist),
         projection_keys=projection,
+        contract_hash_exclusions=frozenset(exclusions),
         sections=MappingProxyType(sections),
     )
 
@@ -289,6 +342,11 @@ def hashed_config_denylist() -> frozenset[str]:
 def projection_keys() -> tuple[str, ...]:
     """Return the keys of the Python code projection, in projection order."""
     return load().projection_keys
+
+
+def contract_hash_exclusions() -> frozenset[str]:
+    """Return the root keys of a Python contract's stored form that `contract_hash` leaves out."""
+    return load().contract_hash_exclusions
 
 
 def classify(family: str, name: str) -> Entry | None:
@@ -353,6 +411,13 @@ _NAME_MEANING = (
     "digest of the node's script bytes, computed by the producer's CI, and for a CSV node the "
     "digest of its URI), `ci.shared_code_hash` (the shared part for the in-repo files the "
     "script imports or lists as assets, folded path by path by `shared_hash`).",
+    "- Python contract: `odcs.<path>` for a field of the contract's stored form, written with "
+    "its ODCS names as they are in the file and without array indexes, such as `odcs.team.name` "
+    "or `odcs.schema.properties.logicalType`. A continuo custom property is "
+    "`odcs.custom.<property>` on the contract (`odcs.custom.timeoutMinutes`) and "
+    "`odcs.schema.custom.<property>` on the schema object (`odcs.schema.custom.reads`). "
+    "`odcs.*` covers every standard ODCS field that no entry names, which a Python family "
+    "classifies as contract, and no continuo custom property.",
 )
 _TERMS_MEANING = (
     "## Terms",
@@ -379,6 +444,7 @@ def render_markdown(fp: Fingerprints) -> str:
     """Return the Markdown of `docs/fingerprints.md` for `fp`, ending with one newline."""
     denylist = ", ".join(f"`{key}`" for key in sorted(fp.hashed_config_denylist))
     projection = ", ".join(f"`{key}`" for key in fp.projection_keys)
+    exclusions = ", ".join(f"`{key}`" for key in sorted(fp.contract_hash_exclusions))
     lines = [
         "# Fingerprint field reference",
         "",
@@ -397,6 +463,8 @@ def render_markdown(fp: Fingerprints) -> str:
         f"{denylist}.",
         f"- `projection_keys`: the keys of the Python code projection, in projection order: "
         f"{projection}.",
+        f"- `contract_hash_exclusions`: the root keys of the stored form that `contract_hash` "
+        f"leaves out: {exclusions}.",
         "",
     ]
     for section in SECTIONS:
@@ -516,7 +584,7 @@ def _entry(section: str, where: str, item: object) -> Entry:
     rule = data.get("rule")
     if "rule" in data:
         _check_rule(section, data, fingerprint, parts, where)
-    inputs = _inputs(data["inputs"], rule is not None, where)
+    inputs = _inputs(data["inputs"], rule, where)
     return Entry(
         family=section,
         id=entry_id,
@@ -578,34 +646,52 @@ def _check_rule(
     parts: tuple[str, ...],
     where: str,
 ) -> None:
-    if data["rule"] != _RULE:
-        raise _fail(where, f"rule: {data['rule']!r} is not {_RULE!r}")
-    if section not in DBT_FAMILIES:
-        raise _fail(where, f"rule: {_RULE} is only for a dbt family, not for {section!r}")
-    if fingerprint != "content" or parts != ("config",):
-        raise _fail(where, f"rule: a {_RULE} entry has fingerprint 'content' and parts ['config']")
-    if data["inputs"] != [_CONFIG_RULE_INPUT]:
-        raise _fail(where, f"rule: a {_RULE} entry has inputs ['{_CONFIG_RULE_INPUT}']")
+    rule = data["rule"]
+    spec = _RULES.get(rule) if isinstance(rule, str) else None
+    if spec is None:
+        raise _fail(where, f"rule: {rule!r} is not one of {', '.join(_RULES)}")
+    if section not in spec.families:
+        raise _fail(where, f"rule: {rule} is only for {spec.where}, not for {section!r}")
+    if fingerprint != spec.fingerprint or parts != spec.parts:
+        shape = f"fingerprint {spec.fingerprint!r}"
+        if spec.parts:
+            shape += f" and parts {list(spec.parts)}"
+        raise _fail(where, f"rule: a {rule} entry has {shape}")
+    if "when" in data:
+        raise _fail(where, f"rule: a {rule} entry has no `when`")
+    if data["inputs"] != [spec.name]:
+        raise _fail(where, f"rule: a {rule} entry has inputs ['{spec.name}']")
 
 
-def _inputs(value: object, is_rule: bool, where: str) -> tuple[str, ...]:
+def _inputs(value: object, rule: str | None, where: str) -> tuple[str, ...]:
     if not isinstance(value, list):
         raise _fail(where, "inputs: expected a list")
     seen: set[str] = set()
     for index, name in enumerate(value):
-        if name == _CONFIG_RULE_INPUT:
-            if not is_rule:
+        stands_for_all = next((r for r, spec in _RULES.items() if spec.name == name), None)
+        if stands_for_all is not None:
+            if rule != stands_for_all:
                 raise _fail(
                     where,
-                    f"inputs[{index}]: {_CONFIG_RULE_INPUT} is only for an entry with rule {_RULE}",
+                    f"inputs[{index}]: {name} is only for an entry with rule {stands_for_all}",
                 )
-        elif not isinstance(name, str) or not _INPUT.fullmatch(name):
+        elif not _is_input_name(name):
             raise _fail(
                 where,
                 f"inputs[{index}]: {name!r} is not an input name, which is lowercase words "
-                "joined by dots",
+                "joined by dots, or odcs and then ODCS names joined by dots",
             )
         if name in seen:
             raise _fail(where, f"inputs[{index}]: duplicate input {name!r}")
         seen.add(name)
     return tuple(value)
+
+
+def _is_input_name(name: object) -> bool:
+    """Say whether `name` is an input name other than a rule's: a name that starts with `odcs`
+    is `odcs.<path>`, with no `*`, and every other name is lowercase words joined by dots."""
+    if not isinstance(name, str):
+        return False
+    if name == "odcs" or name.startswith("odcs."):
+        return _ODCS_INPUT.fullmatch(name) is not None and "*" not in name
+    return _INPUT.fullmatch(name) is not None

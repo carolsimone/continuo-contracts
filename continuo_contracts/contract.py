@@ -38,8 +38,9 @@ values, so both treat the same keys as data. Everywhere, free-form values includ
 is a whole number within -(2**53 - 1) to 2**53 - 1 becomes an integer.
 
 `contract_hash` is `"sha256:"` and the lowercase hex SHA-256 of the RFC 8785 canonical JSON of
-the stored form without its root keys `apiVersion`, `kind`, `status` and `version`, which every
-stored form holds with the same values.
+the stored form without the root keys that `fingerprints.yaml` lists as
+`contract_hash_exclusions`: `apiVersion`, `kind`, `status` and `version`, which every stored form
+holds with the same values.
 """
 
 import string
@@ -48,14 +49,12 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any, Final
 
+from continuo_contracts import fingerprints
 from continuo_contracts.canonical import canonical_json, normalise_text
 from continuo_contracts.errors import HashInputError, ProjectionError
 from continuo_contracts.hashing import sha256_hex
 from continuo_contracts.python import KIND_ALIASES, canonical_sql_type
 from continuo_contracts.vocabulary import VENDOR, continuo_values
-
-# The root keys of the stored form that `contract_hash` leaves out.
-_HASH_EXCLUSIONS: Final = frozenset({"apiVersion", "kind", "status", "version"})
 
 _STORED_VERSION: Final = "0"
 _STORED_STATUS: Final = "active"
@@ -261,12 +260,14 @@ def normalise_python(
 def contract_hash(stored: Mapping[str, Any]) -> str:
     """Return the `contract_hash` of the stored form `stored`, `"sha256:"` and 64 hex digits.
 
-    It is the SHA-256 of the RFC 8785 canonical JSON of `stored` without its root keys
-    `apiVersion`, `kind`, `status` and `version`. `stored` is hashed as it is: it is the result
-    of `normalise_python`, which has already written it in the canonical form. Raises
-    `CanonicalJsonError` for a value that canonical JSON cannot write.
+    It is the SHA-256 of the RFC 8785 canonical JSON of `stored` without the root keys that
+    `fingerprints.contract_hash_exclusions()` lists, `apiVersion`, `kind`, `status` and `version`.
+    `stored` is hashed as it is: it is the result of `normalise_python`, which has already written
+    it in the canonical form. Raises `CanonicalJsonError` for a value that canonical JSON cannot
+    write.
     """
-    hashed = {key: value for key, value in stored.items() if key not in _HASH_EXCLUSIONS}
+    left_out = fingerprints.contract_hash_exclusions()
+    hashed = {key: value for key, value in stored.items() if key not in left_out}
     return "sha256:" + sha256_hex(canonical_json(hashed))
 
 

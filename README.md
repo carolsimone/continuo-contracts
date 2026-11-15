@@ -286,14 +286,15 @@ hash, and compares them with the pinned values.
 
 ```python
 from continuo_contracts.fingerprints import (
-    classify, hashed_config_denylist, projection_keys, unclassified,
+    classify, contract_hash_exclusions, hashed_config_denylist, projection_keys, unclassified,
 )
 ```
 
 `continuo_contracts/fingerprints.yaml` says which fingerprint each input of a node moves, so a
 producer's CI, continuo's topology-controller and the guards that check them agree on it. It holds
-two lists, the `config` keys that stay out of a dbt node's hashed config and the keys of the Python
-code projection, and one list of entries for each of eight sections: `every` (what every family
+three lists, the `config` keys that stay out of a dbt node's hashed config, the keys of the Python
+code projection and the root keys of a Python contract's stored form that `contract_hash` leaves
+out, and one list of entries for each of eight sections: `every` (what every family
 shares) and the seven node families `dbt-model`, `dbt-seed`, `dbt-snapshot`, `dbt-test`,
 `python-node`, `python-csv` and `python-api`. An entry names the inputs it classifies and the
 fingerprint they move: `content` (`content_hash`, with the parts of it that the input is folded
@@ -304,6 +305,9 @@ mapping of the file with a `FingerprintsFileError` that names the key and its li
 - `hashed_config_denylist()` returns the dbt `config` keys that stay out of the hashed config, as a
   `frozenset`.
 - `projection_keys()` returns the twelve keys of the code projection, in projection order.
+- `contract_hash_exclusions()` returns the root keys of a Python contract's stored form that
+  `contract_hash` leaves out, `apiVersion`, `kind`, `status` and `version`, as a `frozenset`.
+  `contract.contract_hash` reads this list, so the file and the hash cannot disagree.
 - `classify(family, name)` returns the entry that classifies the input `name` of a node of
   `family`, or `None`. An entry has `family` (the section it is in), `id`, `field`, `source`,
   `fingerprint`, `parts`, `why`, `inputs`, `when` and `rule`, and `entry.moves(part)` says whether
@@ -311,27 +315,41 @@ mapping of the file with a `FingerprintsFileError` that names the key and its li
   names and whose key is not in the denylist belongs to the family's `other_config` entry. It does
   not classify a sub-key of a denylisted key (`config.meta.owner` gives `None`), and a dotted name
   such as `config.contract.enforced` is classified only where an entry declares it as its own
-  input (the dbt model has one), so in another dbt family it belongs to `other_config`. It raises
-  `ValueError` for a `family` that is not one of the seven.
+  input (the dbt model has one), so in another dbt family it belongs to `other_config`. In a
+  Python family, an `odcs.<path>` that no entry names belongs to the family's `standard_field`
+  entry, which classifies every standard ODCS field of the stored form as `contract`; a `continuo`
+  custom property (`odcs.custom.<property>` or `odcs.schema.custom.<property>`) is classified only
+  by an entry, so one that no entry names gives `None`. It raises `ValueError` for a `family` that
+  is not one of the seven.
 - `unclassified(family, names)` returns the distinct `names` that no entry classifies, sorted. A
   guard test passes it every input of a hash and expects `[]`.
 
 ```python
 classify("dbt-model", "config.persist_docs").id  # "other_config"
 classify("python-node", "ci.shared_code_hash").parts  # ("shared",)
+classify("python-node", "odcs.custom.timeoutMinutes").fingerprint  # "contract"
+classify("python-node", "odcs.description.usage").rule  # "standard_field"
+classify("python-node", "odcs.custom.madeUp")  # None
 ```
 
 [docs/fingerprints.md](https://github.com/carolsimone/continuo-contracts/blob/main/docs/fingerprints.md)
 shows every entry as a table and lists the input names: `raw_code`, `config.<key>`,
-`relation.schema`, `projection.<key>`, `ci.source_hash` and the others. The file is generated from
-`fingerprints.yaml`. The input names written out in full are the tuple `FIXED_INPUT_NAMES` of
-`continuo_contracts.fingerprints`, and every other input name is `config.<key>`, `config.*` or
-`projection.<key>`. This repository's guard tests check that an entry names nothing outside that
-vocabulary and that `docs/fingerprints.md` writes each name of the tuple and no other fixed name.
+`relation.schema`, `projection.<key>`, `ci.source_hash`, `odcs.<path>` and the others. The file is
+generated from `fingerprints.yaml`. The input names written out in full are the tuple
+`FIXED_INPUT_NAMES` of `continuo_contracts.fingerprints`, and every other input name is
+`config.<key>`, `config.*`, `projection.<key>` or `odcs.<path>`. An `odcs.<path>` names a field of
+a Python contract's stored form: `odcs` and then the ODCS names of the path as they are written
+(camelCase allowed) with the array indexes dropped, such as `odcs.team.name` and
+`odcs.schema.properties.logicalType`; a `continuo` custom property is `odcs.custom.<property>` on
+the contract (`odcs.custom.timeoutMinutes`) and `odcs.schema.custom.<property>` on the schema
+object (`odcs.schema.custom.reads`); `odcs.*` is the one name of the `standard_field` entry. This
+repository's guard tests check that an entry names nothing outside that vocabulary and that
+`docs/fingerprints.md` writes each name of the tuple and no other fixed name.
 
 A pull request that adds an input to a hash adds it to `fingerprints.yaml` in the same change. A
-projection key or a denylisted `config` key without an entry fails this repository's guard test, and
-`unclassified()` finds any other input without one.
+projection key or a denylisted `config` key without an entry fails this repository's guard test, so
+does a field of the stored form of a Python contract that no entry or rule classifies as `contract`
+or `both`, and `unclassified()` finds any other input without one.
 
 ### Public names
 
@@ -342,21 +360,26 @@ projection key or a denylisted `config` key without an entry fails this reposito
 - `EVERY`: the name of the section for what every family shares, `every`.
 - `SECTIONS`: the eight sections of the file, `EVERY` and then the seven of `FAMILIES`.
 - `FIXED_INPUT_NAMES`: the input names written out in full, such as `raw_code` and
-  `ci.source_hash`. Every other input name is `config.<key>`, `config.*` or `projection.<key>`.
+  `ci.source_hash`. Every other input name is `config.<key>`, `config.*`, `projection.<key>` or
+  `odcs.<path>`.
 - `When`: what an input moves besides its entry's fingerprint while a condition holds, with the
   fields `condition` (`enforced`, `upsert` or `sql_reads`), `fingerprint` and `parts`.
 - `Entry`: one row of a section, with the fields `family` (the section it is in, `every` or one of
   `FAMILIES`), `id`, `field`, `source`, `fingerprint`, `parts`, `why`, `inputs`, `when` (a `When`
-  or `None`) and `rule` (`outside_denylist` or `None`), and the method `moves(part)`.
+  or `None`) and `rule` (`outside_denylist`, `standard_field` or `None`), and the method
+  `moves(part)`.
 - `Fingerprints`: a checked fingerprints file, with the fields `version`, `hashed_config_denylist`,
-  `projection_keys` and `sections` (a read-only mapping from each section to its entries) and the
-  methods `entries(section)`, `classify(family, name)` and `unclassified(family, names)`.
+  `projection_keys`, `contract_hash_exclusions` and `sections` (a read-only mapping from each
+  section to its entries) and the methods `entries(section)`, `classify(family, name)` and
+  `unclassified(family, names)`.
 - `parse_fingerprints`: reads and checks the YAML text of a fingerprints file and returns a
   `Fingerprints`, or raises `FingerprintsFileError` for a file that is not in the form above.
 - `load`: the packaged `fingerprints.yaml` as a `Fingerprints`, read and checked once.
 - `hashed_config_denylist`: the dbt `config` keys that stay out of the hashed config, as a
   `frozenset`.
 - `projection_keys`: the twelve keys of the code projection, in projection order.
+- `contract_hash_exclusions`: the root keys of a Python contract's stored form that
+  `contract_hash` leaves out, as a `frozenset`.
 - `classify`: the packaged entry that classifies an input of a family, or `None`.
 - `unclassified`: the distinct input names that no packaged entry classifies for a family, sorted.
 - `render_in`: the "In" cell of an entry in `docs/fingerprints.md`, with the fingerprint the entry
@@ -696,9 +719,10 @@ hash, whatever their line endings, byte order mark, key order or quoting. The mo
   that canonical JSON cannot write, which a document that `yaml_strict.load` read never holds.
 - `contract_hash(stored: Mapping[str, Any]) -> str` returns `"sha256:"` and the lowercase hex
   SHA-256 of the RFC 8785 canonical JSON of the stored form without its root keys `apiVersion`,
-  `kind`, `status` and `version`, 71 characters in all. Every stored form holds those four with
-  the same values, so leaving them out changes nothing but keeps the hash free of the version
-  continuo numbers from history. `stored` is hashed as it is, so pass the result of
+  `kind`, `status` and `version`, 71 characters in all. Those keys are the list
+  `contract_hash_exclusions` of `fingerprints.yaml`, which `fingerprints.contract_hash_exclusions()`
+  returns. Every stored form holds those four with the same values, so leaving them out changes
+  nothing but keeps the hash free of the version continuo numbers from history. `stored` is hashed as it is, so pass the result of
   `normalise_python`. Raises `CanonicalJsonError` for a value that canonical JSON cannot write.
 - `logical_type(physical_type: str) -> dict[str, Any] | None` returns the ODCS logical type of an
   SQL type, read as `python.canonical_sql_type` writes it: `INTEGER` and `BIGINT` are

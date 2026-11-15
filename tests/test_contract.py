@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from continuo_contracts import yaml_strict
+from continuo_contracts import fingerprints, yaml_strict
 from continuo_contracts.canonical import canonical_json
 from continuo_contracts.contract import contract_hash, logical_type, normalise_python
 from continuo_contracts.errors import CanonicalJsonError, HashInputError
@@ -170,6 +170,14 @@ def test_contract_hash_is_the_sha256_of_the_canonical_json_without_the_labels():
     view = {key: value for key, value in KPIS_STORED.items() if key not in LABELS}
     expected = "sha256:" + hashlib.sha256(canonical_json(view)).hexdigest()
     assert contract_hash(KPIS_STORED) == expected
+
+
+def test_contract_hash_leaves_out_the_keys_that_fingerprints_yaml_lists(monkeypatch):
+    left_out = fingerprints.contract_hash_exclusions() | {"id"}
+    monkeypatch.setattr(fingerprints, "contract_hash_exclusions", lambda: left_out)
+    assert contract_hash(KPIS_STORED) == contract_hash(dict(KPIS_STORED, id="analytics.other"))
+    monkeypatch.undo()
+    assert contract_hash(KPIS_STORED) != contract_hash(dict(KPIS_STORED, id="analytics.other"))
 
 
 def test_contract_hash_refuses_a_value_canonical_json_cannot_write():

@@ -59,6 +59,16 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   2**53 - 1 (`column_type`), and a custom quality rule with an empty `implementation` (`value`).
   It finds `customProperties` lists through the object types and free-form values of
   `continuo_contracts.contract`, so a `mustBe` value is data and the `value` of a `map` is walked.
+- `fingerprints.yaml` classifies every field of a Python contract's stored form for `python-node`,
+  `python-csv` and `python-api`, in the new input pattern `odcs.<path>` (`odcs.team.name`,
+  `odcs.schema.properties.logicalType`, `odcs.custom.timeoutMinutes`, `odcs.schema.custom.reads`),
+  and the new rule `standard_field` classifies every standard ODCS field no entry names as
+  `contract`; a `continuo` custom property that no entry names stays unclassified. A new list,
+  `lists.contract_hash_exclusions`, holds the root keys that `contract_hash` leaves out
+  (`apiVersion`, `kind`, `status`, `version`): `fingerprints.contract_hash_exclusions()` and
+  `Fingerprints.contract_hash_exclusions` return it, `contract.contract_hash` reads it, and
+  `parse_fingerprints()` refuses a file without the list. The guard test walks the stored form of the demo, full and messy contracts and fails for a field no
+  entry classifies.
 
 ## [0.1.0] - 2026-11-11
 
