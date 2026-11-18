@@ -339,8 +339,9 @@ mapping of the file with a `FingerprintsFileError` that names the key and its li
   Python family, an `odcs.<path>` that no entry names belongs to the family's `standard_field`
   entry, which classifies every standard ODCS field of the stored form as `contract`; a `continuo`
   custom property (`odcs.custom.<property>` or `odcs.schema.custom.<property>`) is classified only
-  by an entry, so one that no entry names gives `None`. It raises `ValueError` for a `family` that
-  is not one of the seven.
+  by an entry, so one that no entry names gives `None`. A dbt family has no such rule: its entries
+  name every `odcs.<path>` that its contracts store, and one they do not name gives `None`. It
+  raises `ValueError` for a `family` that is not one of the seven.
 - `unclassified(family, names)` returns the distinct `names` that no entry classifies, sorted. A
   guard test passes it every input of a hash and expects `[]`.
 
@@ -358,7 +359,7 @@ shows every entry as a table and lists the input names: `raw_code`, `config.<key
 generated from `fingerprints.yaml`. The input names written out in full are the tuple
 `FIXED_INPUT_NAMES` of `continuo_contracts.fingerprints`, and every other input name is
 `config.<key>`, `config.*`, `projection.<key>` or `odcs.<path>`. An `odcs.<path>` names a field of
-a Python contract's stored form: `odcs` and then the ODCS names of the path as they are written
+a contract's stored form: `odcs` and then the ODCS names of the path as they are written
 (camelCase allowed) with the array indexes dropped, such as `odcs.team.name` and
 `odcs.schema.properties.logicalType`; a `continuo` custom property is `odcs.custom.<property>` on
 the contract (`odcs.custom.timeoutMinutes`) and `odcs.schema.custom.<property>` on the schema
@@ -368,8 +369,8 @@ repository's guard tests check that an entry names nothing outside that vocabula
 
 A pull request that adds an input to a hash adds it to `fingerprints.yaml` in the same change. A
 projection key or a denylisted `config` key without an entry fails this repository's guard test, so
-does a field of the stored form of a Python contract that no entry or rule classifies as `contract`
-or `both`, and `unclassified()` finds any other input without one.
+does a field of the stored form of a Python or a dbt contract that no entry or rule classifies as
+`contract` or `both`, and `unclassified()` finds any other input without one.
 
 ### Public names
 

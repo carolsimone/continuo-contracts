@@ -31,12 +31,13 @@ An entry classifies the `inputs` it names:
   form (`inputs: ["odcs.*"]`, `fingerprint: contract`, no `when`).
 
 An input name is `config.<key>` for a dbt config key, `projection.<key>` for a key of the Python
-code projection, one of `FIXED_INPUT_NAMES`, or `odcs.<path>` for a field of a Python contract's
-stored form: `odcs` and then the ODCS names of the path as written (camelCase allowed), with the
-array indexes dropped, such as `odcs.team.name` and `odcs.schema.properties.logicalType`. A
-`continuo` custom property is `odcs.custom.<property>` on the contract and
-`odcs.schema.custom.<property>` on the schema object, and `classify` leaves such a path to its
-entries: the `standard_field` rule never claims one.
+code projection, one of `FIXED_INPUT_NAMES`, or `odcs.<path>` for a field of a contract's stored
+form: `odcs` and then the ODCS names of the path as written (camelCase allowed), with the array
+indexes dropped, such as `odcs.team.name` and `odcs.schema.properties.logicalType`. A `continuo`
+custom property is `odcs.custom.<property>` on the contract and `odcs.schema.custom.<property>` on
+the schema object, and `classify` leaves such a path to its entries: the `standard_field` rule never
+claims one. A dbt family has no such rule, so its entries name every `odcs.<path>` its contracts
+store.
 
 `parse_fingerprints` refuses a file that is not in this form with a `FingerprintsFileError` that
 names the location. A mapping that writes a key twice is refused too, naming the key and its line,
@@ -74,7 +75,7 @@ SECTIONS = (EVERY, *FAMILIES)
 # The input names an entry may list that are written out in full. The rest of the closed
 # vocabulary is the pattern `config.<key>` (and `config.*`) for a dbt config key,
 # `projection.<key>` for a key of the Python code projection and `odcs.<path>` (and `odcs.*`) for a
-# field of a Python contract's stored form.
+# field of a contract's stored form.
 FIXED_INPUT_NAMES = (
     "raw_code",
     "compiled_code",
@@ -451,13 +452,14 @@ _NAME_MEANING = (
     "digest of the node's script bytes, computed by the producer's CI, and for a CSV node the "
     "digest of its URI), `ci.shared_code_hash` (the shared part for the in-repo files the "
     "script imports or lists as assets, folded path by path by `shared_hash`).",
-    "- Python contract: `odcs.<path>` for a field of the contract's stored form, written with "
+    "- Contract: `odcs.<path>` for a field of the contract's stored form, written with "
     "its ODCS names as they are in the file and without array indexes, such as `odcs.team.name` "
     "or `odcs.schema.properties.logicalType`. A continuo custom property is "
     "`odcs.custom.<property>` on the contract (`odcs.custom.timeoutMinutes`) and "
     "`odcs.schema.custom.<property>` on the schema object (`odcs.schema.custom.reads`). "
     "`odcs.*` covers every standard ODCS field that no entry names, which a Python family "
-    "classifies as contract, and no continuo custom property.",
+    "classifies as contract, and no continuo custom property. A dbt family has no such "
+    "rule: its entries name every `odcs.<path>` its contracts store.",
 )
 _TERMS_MEANING = (
     "## Terms",

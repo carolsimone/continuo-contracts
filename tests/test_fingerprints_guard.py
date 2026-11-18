@@ -1,3 +1,4 @@
+import copy
 import json
 import re
 
@@ -5,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from continuo_contracts import fingerprints, yaml_strict
-from continuo_contracts.contract import normalise_python
+from continuo_contracts import dbt, fingerprints, yaml_strict
+from continuo_contracts.contract import normalise_dbt, normalise_python
 from continuo_contracts.fingerprints import (
     DBT_FAMILIES,
     FIXED_INPUT_NAMES,
@@ -23,6 +24,8 @@ ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / "docs" / "fingerprints.md"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 VECTORS = ROOT / "continuo_contracts" / "vectors" / "contracts.json"
+DBT_VECTORS = ROOT / "continuo_contracts" / "vectors" / "dbt_contracts.json"
+GOLDEN = FIXTURES / "dbt" / "golden"
 SERVICE = "service-py"
 
 
@@ -271,9 +274,11 @@ def test_inputs_a_family_does_not_hash_stay_unclassified():
     assert FP.classify("python-node", "config.materialized") is None
 
 
-# The stored form of a Python contract: the three demo and the three full contracts, and a messy
-# spelling of the python-api one, each normalised as continuo's topology-controller does it.
-# The tables a node reads come from the contracts vector, which lists them by file name.
+# The stored forms the repository checks in: for the Python families, the three demo and the three
+# full contracts, and a messy spelling of the python-api one, each normalised as continuo's
+# topology-controller does it, with the tables a node reads from the contracts vector, which lists
+# them by file name; for the dbt families, the stored form of every golden contract and the one of
+# the vector case whose node reads tables.
 _FREE_FORM = frozenset(
     {
         "examples",
@@ -286,6 +291,25 @@ _FREE_FORM = frozenset(
         "logicalTypeOptions",
     }
 )
+
+
+def _dbt_stored_forms():
+    """Return `(name, stored)` for the stored form of every golden and of the reads vector case."""
+    forms = [
+        (
+            f"{path.parent.name}/{path.stem}",
+            json.loads(path.read_text(encoding="utf-8"))["stored"],
+        )
+        for path in sorted(GOLDEN.glob("*/*.json"))
+    ]
+    cases = json.loads(DBT_VECTORS.read_text(encoding="utf-8"))
+    forms.append(
+        (
+            "vector/sql_reads",
+            next(c for c in cases if c["name"] == "sql_reads")["stored"],
+        )
+    )
+    return forms
 
 
 def _stored_forms():
@@ -318,7 +342,7 @@ def _stored_forms():
             ),
         )
     )
-    return forms
+    return forms + _dbt_stored_forms()
 
 
 STORED_FORMS = _stored_forms()
@@ -398,10 +422,17 @@ def test_the_excluded_keys_hold_constants_in_every_stored_form(name, stored):
     ) == ("v3.2.0", "DataContract", "0", "active")
 
 
-def test_the_stored_forms_cover_the_three_kinds():
-    assert sorted(_kind(stored) for _, stored in STORED_FORMS) == sorted(
+def test_the_stored_forms_cover_the_six_kinds():
+    kinds = [_kind(stored) for _, stored in STORED_FORMS]
+    python = sorted(kind for kind in kinds if kind in PYTHON_FAMILIES)
+    assert python == sorted(
         ["python-node", "python-csv", "python-api"] * 2 + ["python-api"]
     )
+    assert {kind for kind in kinds if kind not in PYTHON_FAMILIES} == {
+        "dbt-model",
+        "dbt-seed",
+        "dbt-snapshot",
+    }
 
 
 def test_the_walk_names_the_hashed_fields_and_leaves_out_the_excluded_keys():
@@ -443,6 +474,248 @@ def test_every_stored_python_field_is_classified(family):
         entry = fingerprints.classify(family, name)
         assert entry is not None, name
         assert entry.fingerprint in ("contract", "both"), name
+
+
+DBT_STORED_FORMS = [
+    (name, stored)
+    for name, stored in STORED_FORMS
+    if _kind(stored) in DBT_FAMILIES
+]
+
+
+def _in_the_contract_hash(family, name):
+    entry = fingerprints.classify(family, name)
+    return entry is not None and entry.fingerprint in ("contract", "both")
+
+
+@pytest.mark.parametrize("family", ["dbt-model", "dbt-seed", "dbt-snapshot"])
+def test_every_stored_dbt_field_is_classified(family):
+    forms = [stored for _, stored in DBT_STORED_FORMS if _kind(stored) == family]
+    assert forms, family
+    names = {name for stored in forms for name in _odcs_inputs(stored)}
+    missing = [
+        name for name in sorted(names) if not _in_the_contract_hash(family, name)
+    ]
+    assert not missing, (
+        f"{family}: not classified as contract or both: " + ", ".join(missing)
+    )
+
+
+def test_the_dbt_stored_forms_are_the_golden_contracts_and_the_reads_case():
+    goldens = sorted(GOLDEN.glob("*/*.json"))
+    assert goldens
+    assert [name for name, _ in DBT_STORED_FORMS] == [
+        f"{path.parent.name}/{path.stem}" for path in goldens
+    ] + ["vector/sql_reads"]
+    reads = dict(DBT_STORED_FORMS)["vector/sql_reads"]
+    assert "odcs.schema.custom.reads" in _odcs_inputs(reads)
+
+
+def test_the_dbt_test_family_classifies_no_odcs_input():
+    declared = [
+        name
+        for entry in FP.entries("dbt-test")
+        for name in entry.inputs
+        if name == "odcs" or name.startswith("odcs.")
+    ]
+    assert declared == []
+    names = {
+        name for _, stored in DBT_STORED_FORMS for name in _odcs_inputs(stored)
+    }
+    assert names
+    assert FP.unclassified("dbt-test", names) == sorted(names)
+
+
+@pytest.mark.parametrize("family", ["dbt-model", "dbt-seed", "dbt-snapshot"])
+def test_the_reads_of_a_dbt_contract_are_classified_once_as_a_contract_fact(
+    family,
+):
+    entry = fingerprints.classify(family, "odcs.schema.custom.reads")
+    assert entry is not None
+    assert (entry.id, entry.fingerprint, entry.parts, entry.when) == (
+        "sql_reads",
+        "contract",
+        (),
+        None,
+    )
+    assert entry.field == "Tables the compiled SQL names"
+    assert entry.source == "`compiled_code`, listed by topology-controller"
+    assert [
+        e.id for e in FP.entries(family) if "odcs.schema.custom.reads" in e.inputs
+    ] == ["sql_reads"]
+
+
+# The goldens and the vector do not exercise every field the generator writes: a composite primary
+# key, a column type with a length, and the settings of a test on a column or on the schema object.
+# `_full_dbt_stored` generates the contract of one vector node of each dbt kind with all of them set.
+_SETTINGS = {
+    "severity": "WARN",
+    "where": "id > 0",
+    "warn_if": ">1",
+    "error_if": ">2",
+    "fail_calc": "max(id)",
+}
+
+
+def _dbt_test(
+    node_id, name, column, generic, kwargs=None, extra_nodes=(), strict=False
+):
+    """Return a test node; a `strict` one has dbt's default severity, `where` and thresholds."""
+    return {
+        "name": name,
+        "unique_id": f"test.cases.{name}.0",
+        "attached_node": node_id,
+        "column_name": column,
+        "depends_on": {"nodes": [*extra_nodes, node_id]},
+        "description": "checks the table",
+        "tags": ["quality"],
+        "test_metadata": {
+            "name": generic,
+            "namespace": None,
+            "kwargs": kwargs or {},
+        },
+        "config": {
+            "severity": "ERROR",
+            "where": None,
+            "warn_if": "!= 0",
+            "error_if": "!= 0",
+            "fail_calc": "count(*)",
+        }
+        if strict
+        else dict(_SETTINGS),
+    }
+
+
+def _full_dbt_stored(case_name):
+    cases = {c["name"]: c for c in json.loads(DBT_VECTORS.read_text("utf-8"))}
+    node = copy.deepcopy(cases[case_name]["node"])
+    node_id = node["unique_id"]
+    node["description"] = "A node."
+    node["tags"] = ["daily"]
+    node["columns"] = {
+        "id": {"name": "id", "data_type": "varchar(10)", "tags": ["key"]},
+        "ref_id": {
+            "name": "ref_id",
+            "description": "A reference.",
+            "meta": {"continuo": {"classification": "personal"}},
+        },
+    }
+    config = node["config"]
+    config["grants"] = {"select": ["analyst"]}
+    config["group"] = "finance"
+    config["meta"] = {
+        "owner": "cases",
+        "criticality": "CORE",
+        "timeout_minutes": 30,
+        "continuo": {
+            "readers": ["reader"],
+            "reads": ["raw.orders"],
+            "tests": [
+                {"name": "rows", "granularity": "daily", "params": {"min": 1}}
+            ],
+        },
+    }
+    if node["resource_type"] == "model":
+        node["primary_key"] = ["id", "ref_id"]
+        node["deprecation_date"] = "2030-01-01"
+        config["access"] = "public"
+        config["freshness"] = {"build_after": {"count": 1, "period": "day"}}
+        config["contract"] = {"enforced": True}
+    target = "model.cases.customer.v2"
+    manifest = cases["model_with_tests"]["manifest"]
+    tests = [
+        _dbt_test(node_id, "not_null_id", "id", "not_null", strict=True),
+        _dbt_test(node_id, "unique_id", "id", "unique", strict=True),
+        _dbt_test(
+            node_id,
+            "values_ref_id",
+            "ref_id",
+            "accepted_values",
+            {"values": ["a"]},
+        ),
+        _dbt_test(
+            node_id, "positive_ref_id", "ref_id", "is_positive", {"min_value": 0}
+        ),
+        _dbt_test(
+            node_id,
+            "ref_id_customer",
+            "ref_id",
+            "relationships",
+            {"to": "ref('customer')", "field": "id"},
+            [target],
+        ),
+        _dbt_test(node_id, "not_null_ghost", "ghost", "not_null"),
+        _dbt_test(
+            node_id, "positive_ghost", "ghost", "is_positive", {"min_value": 0}
+        ),
+        _dbt_test(node_id, "assert_rows", None, ""),
+    ]
+    document = dbt.generate(node, tests, manifest=manifest).document
+    return normalise_dbt(document, reads=["raw.events"])
+
+
+@pytest.mark.parametrize(
+    ("case", "family"),
+    [
+        ("model_with_tests", "dbt-model"),
+        ("seed_with_column_types", "dbt-seed"),
+        ("snapshot", "dbt-snapshot"),
+    ],
+)
+def test_every_field_a_dbt_contract_can_hold_is_classified(case, family):
+    stored = _full_dbt_stored(case)
+    assert _kind(stored) == family
+    names = _odcs_inputs(stored)
+    assert {
+        "odcs.schema.custom.reads",
+        "odcs.schema.properties.logicalTypeOptions",
+        "odcs.schema.properties.quality.custom.failCalc",
+        "odcs.schema.properties.quality.description",
+        "odcs.schema.quality.custom.warnIf",
+        "odcs.schema.quality.severity",
+        "odcs.schema.quality.tags",
+        "odcs.schema.quality.metric",
+        "odcs.schema.quality.engine",
+        "odcs.roles.access",
+    } <= names
+    missing = [
+        name for name in sorted(names) if not _in_the_contract_hash(family, name)
+    ]
+    assert not missing, (
+        f"{family}: not classified as contract or both: " + ", ".join(missing)
+    )
+
+
+@pytest.mark.parametrize(
+    ("case", "family"),
+    [
+        ("model_with_tests", "dbt-model"),
+        ("seed_with_column_types", "dbt-seed"),
+        ("snapshot", "dbt-snapshot"),
+    ],
+)
+def test_every_odcs_input_a_dbt_family_names_is_written_by_a_contract(
+    case, family
+):
+    written = _odcs_inputs(_full_dbt_stored(case))
+    for _, stored in DBT_STORED_FORMS:
+        if _kind(stored) == family:
+            written |= _odcs_inputs(stored)
+    declared = {
+        name
+        for entry in FP.entries(family)
+        for name in entry.inputs
+        if name.startswith("odcs.")
+    }
+    assert sorted(declared - written) == []
+
+
+def test_a_composite_primary_key_is_classified_for_a_model():
+    names = _odcs_inputs(_full_dbt_stored("model_with_tests"))
+    assert "odcs.schema.properties.primaryKeyPosition" in names
+    assert _in_the_contract_hash(
+        "dbt-model", "odcs.schema.properties.primaryKeyPosition"
+    )
 
 
 def test_every_field_of_every_stored_form_is_classified_for_its_kind():
@@ -745,9 +1018,9 @@ def test_every_fixed_name_in_the_rendered_input_names_is_a_fixed_input_name():
 
 ENTRY_COUNTS = {
     "every": 3,
-    "dbt-model": 29,
-    "dbt-seed": 19,
-    "dbt-snapshot": 18,
+    "dbt-model": 39,
+    "dbt-seed": 26,
+    "dbt-snapshot": 23,
     "dbt-test": 18,
     "python-node": 39,
     "python-csv": 32,

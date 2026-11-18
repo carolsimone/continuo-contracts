@@ -97,6 +97,22 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   stored form and the hash of every kept node of the five fixture manifests, and
   `scripts/write_dbt_goldens.py` writes both, the same bytes on every run. No 0.2.0 vector file
   changes.
+- `fingerprints.yaml` classifies every field of a dbt contract's stored form for `dbt-model`,
+  `dbt-seed` and `dbt-snapshot`, in the `odcs.<path>` inputs the Python families use: the
+  identity (`odcs.id`, `odcs.name`, `odcs.schema.name`, `odcs.schema.physicalName`), the
+  `materialization` and `schema[0].physicalType`, the tags and `schedule`, the owner, `criticality`
+  and `timeoutMinutes`, the `roles` of the readers and grants, the description, `service`, `kind`
+  and `filePath`, the declared columns with their types, descriptions, tags and classification, a
+  model's primary key, and the rules and relationships the tests give with their `severity`,
+  `where` and thresholds. Each is `contract`, or `both` where it also moves `content_hash`, as the
+  entry that names it says. A new entry `sql_reads` in each dbt family classifies
+  `odcs.schema.custom.reads` as `contract`: the tables the compiled SQL names, with the declared
+  reads. The `dbt-test` family classifies no `odcs.` input, since a test's facts land on the tested
+  node's contract. The guard test walks the stored form of every golden contract and of the vector
+  case that reads tables, and one generated contract of each dbt kind that sets every field the
+  generator can write, and fails for a field no entry classifies; `docs/fingerprints.md` lists the
+  new entries and inputs. No existing classification and no Python family changes, and no hash
+  moves.
 
 ## [0.2.0] - 2026-11-15
 
