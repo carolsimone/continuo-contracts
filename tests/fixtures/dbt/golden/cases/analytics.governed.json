@@ -1,0 +1,268 @@
+{
+ "contract_hash": "sha256:01e1936b97d5e129439e0bcf0921271712f23e2391de30b9e535dd8dd56611bc",
+ "flags": [],
+ "generated": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "service",
+    "value": "cases",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "project_tag",
+    "vendor": "continuo"
+   },
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "timeoutMinutes",
+    "value": 90,
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/tagged/governed.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "access",
+    "value": "private",
+    "vendor": "continuo"
+   },
+   {
+    "property": "group",
+    "value": "finance_team",
+    "vendor": "continuo"
+   },
+   {
+    "property": "deprecationDate",
+    "value": "2026-12-01",
+    "vendor": "continuo"
+   },
+   {
+    "property": "freshnessBuildAfter",
+    "value": {
+     "count": 4,
+     "period": "hour"
+    },
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.governed",
+  "kind": "DataContract",
+  "name": "governed",
+  "roles": [
+   {
+    "access": "read",
+    "role": "core"
+   },
+   {
+    "access": "select",
+    "role": "reporter"
+   },
+   {
+    "access": "select",
+    "role": "analyst"
+   }
+  ],
+  "schema": [
+   {
+    "customProperties": [
+     {
+      "property": "reads",
+      "value": [
+       "analytics.raw_events"
+      ],
+      "vendor": "continuo"
+     }
+    ],
+    "name": "governed",
+    "physicalName": "governed",
+    "physicalType": "table",
+    "properties": [
+     {
+      "name": "id"
+     },
+     {
+      "classification": "personal",
+      "name": "email",
+      "tags": [
+       "pii"
+      ]
+     }
+    ],
+    "quality": [
+     {
+      "engine": "data-quality",
+      "implementation": {
+       "enabled": true,
+       "granularity": "daily",
+       "params": {
+        "min": 1
+       }
+      },
+      "name": "row_count",
+      "type": "custom"
+     }
+    ]
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "project_tag"
+  ],
+  "team": {
+   "name": "cases"
+  },
+  "version": "0"
+ },
+ "stored": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "access",
+    "value": "private",
+    "vendor": "continuo"
+   },
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "deprecationDate",
+    "value": "2026-12-01",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/tagged/governed.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "freshnessBuildAfter",
+    "value": {
+     "count": 4,
+     "period": "hour"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "group",
+    "value": "finance_team",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "project_tag",
+    "vendor": "continuo"
+   },
+   {
+    "property": "service",
+    "value": "cases",
+    "vendor": "continuo"
+   },
+   {
+    "property": "timeoutMinutes",
+    "value": 90,
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.governed",
+  "kind": "DataContract",
+  "name": "governed",
+  "roles": [
+   {
+    "access": "read",
+    "role": "core"
+   },
+   {
+    "access": "select",
+    "role": "analyst"
+   },
+   {
+    "access": "select",
+    "role": "reporter"
+   }
+  ],
+  "schema": [
+   {
+    "customProperties": [
+     {
+      "property": "reads",
+      "value": [
+       "analytics.raw_events"
+      ],
+      "vendor": "continuo"
+     }
+    ],
+    "name": "governed",
+    "physicalName": "governed",
+    "physicalType": "table",
+    "properties": [
+     {
+      "name": "id"
+     },
+     {
+      "classification": "personal",
+      "name": "email",
+      "tags": [
+       "pii"
+      ]
+     }
+    ],
+    "quality": [
+     {
+      "engine": "data-quality",
+      "implementation": {
+       "enabled": true,
+       "granularity": "daily",
+       "params": {
+        "min": 1
+       }
+      },
+      "name": "row_count",
+      "type": "custom"
+     }
+    ]
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "project_tag"
+  ],
+  "team": {
+   "name": "cases"
+  },
+  "version": "0"
+ }
+}

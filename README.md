@@ -497,10 +497,12 @@ from continuo_contracts.dbt import (
     SEED_SCHEDULE,
     SKIP_REASONS,
     Generated,
+    RunFacts,
     generate,
     logical_type,
     node_service,
     project_service,
+    run_facts,
     schedule,
     skip_reason,
     table_name,
@@ -658,6 +660,27 @@ logical_type("varchar(64)")
 # {"logicalType": "string", "logicalTypeOptions": {"maxLength": 64}}
 ```
 
+`run_facts` reads back from a dbt contract what continuo runs the node with, so a reader checks
+that the contract and the node it parsed agree. It reads a contract that
+`validate.validate_dbt_contract` accepted, as `generate` wrote it or in its stored form, and both
+give the same facts. Each value is read as the contract holds it, and none is checked: `unique_id`
+is the `id`, `schema` the `id` without `.<table>` (so it is lower case), `table` the schema
+object's `name`, `physical_name` its `physicalName` (else the table), `owner` the `team.name`,
+`materialized` the `materialized` of the `materialization` property, and `service`, `kind`,
+`schedule`, `criticality`, `timeout_minutes` and `file_path` the root properties `service`, `kind`,
+`schedule`, `criticality`, `timeoutMinutes` and `filePath`. A dormant node has no `schedule`
+property, and its `schedule` is `""`, as `schedule(node)` gives; with no `timeoutMinutes` the
+`timeout_minutes` is `None`; with no `criticality` the `criticality` is `DEFAULT_CRITICALITY`.
+
+```python
+from continuo_contracts.contract import normalise_dbt
+
+facts = run_facts(generated.document)
+facts.table  # "fx_transactions_eur"
+facts.schema, facts.schedule  # ("analytics", "daily")
+facts == run_facts(normalise_dbt(generated.document, reads=[]))  # True
+```
+
 ### Public names
 
 - `RESOURCE_TYPES`: `("model", "seed", "snapshot")`, the resource types of the nodes that can get a
@@ -716,6 +739,13 @@ logical_type("varchar(64)")
   and so does an array type (one with `[`, such as `integer[]` or `varchar(10)[]`) and a type with
   a character outside ASCII; a length is read in ASCII digits only. The result is a new dict, such
   as `{"logicalType": "integer"}`.
+- `RunFacts`: what `run_facts` returns, a frozen dataclass with the fields `unique_id`, `schema`,
+  `table`, `physical_name`, `service`, `kind`, `schedule`, `criticality`, `timeout_minutes` (an
+  `int`, or `None` when the contract sets none), `file_path`, `owner` and `materialized`.
+- `run_facts`: `run_facts(document) -> RunFacts` reads the run facts of a dbt contract that
+  `validate.validate_dbt_contract` accepted, generated or stored, as the contract holds them.
+  `schedule` is `""` for a dormant node and `timeout_minutes` is `None` when the contract has no
+  `timeoutMinutes`.
 
 ## vocabulary
 
@@ -954,11 +984,12 @@ validate_python_contract(
 from continuo_contracts.contract import (
     contract_hash,
     logical_type,
+    normalise_dbt,
     normalise_python,
 )
 ```
 
-continuo stores a Python contract in one canonical shape, its stored form, and fingerprints it
+continuo stores a contract in one canonical shape, its stored form, and fingerprints it
 with `contract_hash`. Two files that mean the same thing store the same document and get the same
 hash, whatever their line endings, byte order mark, key order or quoting. The module logs nothing.
 
@@ -1020,13 +1051,28 @@ hash, whatever their line endings, byte order mark, key order or quoting. The mo
   `"db.analytics.x"` and `"analytics. x"` are refused), and `CanonicalJsonError` when an item
   of a set-like list holds a value that canonical JSON cannot write, which a document that
   `yaml_strict.load` read never holds.
+- `normalise_dbt(doc: Mapping[str, Any], *, reads: Sequence[str]) -> dict[str, Any]` returns the
+  stored form of a dbt contract that `dbt.generate` wrote, or of its stored form, as a new dict,
+  and leaves `doc` unchanged. `reads` lists the tables that the node's compiled SQL names, each
+  `<schema>.<table>`; the library never reads SQL, so the caller lists them. The stored form is
+  `doc` with:
+  - the `continuo` property `reads` of the schema object holding the tables of `reads` joined with
+    the ones the node declares (`config.meta.continuo.reads`, which `generate` writes there), in
+    lower case (ASCII letters only), sorted by code point and listed once, and left out when there
+    are none;
+  - the `primaryKeyPosition` of the only column with `primaryKey: true` dropped, as for a Python
+    contract.
+
+  It then writes the document in the canonical form above. Storing a stored form again with no
+  `reads` gives it back unchanged. Raises `HashInputError` when `reads` is one string, or when
+  `reads` or the declared reads list a table that is not `<schema>.<table>` as above.
 - `contract_hash(stored: Mapping[str, Any]) -> str` returns `"sha256:"` and the lowercase hex
   SHA-256 of the RFC 8785 canonical JSON of the stored form without its root keys `apiVersion`,
   `kind`, `status` and `version`, 71 characters in all. Those keys are the list
   `contract_hash_exclusions` of `fingerprints.yaml`, which `fingerprints.contract_hash_exclusions()`
   returns. Every stored form holds those four with the same values, so leaving them out changes
   nothing but keeps the hash free of the version continuo numbers from history. `stored` is
-  hashed as it is, so pass the result of `normalise_python`. Raises `CanonicalJsonError` for a
+  hashed as it is, so pass the result of `normalise_python` or `normalise_dbt`. Raises `CanonicalJsonError` for a
   value that canonical JSON cannot write.
 - `logical_type(physical_type: str) -> dict[str, Any] | None` returns the ODCS logical type of an
   SQL type, read as `python.canonical_sql_type` writes it: `INTEGER` and `BIGINT` are
@@ -1054,6 +1100,8 @@ logical_type("varchar(64)")
 
 - `normalise_python`: returns the stored form of a Python contract that the contract check
   accepted, written in the canonical form.
+- `normalise_dbt`: returns the stored form of a dbt contract, with the tables its compiled SQL
+  names joined with its declared reads, written in the canonical form.
 - `contract_hash`: returns the `contract_hash` of a stored form, `"sha256:"` and 64 hex digits.
 - `logical_type`: returns the ODCS logical type of an SQL type, or `None`.
 
@@ -1174,7 +1222,7 @@ surrogate, and an argument of the wrong type can raise `TypeError` or `Attribute
 
 ## Vectors
 
-The wheel ships six data files in `continuo_contracts/vectors/`. Each is a JSON list of cases
+The wheel ships seven data files in `continuo_contracts/vectors/`. Each is a JSON list of cases
 that give the inputs and the expected output of one part of the package, so a producer in any
 language can check its own implementation against the same values. Read a file with
 `importlib.resources.files("continuo_contracts") / "vectors" / "<file>"`. Every consumer runs
@@ -1236,6 +1284,29 @@ every case of every file.
   name with outer whitespace, a `schedule` with outer whitespace or longer than 50 characters, a
   `script` with outer whitespace or that is not a normalised path, six `assets` that are not
   normalised paths, a `VARCHAR(0)` column and a blank `service` property. The file is ASCII.
+- `dbt_contracts.json` is a list of `{"name", "node", "tests", "manifest", "reads", "generated",
+  "flags", "stored", "contract_hash"}`. `node` is a manifest node, `tests` its test nodes in the
+  order `dbt.tests_by_node` joins them, and `manifest` the part of the manifest that `generate`
+  reads for them. Pass them to `dbt.generate(node, tests, manifest=manifest)`: its `document` is
+  `generated` and its `flags` are `flags`. `contract.normalise_dbt(generated, reads=reads)` is
+  `stored`, and `contract.contract_hash(stored)` is `contract_hash`. `reads` are the tables the
+  node's compiled SQL names. The cases come from the `cases` fixture project, one for each rule: a
+  model with tests (every kind of test, relationships to a versioned model and to a source, and
+  Jinja in a kwarg, which flags it), a seed with `column_types`, a dormant model, a versioned
+  model, an ephemeral model, a snapshot (its unique key in both `materialization` and
+  `snapshot`, and its history columns), an enforced contract, a governed model (readers, grants,
+  access, group, freshness, a timeout, declared reads and a table test), and the governed model
+  again with the reads `["Analytics.Orders", "analytics.orders", "raw.events"]`, which store
+  joined with its declared read, once and in lower case. Each input is pruned to the fields
+  `generate` reads, which the [dbt](#dbt) section lists for `source_sha256`: `node` keeps its
+  `unique_id` and those fields, `tests` keep their `unique_id` and those fields (each kwarg but
+  `model` and `column_name`), and `manifest` holds under `nodes` and `sources` each entry of a
+  test's `depends_on.nodes` other than its `attached_node` and the tested node, with a node's
+  `schema`, `name` and `version` or a source's `schema`, `identifier` and `name`. A field the node
+  does not hold is left out, and a value is kept whole. The file is ASCII and the keys of every
+  object are sorted, except the keys of a node's `columns`, which keep the order in which the node
+  declares its columns: the contract's columns follow it, so read that object with its key order
+  kept.
 
 ## Pinning
 
@@ -1259,7 +1330,9 @@ service, run once after such a change, that recomputes every node's stored hash 
 code and validates and reloads nothing.
 
 A `contract_hash` pinned in `vectors/contracts.json` is a contract in the same way: a change that
-moves one gives every Python node of every install a new contract version.
+moves one gives every Python node of every install a new contract version. A `contract_hash`
+pinned in `vectors/dbt_contracts.json` is one too: a change that moves one gives every dbt node of
+every install a new contract version.
 
 The contract check only widens. A newer version accepts every contract that an older version
 accepted, and gives it the same stored form and the same `contract_hash`: the vocabulary of a

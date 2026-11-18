@@ -65,6 +65,23 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `tests/fixtures/dbt/manifests/<project>.json.gz`, the same bytes on every rebuild.
   `tests/dbt_fixtures.py` loads them, and the `dbt` pytest marker names the test that rebuilds them
   by hand.
+- `continuo_contracts.contract.normalise_dbt` writes the stored form of a dbt contract: the tables
+  the node's compiled SQL names, which the caller passes, joined with its declared `reads` on the
+  schema object, in lower case, sorted and listed once; the `primaryKeyPosition` of a key of one
+  column dropped; then the canonical form of a Python contract. A table that is not
+  `<schema>.<table>` raises `HashInputError`. `contract_hash` hashes the result as it hashes a
+  Python contract's.
+- `continuo_contracts.dbt.run_facts` reads back from a generated or stored dbt contract what
+  continuo runs the node with, as a `RunFacts`: its id, schema, table, physical name, service,
+  kind, schedule (`""` for a dormant node), criticality, timeout (`None` when unset), file path,
+  owner and materialization.
+- The new vector file `vectors/dbt_contracts.json` pins the generated contract, the flags, the
+  stored form and the first `contract_hash` of nine dbt nodes, one for each rule of the
+  generator, each with its node, tests and manifest pruned to the fields `generate` reads.
+  `tests/fixtures/dbt/golden/<project>/<id>.json` holds the generated contract, the flags, the
+  stored form and the hash of every kept node of the five fixture manifests, and
+  `scripts/write_dbt_goldens.py` writes both, the same bytes on every run. No 0.2.0 vector file
+  changes.
 
 ## [0.2.0] - 2026-11-15
 

@@ -1,0 +1,414 @@
+{
+ "contract_hash": "sha256:f724150991699cb50dccfd84c0d9d030526b095fe556f52d2d9c6b67279a97a1",
+ "flags": [
+  "jinja_in_test_arguments"
+ ],
+ "generated": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "service",
+    "value": "cases",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "project_tag",
+    "vendor": "continuo"
+   },
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/tagged/generic_tests.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   }
+  ],
+  "description": {
+   "purpose": "Every generic test the contract maps, one column each."
+  },
+  "id": "analytics.generic_tests",
+  "kind": "DataContract",
+  "name": "generic_tests",
+  "schema": [
+   {
+    "description": "Every generic test the contract maps, one column each.",
+    "name": "generic_tests",
+    "physicalName": "generic_tests",
+    "physicalType": "table",
+    "properties": [
+     {
+      "name": "id",
+      "primaryKey": true,
+      "quality": [
+       {
+        "id": "not_null_generic_tests_id",
+        "metric": "nullValues",
+        "mustBe": 0
+       },
+       {
+        "id": "unique_generic_tests_id",
+        "metric": "duplicateValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true,
+      "unique": true
+     },
+     {
+      "description": "accepted_values in the syntax that puts the values beside the test.",
+      "name": "status",
+      "quality": [
+       {
+        "arguments": {
+         "validValues": [
+          "active",
+          "closed"
+         ]
+        },
+        "id": "accepted_values_generic_tests_status__active__closed",
+        "metric": "invalidValues",
+        "mustBe": 0
+       }
+      ]
+     },
+     {
+      "description": "accepted_values in the syntax that nests the values under arguments.",
+      "name": "kind",
+      "quality": [
+       {
+        "arguments": {
+         "validValues": [
+          "a",
+          "b"
+         ]
+        },
+        "id": "accepted_values_generic_tests_kind__a__b",
+        "metric": "invalidValues",
+        "mustBe": 0
+       }
+      ]
+     },
+     {
+      "name": "allowed_status",
+      "quality": [
+       {
+        "arguments": {
+         "validValues": "{{ var('allowed') }}"
+        },
+        "id": "accepted_values_generic_tests_allowed_status___var_allowed_",
+        "metric": "invalidValues",
+        "mustBe": 0
+       }
+      ]
+     },
+     {
+      "name": "customer_id",
+      "relationships": [
+       {
+        "to": "analytics.customer.v2.id"
+       }
+      ]
+     },
+     {
+      "name": "event_id",
+      "relationships": [
+       {
+        "to": "raw.events.id"
+       }
+      ]
+     },
+     {
+      "name": "amount",
+      "quality": [
+       {
+        "engine": "dbt",
+        "id": "is_positive_generic_tests_amount__0",
+        "implementation": {
+         "arguments": {
+          "min_value": 0
+         },
+         "test": "is_positive"
+        },
+        "name": "is_positive_generic_tests_amount__0",
+        "type": "custom"
+       }
+      ]
+     },
+     {
+      "name": "warned",
+      "quality": [
+       {
+        "id": "not_null_generic_tests_warned",
+        "metric": "nullValues",
+        "mustBe": 0,
+        "severity": "warning"
+       }
+      ]
+     },
+     {
+      "name": "filtered",
+      "quality": [
+       {
+        "customProperties": [
+         {
+          "property": "where",
+          "value": "id > 0",
+          "vendor": "continuo"
+         }
+        ],
+        "id": "not_null_generic_tests_filtered",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ]
+     },
+     {
+      "name": "lenient",
+      "quality": [
+       {
+        "customProperties": [
+         {
+          "property": "errorIf",
+          "value": ">10",
+          "vendor": "continuo"
+         }
+        ],
+        "id": "unique_generic_tests_lenient",
+        "metric": "duplicateValues",
+        "mustBe": 0
+       }
+      ]
+     }
+    ]
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "project_tag"
+  ],
+  "team": {
+   "name": "cases"
+  },
+  "version": "0"
+ },
+ "stored": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/tagged/generic_tests.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "project_tag",
+    "vendor": "continuo"
+   },
+   {
+    "property": "service",
+    "value": "cases",
+    "vendor": "continuo"
+   }
+  ],
+  "description": {
+   "purpose": "Every generic test the contract maps, one column each."
+  },
+  "id": "analytics.generic_tests",
+  "kind": "DataContract",
+  "name": "generic_tests",
+  "schema": [
+   {
+    "description": "Every generic test the contract maps, one column each.",
+    "name": "generic_tests",
+    "physicalName": "generic_tests",
+    "physicalType": "table",
+    "properties": [
+     {
+      "name": "id",
+      "primaryKey": true,
+      "quality": [
+       {
+        "id": "not_null_generic_tests_id",
+        "metric": "nullValues",
+        "mustBe": 0
+       },
+       {
+        "id": "unique_generic_tests_id",
+        "metric": "duplicateValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true,
+      "unique": true
+     },
+     {
+      "description": "accepted_values in the syntax that puts the values beside the test.",
+      "name": "status",
+      "quality": [
+       {
+        "arguments": {
+         "validValues": [
+          "active",
+          "closed"
+         ]
+        },
+        "id": "accepted_values_generic_tests_status__active__closed",
+        "metric": "invalidValues",
+        "mustBe": 0
+       }
+      ]
+     },
+     {
+      "description": "accepted_values in the syntax that nests the values under arguments.",
+      "name": "kind",
+      "quality": [
+       {
+        "arguments": {
+         "validValues": [
+          "a",
+          "b"
+         ]
+        },
+        "id": "accepted_values_generic_tests_kind__a__b",
+        "metric": "invalidValues",
+        "mustBe": 0
+       }
+      ]
+     },
+     {
+      "name": "allowed_status",
+      "quality": [
+       {
+        "arguments": {
+         "validValues": "{{ var('allowed') }}"
+        },
+        "id": "accepted_values_generic_tests_allowed_status___var_allowed_",
+        "metric": "invalidValues",
+        "mustBe": 0
+       }
+      ]
+     },
+     {
+      "name": "customer_id",
+      "relationships": [
+       {
+        "to": "analytics.customer.v2.id"
+       }
+      ]
+     },
+     {
+      "name": "event_id",
+      "relationships": [
+       {
+        "to": "raw.events.id"
+       }
+      ]
+     },
+     {
+      "name": "amount",
+      "quality": [
+       {
+        "engine": "dbt",
+        "id": "is_positive_generic_tests_amount__0",
+        "implementation": {
+         "arguments": {
+          "min_value": 0
+         },
+         "test": "is_positive"
+        },
+        "name": "is_positive_generic_tests_amount__0",
+        "type": "custom"
+       }
+      ]
+     },
+     {
+      "name": "warned",
+      "quality": [
+       {
+        "id": "not_null_generic_tests_warned",
+        "metric": "nullValues",
+        "mustBe": 0,
+        "severity": "warning"
+       }
+      ]
+     },
+     {
+      "name": "filtered",
+      "quality": [
+       {
+        "customProperties": [
+         {
+          "property": "where",
+          "value": "id > 0",
+          "vendor": "continuo"
+         }
+        ],
+        "id": "not_null_generic_tests_filtered",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ]
+     },
+     {
+      "name": "lenient",
+      "quality": [
+       {
+        "customProperties": [
+         {
+          "property": "errorIf",
+          "value": ">10",
+          "vendor": "continuo"
+         }
+        ],
+        "id": "unique_generic_tests_lenient",
+        "metric": "duplicateValues",
+        "mustBe": 0
+       }
+      ]
+     }
+    ]
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "project_tag"
+  ],
+  "team": {
+   "name": "cases"
+  },
+  "version": "0"
+ }
+}

@@ -1,0 +1,108 @@
+{
+ "contract_hash": "sha256:f0b4fc24679594f04a12f580815f6ba8e63513a12eb7579a83380d1456f69225",
+ "flags": [],
+ "generated": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "service",
+    "value": "service-1",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-seed",
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "seed",
+    "vendor": "continuo"
+   },
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "seeds/seed_table_1.csv",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "seed"
+    },
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.seed_table_1",
+  "kind": "DataContract",
+  "name": "seed_table_1",
+  "schema": [
+   {
+    "name": "seed_table_1",
+    "physicalName": "seed_table_1",
+    "physicalType": "table"
+   }
+  ],
+  "status": "active",
+  "team": {
+   "name": "test"
+  },
+  "version": "0"
+ },
+ "stored": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "seeds/seed_table_1.csv",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-seed",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "seed"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "seed",
+    "vendor": "continuo"
+   },
+   {
+    "property": "service",
+    "value": "service-1",
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.seed_table_1",
+  "kind": "DataContract",
+  "name": "seed_table_1",
+  "schema": [
+   {
+    "name": "seed_table_1",
+    "physicalName": "seed_table_1",
+    "physicalType": "table"
+   }
+  ],
+  "status": "active",
+  "team": {
+   "name": "test"
+  },
+  "version": "0"
+ }
+}

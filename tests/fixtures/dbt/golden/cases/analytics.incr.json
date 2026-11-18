@@ -1,0 +1,120 @@
+{
+ "contract_hash": "sha256:ead8a22219282f90ca6e0a80fa65412669046038db084dcbb3e0042922efb853",
+ "flags": [],
+ "generated": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "service",
+    "value": "cases",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "project_tag",
+    "vendor": "continuo"
+   },
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/tagged/incr.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "incrementalStrategy": "merge",
+     "materialized": "incremental",
+     "onSchemaChange": "append_new_columns",
+     "uniqueKey": "id"
+    },
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.incr",
+  "kind": "DataContract",
+  "name": "incr",
+  "schema": [
+   {
+    "name": "incr",
+    "physicalName": "incr",
+    "physicalType": "table"
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "project_tag"
+  ],
+  "team": {
+   "name": "cases"
+  },
+  "version": "0"
+ },
+ "stored": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/tagged/incr.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "incrementalStrategy": "merge",
+     "materialized": "incremental",
+     "onSchemaChange": "append_new_columns",
+     "uniqueKey": "id"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "project_tag",
+    "vendor": "continuo"
+   },
+   {
+    "property": "service",
+    "value": "cases",
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.incr",
+  "kind": "DataContract",
+  "name": "incr",
+  "schema": [
+   {
+    "name": "incr",
+    "physicalName": "incr",
+    "physicalType": "table"
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "project_tag"
+  ],
+  "team": {
+   "name": "cases"
+  },
+  "version": "0"
+ }
+}

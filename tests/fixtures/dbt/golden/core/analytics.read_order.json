@@ -1,0 +1,114 @@
+{
+ "contract_hash": "sha256:8eb7b0beaa4959af1fd20378b24e2bd780b1c40a57342666db3a6838788a4137",
+ "flags": [],
+ "generated": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "service",
+    "value": "core",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "daily",
+    "vendor": "continuo"
+   },
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/read_order.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.read_order",
+  "kind": "DataContract",
+  "name": "read_order",
+  "schema": [
+   {
+    "name": "read_order",
+    "physicalName": "read_order",
+    "physicalType": "table"
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "daily"
+  ],
+  "team": {
+   "name": "core"
+  },
+  "version": "0"
+ },
+ "stored": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/read_order.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "daily",
+    "vendor": "continuo"
+   },
+   {
+    "property": "service",
+    "value": "core",
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.read_order",
+  "kind": "DataContract",
+  "name": "read_order",
+  "schema": [
+   {
+    "name": "read_order",
+    "physicalName": "read_order",
+    "physicalType": "table"
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "daily"
+  ],
+  "team": {
+   "name": "core"
+  },
+  "version": "0"
+ }
+}

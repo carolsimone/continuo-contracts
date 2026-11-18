@@ -1,0 +1,308 @@
+{
+ "contract_hash": "sha256:ce44bd6f54c75f45805b7d3c65786db6d6c1290d874c59d56b8601b10e5039fc",
+ "flags": [],
+ "generated": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "service",
+    "value": "finance",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "daily",
+    "vendor": "continuo"
+   },
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/ltv_per_user.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   }
+  ],
+  "description": {
+   "purpose": "Per-user unit economics. contribution_margin_eur (revenue minus variable cost) is the standard LTV numerator and drives ltv_to_cac; fully_allocated_eur additionally subtracts fixed operational cost and is negative for essentially every user, which is the honest picture for a company at this stage. One row per user. Reads core and marketing cross-service by raw schema-qualified name."
+  },
+  "id": "analytics.ltv_per_user",
+  "kind": "DataContract",
+  "name": "ltv_per_user",
+  "schema": [
+   {
+    "description": "Per-user unit economics. contribution_margin_eur (revenue minus variable cost) is the standard LTV numerator and drives ltv_to_cac; fully_allocated_eur additionally subtracts fixed operational cost and is negative for essentially every user, which is the honest picture for a company at this stage. One row per user. Reads core and marketing cross-service by raw schema-qualified name.",
+    "name": "ltv_per_user",
+    "physicalName": "ltv_per_user",
+    "physicalType": "table",
+    "properties": [
+     {
+      "name": "user_id",
+      "primaryKey": true,
+      "quality": [
+       {
+        "id": "not_null_ltv_per_user_user_id",
+        "metric": "nullValues",
+        "mustBe": 0
+       },
+       {
+        "id": "unique_ltv_per_user_user_id",
+        "metric": "duplicateValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true,
+      "unique": true
+     },
+     {
+      "name": "acquisition_month",
+      "quality": [
+       {
+        "id": "not_null_ltv_per_user_acquisition_month",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "name": "revenue_eur",
+      "quality": [
+       {
+        "id": "not_null_ltv_per_user_revenue_eur",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "revenue_eur - variable_cost_eur. The LTV numerator.",
+      "name": "contribution_margin_eur",
+      "quality": [
+       {
+        "id": "not_null_ltv_per_user_contribution_margin_eur",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "revenue_eur - operational_cost_eur - marketing_cost_eur. Expected negative.",
+      "name": "fully_allocated_eur",
+      "quality": [
+       {
+        "id": "not_null_ltv_per_user_fully_allocated_eur",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "contribution_margin_eur / marketing_cost_eur. NULL for organic users, who have zero CAC.",
+      "name": "ltv_to_cac"
+     }
+    ],
+    "quality": [
+     {
+      "engine": "dbt",
+      "id": "assert_ltv_components_reconcile",
+      "implementation": "assert_ltv_components_reconcile",
+      "name": "assert_ltv_components_reconcile",
+      "type": "custom"
+     },
+     {
+      "engine": "dbt",
+      "id": "assert_ltv_covers_every_revenue_user",
+      "implementation": "assert_ltv_covers_every_revenue_user",
+      "name": "assert_ltv_covers_every_revenue_user",
+      "type": "custom"
+     },
+     {
+      "engine": "dbt",
+      "id": "assert_ltv_to_cac_within_plausible_band",
+      "implementation": "assert_ltv_to_cac_within_plausible_band",
+      "name": "assert_ltv_to_cac_within_plausible_band",
+      "type": "custom"
+     }
+    ]
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "daily"
+  ],
+  "team": {
+   "name": "finance"
+  },
+  "version": "0"
+ },
+ "stored": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/ltv_per_user.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "daily",
+    "vendor": "continuo"
+   },
+   {
+    "property": "service",
+    "value": "finance",
+    "vendor": "continuo"
+   }
+  ],
+  "description": {
+   "purpose": "Per-user unit economics. contribution_margin_eur (revenue minus variable cost) is the standard LTV numerator and drives ltv_to_cac; fully_allocated_eur additionally subtracts fixed operational cost and is negative for essentially every user, which is the honest picture for a company at this stage. One row per user. Reads core and marketing cross-service by raw schema-qualified name."
+  },
+  "id": "analytics.ltv_per_user",
+  "kind": "DataContract",
+  "name": "ltv_per_user",
+  "schema": [
+   {
+    "description": "Per-user unit economics. contribution_margin_eur (revenue minus variable cost) is the standard LTV numerator and drives ltv_to_cac; fully_allocated_eur additionally subtracts fixed operational cost and is negative for essentially every user, which is the honest picture for a company at this stage. One row per user. Reads core and marketing cross-service by raw schema-qualified name.",
+    "name": "ltv_per_user",
+    "physicalName": "ltv_per_user",
+    "physicalType": "table",
+    "properties": [
+     {
+      "name": "user_id",
+      "primaryKey": true,
+      "quality": [
+       {
+        "id": "not_null_ltv_per_user_user_id",
+        "metric": "nullValues",
+        "mustBe": 0
+       },
+       {
+        "id": "unique_ltv_per_user_user_id",
+        "metric": "duplicateValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true,
+      "unique": true
+     },
+     {
+      "name": "acquisition_month",
+      "quality": [
+       {
+        "id": "not_null_ltv_per_user_acquisition_month",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "name": "revenue_eur",
+      "quality": [
+       {
+        "id": "not_null_ltv_per_user_revenue_eur",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "revenue_eur - variable_cost_eur. The LTV numerator.",
+      "name": "contribution_margin_eur",
+      "quality": [
+       {
+        "id": "not_null_ltv_per_user_contribution_margin_eur",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "revenue_eur - operational_cost_eur - marketing_cost_eur. Expected negative.",
+      "name": "fully_allocated_eur",
+      "quality": [
+       {
+        "id": "not_null_ltv_per_user_fully_allocated_eur",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "contribution_margin_eur / marketing_cost_eur. NULL for organic users, who have zero CAC.",
+      "name": "ltv_to_cac"
+     }
+    ],
+    "quality": [
+     {
+      "engine": "dbt",
+      "id": "assert_ltv_components_reconcile",
+      "implementation": "assert_ltv_components_reconcile",
+      "name": "assert_ltv_components_reconcile",
+      "type": "custom"
+     },
+     {
+      "engine": "dbt",
+      "id": "assert_ltv_covers_every_revenue_user",
+      "implementation": "assert_ltv_covers_every_revenue_user",
+      "name": "assert_ltv_covers_every_revenue_user",
+      "type": "custom"
+     },
+     {
+      "engine": "dbt",
+      "id": "assert_ltv_to_cac_within_plausible_band",
+      "implementation": "assert_ltv_to_cac_within_plausible_band",
+      "name": "assert_ltv_to_cac_within_plausible_band",
+      "type": "custom"
+     }
+    ]
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "daily"
+  ],
+  "team": {
+   "name": "finance"
+  },
+  "version": "0"
+ }
+}

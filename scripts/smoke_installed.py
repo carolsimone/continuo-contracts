@@ -4,7 +4,7 @@ Install the wheel into a clean virtual environment, then run this script with th
 interpreter in isolated mode, from a directory that is not the checkout:
 `<venv>/bin/python -I scripts/smoke_installed.py`. The package must come from a `site-packages`
 directory, `fingerprints.yaml` must load with entries in every section, the packaged ODCS schema
-must load with its pinned bytes, every case of the six vector files must pass when read through
+must load with its pinned bytes, every case of the seven vector files must pass when read through
 `importlib.resources`, and canonical JSON must give the documented bytes. Exit status 0 means all
 of it held, 1 means a failure was logged.
 """
@@ -22,7 +22,12 @@ import continuo_contracts
 
 from continuo_contracts import schema, yaml_strict
 from continuo_contracts.canonical import canonical_json
-from continuo_contracts.contract import contract_hash, normalise_python
+from continuo_contracts.contract import (
+    contract_hash,
+    normalise_dbt,
+    normalise_python,
+)
+from continuo_contracts.dbt import generate
 from continuo_contracts.errors import (
     CanonicalJsonError,
     ContractsError,
@@ -267,6 +272,37 @@ def _contract_failures(cases: list[dict[str, Any]]) -> list[str]:
     return failures
 
 
+def _dbt_contract_failures(cases: list[dict[str, Any]]) -> list[str]:
+    """Return the dbt contract vector cases whose contract, flags, stored form or hash differ."""
+    failures: list[str] = []
+    for case in cases:
+        name = case["name"]
+        try:
+            generated = generate(
+                case["node"], case["tests"], manifest=case["manifest"]
+            )
+            stored = normalise_dbt(generated.document, reads=case["reads"])
+            digest = contract_hash(stored)
+        except ContractsError as error:
+            failures.append(f"dbt contract vector {name!r}: refused: {error}")
+            continue
+        if generated.document != case["generated"]:
+            failures.append(
+                f"dbt contract vector {name!r}: the generated contract differs"
+            )
+        if list(generated.flags) != case["flags"]:
+            failures.append(
+                f"dbt contract vector {name!r}: the flags are {generated.flags!r}"
+            )
+        if stored != case["stored"]:
+            failures.append(
+                f"dbt contract vector {name!r}: the stored form differs"
+            )
+        if digest != case["contract_hash"]:
+            failures.append(f"dbt contract vector {name!r}: the hash is {digest}")
+    return failures
+
+
 def _canonical_json_failures() -> list[str]:
     """Return a problem when `canonical_json` does not give the documented bytes."""
     expected = b'{"a":true,"b":[1,"' + NON_ASCII_UTF8 + b'"]}'
@@ -284,6 +320,7 @@ def main() -> int:
     hashing = _vector_cases("hashing.json")
     strict_yaml = _vector_cases("strict_yaml.json")
     contracts = _vector_cases("contracts.json")
+    dbt_contracts = _vector_cases("dbt_contracts.json")
     failures = [
         *_installed_failures(),
         *_fingerprint_failures(),
@@ -294,6 +331,7 @@ def main() -> int:
         *_hashing_failures(hashing),
         *_strict_yaml_failures(strict_yaml),
         *_contract_failures(contracts),
+        *_dbt_contract_failures(dbt_contracts),
         *_canonical_json_failures(),
     ]
     for name, cases in (
@@ -303,6 +341,7 @@ def main() -> int:
         ("hashing.json", hashing),
         ("strict_yaml.json", strict_yaml),
         ("contracts.json", contracts),
+        ("dbt_contracts.json", dbt_contracts),
     ):
         if not cases:
             failures.append(f"{name} holds no cases")
@@ -312,7 +351,7 @@ def main() -> int:
         return 1
     logger.info(
         "continuo-contracts %s installed at %s: %d projection, %d sql type, %d canonical json, "
-        "%d hashing, %d strict yaml and %d contract cases pass",
+        "%d hashing, %d strict yaml, %d contract and %d dbt contract cases pass",
         continuo_contracts.__version__,
         Path(continuo_contracts.__file__).parent,
         len(projections),
@@ -321,6 +360,7 @@ def main() -> int:
         len(hashing),
         len(strict_yaml),
         len(contracts),
+        len(dbt_contracts),
     )
     return 0
 

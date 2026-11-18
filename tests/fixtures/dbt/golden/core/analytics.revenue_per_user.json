@@ -1,0 +1,250 @@
+{
+ "contract_hash": "sha256:ec869677130dcdd8e7ca171045df1aaa8826fcb12366f423f3b68d61d926fd94",
+ "flags": [],
+ "generated": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "service",
+    "value": "core",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "daily",
+    "vendor": "continuo"
+   },
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/revenue_per_user.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   }
+  ],
+  "description": {
+   "purpose": "Per-user realized revenue over the observation window: the fees the company earned, not the volume the customer moved. One row per user; users with no transactions carry revenue_eur 0. Input to finance's ltv_per_user."
+  },
+  "id": "analytics.revenue_per_user",
+  "kind": "DataContract",
+  "name": "revenue_per_user",
+  "schema": [
+   {
+    "description": "Per-user realized revenue over the observation window: the fees the company earned, not the volume the customer moved. One row per user; users with no transactions carry revenue_eur 0. Input to finance's ltv_per_user.",
+    "name": "revenue_per_user",
+    "physicalName": "revenue_per_user",
+    "physicalType": "table",
+    "properties": [
+     {
+      "name": "user_id",
+      "primaryKey": true,
+      "quality": [
+       {
+        "id": "not_null_revenue_per_user_user_id",
+        "metric": "nullValues",
+        "mustBe": 0
+       },
+       {
+        "id": "unique_revenue_per_user_user_id",
+        "metric": "duplicateValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true,
+      "unique": true
+     },
+     {
+      "name": "acquisition_month",
+      "quality": [
+       {
+        "id": "not_null_revenue_per_user_acquisition_month",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "Sum of fee_amount_eur across this user's transactions. Zero for users with none.",
+      "name": "revenue_eur",
+      "quality": [
+       {
+        "id": "not_null_revenue_per_user_revenue_eur",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "Sum of amount_eur. Carried beside revenue_eur so the volume/revenue distinction stays visible.",
+      "name": "gross_volume_eur",
+      "quality": [
+       {
+        "id": "not_null_revenue_per_user_gross_volume_eur",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     }
+    ],
+    "quality": [
+     {
+      "engine": "dbt",
+      "id": "assert_revenue_non_negative",
+      "implementation": "assert_revenue_non_negative",
+      "name": "assert_revenue_non_negative",
+      "type": "custom"
+     }
+    ]
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "daily"
+  ],
+  "team": {
+   "name": "core"
+  },
+  "version": "0"
+ },
+ "stored": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/revenue_per_user.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "daily",
+    "vendor": "continuo"
+   },
+   {
+    "property": "service",
+    "value": "core",
+    "vendor": "continuo"
+   }
+  ],
+  "description": {
+   "purpose": "Per-user realized revenue over the observation window: the fees the company earned, not the volume the customer moved. One row per user; users with no transactions carry revenue_eur 0. Input to finance's ltv_per_user."
+  },
+  "id": "analytics.revenue_per_user",
+  "kind": "DataContract",
+  "name": "revenue_per_user",
+  "schema": [
+   {
+    "description": "Per-user realized revenue over the observation window: the fees the company earned, not the volume the customer moved. One row per user; users with no transactions carry revenue_eur 0. Input to finance's ltv_per_user.",
+    "name": "revenue_per_user",
+    "physicalName": "revenue_per_user",
+    "physicalType": "table",
+    "properties": [
+     {
+      "name": "user_id",
+      "primaryKey": true,
+      "quality": [
+       {
+        "id": "not_null_revenue_per_user_user_id",
+        "metric": "nullValues",
+        "mustBe": 0
+       },
+       {
+        "id": "unique_revenue_per_user_user_id",
+        "metric": "duplicateValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true,
+      "unique": true
+     },
+     {
+      "name": "acquisition_month",
+      "quality": [
+       {
+        "id": "not_null_revenue_per_user_acquisition_month",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "Sum of fee_amount_eur across this user's transactions. Zero for users with none.",
+      "name": "revenue_eur",
+      "quality": [
+       {
+        "id": "not_null_revenue_per_user_revenue_eur",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "Sum of amount_eur. Carried beside revenue_eur so the volume/revenue distinction stays visible.",
+      "name": "gross_volume_eur",
+      "quality": [
+       {
+        "id": "not_null_revenue_per_user_gross_volume_eur",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     }
+    ],
+    "quality": [
+     {
+      "engine": "dbt",
+      "id": "assert_revenue_non_negative",
+      "implementation": "assert_revenue_non_negative",
+      "name": "assert_revenue_non_negative",
+      "type": "custom"
+     }
+    ]
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "daily"
+  ],
+  "team": {
+   "name": "core"
+  },
+  "version": "0"
+ }
+}

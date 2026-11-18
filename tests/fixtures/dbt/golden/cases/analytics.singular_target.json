@@ -1,0 +1,140 @@
+{
+ "contract_hash": "sha256:916305d7dfae9d3f8449ee8c8ff2ce7e4db62169d80fa11bc525595e5a165291",
+ "flags": [],
+ "generated": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "service",
+    "value": "cases",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "project_tag",
+    "vendor": "continuo"
+   },
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/tagged/singular_target.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   }
+  ],
+  "description": {
+   "purpose": "A model that tests/assert_singular_target.sql checks."
+  },
+  "id": "analytics.singular_target",
+  "kind": "DataContract",
+  "name": "singular_target",
+  "schema": [
+   {
+    "description": "A model that tests/assert_singular_target.sql checks.",
+    "name": "singular_target",
+    "physicalName": "singular_target",
+    "physicalType": "table",
+    "quality": [
+     {
+      "engine": "dbt",
+      "id": "assert_singular_target",
+      "implementation": "assert_singular_target",
+      "name": "assert_singular_target",
+      "type": "custom"
+     }
+    ]
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "project_tag"
+  ],
+  "team": {
+   "name": "cases"
+  },
+  "version": "0"
+ },
+ "stored": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/tagged/singular_target.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "project_tag",
+    "vendor": "continuo"
+   },
+   {
+    "property": "service",
+    "value": "cases",
+    "vendor": "continuo"
+   }
+  ],
+  "description": {
+   "purpose": "A model that tests/assert_singular_target.sql checks."
+  },
+  "id": "analytics.singular_target",
+  "kind": "DataContract",
+  "name": "singular_target",
+  "schema": [
+   {
+    "description": "A model that tests/assert_singular_target.sql checks.",
+    "name": "singular_target",
+    "physicalName": "singular_target",
+    "physicalType": "table",
+    "quality": [
+     {
+      "engine": "dbt",
+      "id": "assert_singular_target",
+      "implementation": "assert_singular_target",
+      "name": "assert_singular_target",
+      "type": "custom"
+     }
+    ]
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "project_tag"
+  ],
+  "team": {
+   "name": "cases"
+  },
+  "version": "0"
+ }
+}

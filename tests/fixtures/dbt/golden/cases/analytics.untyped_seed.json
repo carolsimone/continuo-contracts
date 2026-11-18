@@ -1,0 +1,108 @@
+{
+ "contract_hash": "sha256:caa7a3ddffedad99cc62731ee20807392138f12231cbaa0d8763a78d9435ab24",
+ "flags": [],
+ "generated": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "service",
+    "value": "cases",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-seed",
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "seed",
+    "vendor": "continuo"
+   },
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "seeds/untyped_seed.csv",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "seed"
+    },
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.untyped_seed",
+  "kind": "DataContract",
+  "name": "untyped_seed",
+  "schema": [
+   {
+    "name": "untyped_seed",
+    "physicalName": "untyped_seed",
+    "physicalType": "table"
+   }
+  ],
+  "status": "active",
+  "team": {
+   "name": "cases"
+  },
+  "version": "0"
+ },
+ "stored": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "seeds/untyped_seed.csv",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-seed",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "seed"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "seed",
+    "vendor": "continuo"
+   },
+   {
+    "property": "service",
+    "value": "cases",
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.untyped_seed",
+  "kind": "DataContract",
+  "name": "untyped_seed",
+  "schema": [
+   {
+    "name": "untyped_seed",
+    "physicalName": "untyped_seed",
+    "physicalType": "table"
+   }
+  ],
+  "status": "active",
+  "team": {
+   "name": "cases"
+  },
+  "version": "0"
+ }
+}

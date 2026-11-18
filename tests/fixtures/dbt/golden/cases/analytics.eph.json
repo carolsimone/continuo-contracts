@@ -1,0 +1,114 @@
+{
+ "contract_hash": "sha256:00b47acb350f3e7a263450c091c712ddced292ab0f7206b30fa374468abf4590",
+ "flags": [],
+ "generated": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "service",
+    "value": "cases",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "project_tag",
+    "vendor": "continuo"
+   },
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/tagged/eph.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "ephemeral"
+    },
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.eph",
+  "kind": "DataContract",
+  "name": "eph",
+  "schema": [
+   {
+    "name": "eph",
+    "physicalName": "eph",
+    "physicalType": "ephemeral"
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "project_tag"
+  ],
+  "team": {
+   "name": "cases"
+  },
+  "version": "0"
+ },
+ "stored": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/tagged/eph.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "ephemeral"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "project_tag",
+    "vendor": "continuo"
+   },
+   {
+    "property": "service",
+    "value": "cases",
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.eph",
+  "kind": "DataContract",
+  "name": "eph",
+  "schema": [
+   {
+    "name": "eph",
+    "physicalName": "eph",
+    "physicalType": "ephemeral"
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "project_tag"
+  ],
+  "team": {
+   "name": "cases"
+  },
+  "version": "0"
+ }
+}

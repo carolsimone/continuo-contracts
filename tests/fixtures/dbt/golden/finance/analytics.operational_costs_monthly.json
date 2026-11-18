@@ -1,0 +1,278 @@
+{
+ "contract_hash": "sha256:d9aa78a94848b09bd2983121ca33a0f6c1652400825cbe1d42083da8aee2be70",
+ "flags": [],
+ "generated": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "service",
+    "value": "finance",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "daily",
+    "vendor": "continuo"
+   },
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/operational_costs_monthly.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   }
+  ],
+  "description": {
+   "purpose": "Operational costs rolled up to one row per month, with COGS/R&D/G&A breakdown columns. Source of the monthly totals that operational_cost_per_user divides across users acquired that month. All amounts are EUR."
+  },
+  "id": "analytics.operational_costs_monthly",
+  "kind": "DataContract",
+  "name": "operational_costs_monthly",
+  "schema": [
+   {
+    "description": "Operational costs rolled up to one row per month, with COGS/R&D/G&A breakdown columns. Source of the monthly totals that operational_cost_per_user divides across users acquired that month. All amounts are EUR.",
+    "name": "operational_costs_monthly",
+    "physicalName": "operational_costs_monthly",
+    "physicalType": "table",
+    "properties": [
+     {
+      "description": "First day of the calendar month the costs fall in.",
+      "name": "cost_month",
+      "primaryKey": true,
+      "quality": [
+       {
+        "id": "not_null_operational_costs_monthly_cost_month",
+        "metric": "nullValues",
+        "mustBe": 0
+       },
+       {
+        "id": "unique_operational_costs_monthly_cost_month",
+        "metric": "duplicateValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true,
+      "unique": true
+     },
+     {
+      "description": "Total operational cost for the month, in EUR, rounded to cents. Equals cogs_eur + rd_eur + ga_eur, and also equals variable_cost_eur + fixed_cost_eur.",
+      "name": "total_cost_eur",
+      "quality": [
+       {
+        "id": "not_null_operational_costs_monthly_total_cost_eur",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "The variable share (cloud hosting, transaction fees) of the month's operational cost, in EUR. The basis for the per-user variable_cost_eur that ltv_per_user subtracts from revenue to get contribution margin.",
+      "name": "variable_cost_eur",
+      "quality": [
+       {
+        "id": "not_null_operational_costs_monthly_variable_cost_eur",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "The fixed share (e.g. salaries, customer support) of the month's operational cost, in EUR. Excluded from contribution margin in ltv_per_user; belongs in a fully-allocated view instead.",
+      "name": "fixed_cost_eur",
+      "quality": [
+       {
+        "id": "not_null_operational_costs_monthly_fixed_cost_eur",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "Number of cost-line seed rows rolled into this month.",
+      "name": "cost_line_count",
+      "quality": [
+       {
+        "id": "not_null_operational_costs_monthly_cost_line_count",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     }
+    ],
+    "quality": [
+     {
+      "engine": "dbt",
+      "id": "assert_operational_costs_within_acquisition_window",
+      "implementation": "assert_operational_costs_within_acquisition_window",
+      "name": "assert_operational_costs_within_acquisition_window",
+      "type": "custom"
+     }
+    ]
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "daily"
+  ],
+  "team": {
+   "name": "finance"
+  },
+  "version": "0"
+ },
+ "stored": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/operational_costs_monthly.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "daily",
+    "vendor": "continuo"
+   },
+   {
+    "property": "service",
+    "value": "finance",
+    "vendor": "continuo"
+   }
+  ],
+  "description": {
+   "purpose": "Operational costs rolled up to one row per month, with COGS/R&D/G&A breakdown columns. Source of the monthly totals that operational_cost_per_user divides across users acquired that month. All amounts are EUR."
+  },
+  "id": "analytics.operational_costs_monthly",
+  "kind": "DataContract",
+  "name": "operational_costs_monthly",
+  "schema": [
+   {
+    "description": "Operational costs rolled up to one row per month, with COGS/R&D/G&A breakdown columns. Source of the monthly totals that operational_cost_per_user divides across users acquired that month. All amounts are EUR.",
+    "name": "operational_costs_monthly",
+    "physicalName": "operational_costs_monthly",
+    "physicalType": "table",
+    "properties": [
+     {
+      "description": "First day of the calendar month the costs fall in.",
+      "name": "cost_month",
+      "primaryKey": true,
+      "quality": [
+       {
+        "id": "not_null_operational_costs_monthly_cost_month",
+        "metric": "nullValues",
+        "mustBe": 0
+       },
+       {
+        "id": "unique_operational_costs_monthly_cost_month",
+        "metric": "duplicateValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true,
+      "unique": true
+     },
+     {
+      "description": "Total operational cost for the month, in EUR, rounded to cents. Equals cogs_eur + rd_eur + ga_eur, and also equals variable_cost_eur + fixed_cost_eur.",
+      "name": "total_cost_eur",
+      "quality": [
+       {
+        "id": "not_null_operational_costs_monthly_total_cost_eur",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "The variable share (cloud hosting, transaction fees) of the month's operational cost, in EUR. The basis for the per-user variable_cost_eur that ltv_per_user subtracts from revenue to get contribution margin.",
+      "name": "variable_cost_eur",
+      "quality": [
+       {
+        "id": "not_null_operational_costs_monthly_variable_cost_eur",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "The fixed share (e.g. salaries, customer support) of the month's operational cost, in EUR. Excluded from contribution margin in ltv_per_user; belongs in a fully-allocated view instead.",
+      "name": "fixed_cost_eur",
+      "quality": [
+       {
+        "id": "not_null_operational_costs_monthly_fixed_cost_eur",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "Number of cost-line seed rows rolled into this month.",
+      "name": "cost_line_count",
+      "quality": [
+       {
+        "id": "not_null_operational_costs_monthly_cost_line_count",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     }
+    ],
+    "quality": [
+     {
+      "engine": "dbt",
+      "id": "assert_operational_costs_within_acquisition_window",
+      "implementation": "assert_operational_costs_within_acquisition_window",
+      "name": "assert_operational_costs_within_acquisition_window",
+      "type": "custom"
+     }
+    ]
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "daily"
+  ],
+  "team": {
+   "name": "finance"
+  },
+  "version": "0"
+ }
+}

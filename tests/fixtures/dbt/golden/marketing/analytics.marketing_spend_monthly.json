@@ -1,0 +1,288 @@
+{
+ "contract_hash": "sha256:fba7c8351f712a3d28ea160f58b33ec75adc8380b5efbe4c8ec1fefd72b79e16",
+ "flags": [],
+ "generated": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "service",
+    "value": "marketing",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "daily",
+    "vendor": "continuo"
+   },
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/marketing_spend_monthly.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   }
+  ],
+  "description": {
+   "purpose": "Marketing spend rolled up to one row per channel per month. Source of the channel-month totals that marketing_cost_per_user divides across acquired users. All amounts are EUR."
+  },
+  "id": "analytics.marketing_spend_monthly",
+  "kind": "DataContract",
+  "name": "marketing_spend_monthly",
+  "schema": [
+   {
+    "description": "Marketing spend rolled up to one row per channel per month. Source of the channel-month totals that marketing_cost_per_user divides across acquired users. All amounts are EUR.",
+    "name": "marketing_spend_monthly",
+    "physicalName": "marketing_spend_monthly",
+    "physicalType": "table",
+    "properties": [
+     {
+      "description": "Paid acquisition channel. Six channels we spend on appear here (five ad channels plus referral, which is paid via the per-signup bounty); organic never does.",
+      "name": "channel",
+      "quality": [
+       {
+        "id": "not_null_marketing_spend_monthly_channel",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "First day of the calendar month the spend falls in.",
+      "name": "spend_month",
+      "quality": [
+       {
+        "id": "not_null_marketing_spend_monthly_spend_month",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "Total spend for the channel that month, in EUR, rounded to cents.",
+      "name": "spend_eur",
+      "quality": [
+       {
+        "id": "not_null_marketing_spend_monthly_spend_eur",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "Number of campaign-level seed rows rolled into this channel-month.",
+      "name": "campaign_count",
+      "quality": [
+       {
+        "id": "not_null_marketing_spend_monthly_campaign_count",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "Total ad impressions served across the channel's campaigns that month.",
+      "name": "impressions",
+      "quality": [
+       {
+        "id": "not_null_marketing_spend_monthly_impressions",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "Total ad clicks across the channel's campaigns that month.",
+      "name": "clicks",
+      "quality": [
+       {
+        "id": "not_null_marketing_spend_monthly_clicks",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     }
+    ],
+    "quality": [
+     {
+      "engine": "dbt",
+      "id": "assert_spend_monthly_unique_channel_month",
+      "implementation": "assert_spend_monthly_unique_channel_month",
+      "name": "assert_spend_monthly_unique_channel_month",
+      "type": "custom"
+     }
+    ]
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "daily"
+  ],
+  "team": {
+   "name": "marketing"
+  },
+  "version": "0"
+ },
+ "stored": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/marketing_spend_monthly.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "daily",
+    "vendor": "continuo"
+   },
+   {
+    "property": "service",
+    "value": "marketing",
+    "vendor": "continuo"
+   }
+  ],
+  "description": {
+   "purpose": "Marketing spend rolled up to one row per channel per month. Source of the channel-month totals that marketing_cost_per_user divides across acquired users. All amounts are EUR."
+  },
+  "id": "analytics.marketing_spend_monthly",
+  "kind": "DataContract",
+  "name": "marketing_spend_monthly",
+  "schema": [
+   {
+    "description": "Marketing spend rolled up to one row per channel per month. Source of the channel-month totals that marketing_cost_per_user divides across acquired users. All amounts are EUR.",
+    "name": "marketing_spend_monthly",
+    "physicalName": "marketing_spend_monthly",
+    "physicalType": "table",
+    "properties": [
+     {
+      "description": "Paid acquisition channel. Six channels we spend on appear here (five ad channels plus referral, which is paid via the per-signup bounty); organic never does.",
+      "name": "channel",
+      "quality": [
+       {
+        "id": "not_null_marketing_spend_monthly_channel",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "First day of the calendar month the spend falls in.",
+      "name": "spend_month",
+      "quality": [
+       {
+        "id": "not_null_marketing_spend_monthly_spend_month",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "Total spend for the channel that month, in EUR, rounded to cents.",
+      "name": "spend_eur",
+      "quality": [
+       {
+        "id": "not_null_marketing_spend_monthly_spend_eur",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "Number of campaign-level seed rows rolled into this channel-month.",
+      "name": "campaign_count",
+      "quality": [
+       {
+        "id": "not_null_marketing_spend_monthly_campaign_count",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "Total ad impressions served across the channel's campaigns that month.",
+      "name": "impressions",
+      "quality": [
+       {
+        "id": "not_null_marketing_spend_monthly_impressions",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "Total ad clicks across the channel's campaigns that month.",
+      "name": "clicks",
+      "quality": [
+       {
+        "id": "not_null_marketing_spend_monthly_clicks",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     }
+    ],
+    "quality": [
+     {
+      "engine": "dbt",
+      "id": "assert_spend_monthly_unique_channel_month",
+      "implementation": "assert_spend_monthly_unique_channel_month",
+      "name": "assert_spend_monthly_unique_channel_month",
+      "type": "custom"
+     }
+    ]
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "daily"
+  ],
+  "team": {
+   "name": "marketing"
+  },
+  "version": "0"
+ }
+}

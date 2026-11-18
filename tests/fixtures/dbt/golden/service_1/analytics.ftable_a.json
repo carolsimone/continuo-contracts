@@ -1,0 +1,114 @@
+{
+ "contract_hash": "sha256:1e4e43ab90cf74a0d21f2f56e2003ac8b4d510456dd12957970de10a873504b5",
+ "flags": [],
+ "generated": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "service",
+    "value": "service-1",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "hourly",
+    "vendor": "continuo"
+   },
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/ftable_a.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.ftable_a",
+  "kind": "DataContract",
+  "name": "ftable_a",
+  "schema": [
+   {
+    "name": "ftable_a",
+    "physicalName": "ftable_a",
+    "physicalType": "table"
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "hourly"
+  ],
+  "team": {
+   "name": "test"
+  },
+  "version": "0"
+ },
+ "stored": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/ftable_a.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "hourly",
+    "vendor": "continuo"
+   },
+   {
+    "property": "service",
+    "value": "service-1",
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.ftable_a",
+  "kind": "DataContract",
+  "name": "ftable_a",
+  "schema": [
+   {
+    "name": "ftable_a",
+    "physicalName": "ftable_a",
+    "physicalType": "table"
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "hourly"
+  ],
+  "team": {
+   "name": "test"
+  },
+  "version": "0"
+ }
+}

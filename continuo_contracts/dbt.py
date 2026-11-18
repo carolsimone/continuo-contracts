@@ -30,7 +30,8 @@ the identity, the owner, the tags, the roles, continuo's root properties and the
 with the declared columns, their types, and the quality rules and relationships the tests give.
 It also gives the SHA-256 of the fields of the node, of its tests and of the nodes its
 relationships point to that it reads, and of nothing else of them. `logical_type` gives the ODCS
-logical type of a declared column type.
+logical type of a declared column type. `run_facts` reads back from a contract what continuo
+runs the node with.
 
 A field of a node in a shape these functions cannot read raises `DbtNodeError`.
 """
@@ -1230,4 +1231,58 @@ def generate(
         document=_without_empty(document),
         flags=tuple(flag for flag in FLAGS if flag in run.flags),
         source_sha256=_source_sha256(run, tests),
+    )
+
+
+@dataclass(frozen=True)
+class RunFacts:
+    """What continuo runs a dbt node with, as its contract says it.
+
+    `unique_id` is the contract's `id`, `schema` that id without `.<table>`, so it is lower
+    case, `table` the schema object's `name` and `physical_name` its `physicalName` (else the
+    table). `service`, `kind`, `schedule`, `criticality`, `timeout_minutes` and `file_path` are
+    the root `continuo` properties `service`, `kind`, `schedule` (`""` for a dormant node, which
+    has none), `criticality` (`DEFAULT_CRITICALITY` when absent), `timeoutMinutes` (`None` when
+    absent) and `filePath`. `owner` is `team.name`, and `materialized` the `materialized` of the
+    `materialization` property.
+    """
+
+    unique_id: str
+    schema: str
+    table: str
+    physical_name: str
+    service: str
+    kind: str
+    schedule: str
+    criticality: str
+    timeout_minutes: int | None
+    file_path: str
+    owner: str
+    materialized: str
+
+
+def run_facts(document: Mapping[str, Any]) -> RunFacts:
+    """Return the run facts of the dbt contract `document`.
+
+    `document` is a contract that `validate.validate_dbt_contract` accepted, as `generate` wrote
+    it or in its stored form; both give the same facts. Each value is read as the contract holds
+    it, and none is checked.
+    """
+    table_object = document["schema"][0]
+    table = table_object["name"]
+    values = continuo_values(document["customProperties"])
+    contract_id = document["id"]
+    return RunFacts(
+        unique_id=contract_id,
+        schema=contract_id.removesuffix(f".{table.lower()}"),
+        table=table,
+        physical_name=table_object.get("physicalName") or table,
+        service=values["service"],
+        kind=values["kind"],
+        schedule=values.get("schedule", ""),
+        criticality=values.get("criticality", DEFAULT_CRITICALITY),
+        timeout_minutes=values.get("timeoutMinutes"),
+        file_path=values["filePath"],
+        owner=document["team"]["name"],
+        materialized=values["materialization"]["materialized"],
     )

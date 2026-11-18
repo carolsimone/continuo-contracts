@@ -1,0 +1,126 @@
+{
+ "contract_hash": "sha256:5b213121552e612111f2397b76a6aee29b69a60ffbabc0b92c79927bf1b74fd4",
+ "flags": [],
+ "generated": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "service",
+    "value": "core",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-seed",
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "seed",
+    "vendor": "continuo"
+   },
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "seeds/seed_users.csv",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "seed"
+    },
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.seed_users",
+  "kind": "DataContract",
+  "name": "seed_users",
+  "schema": [
+   {
+    "name": "seed_users",
+    "physicalName": "seed_users",
+    "physicalType": "table",
+    "quality": [
+     {
+      "engine": "dbt",
+      "id": "assert_transactions_after_acquisition",
+      "implementation": "assert_transactions_after_acquisition",
+      "name": "assert_transactions_after_acquisition",
+      "type": "custom"
+     }
+    ]
+   }
+  ],
+  "status": "active",
+  "team": {
+   "name": "core"
+  },
+  "version": "0"
+ },
+ "stored": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "seeds/seed_users.csv",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-seed",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "seed"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "seed",
+    "vendor": "continuo"
+   },
+   {
+    "property": "service",
+    "value": "core",
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.seed_users",
+  "kind": "DataContract",
+  "name": "seed_users",
+  "schema": [
+   {
+    "name": "seed_users",
+    "physicalName": "seed_users",
+    "physicalType": "table",
+    "quality": [
+     {
+      "engine": "dbt",
+      "id": "assert_transactions_after_acquisition",
+      "implementation": "assert_transactions_after_acquisition",
+      "name": "assert_transactions_after_acquisition",
+      "type": "custom"
+     }
+    ]
+   }
+  ],
+  "status": "active",
+  "team": {
+   "name": "core"
+  },
+  "version": "0"
+ }
+}
