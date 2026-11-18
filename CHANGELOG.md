@@ -28,8 +28,10 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `roles` (readers and grants), the fourteen root `continuo` properties a dbt contract may carry,
   each only when it has a value, and one schema object with its `physicalName`, `physicalType` and
   declared `reads`. It returns a `Generated` with the document, the contract's flags (`FLAGS`) and
-  `source_sha256`, the SHA-256 of the manifest fields it read. A `deprecationDate` is the date the
-  team wrote in every time zone. A field of the node in a shape it cannot read raises
+  `source_sha256`, the SHA-256 of exactly the manifest fields it reads, down to the keys of
+  `config`, `config.meta` and `config.meta.continuo`, so another `config` or `meta` key never moves
+  it. A `deprecationDate` is the date the team wrote in every time zone. A field of the node in a
+  shape it cannot read, or a field it reads whose value canonical JSON cannot write, raises
   `DbtNodeError`.
 - Test fixtures for dbt nodes: `tests/fixtures/dbt/projects` holds the dbt projects `core`,
   `finance`, `marketing` and `service_1`, copied from continuo-demo at commit

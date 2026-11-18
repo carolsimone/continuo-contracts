@@ -569,8 +569,17 @@ the database or the compiled SQL:
   node's description, and `config.meta.continuo.reads` as its `reads` custom property.
 
 A field with no value is left out of the document. The result does not depend on the order of the
-keys of the node or on the machine's time zone, and `source_sha256` covers only the manifest fields
-`generate` reads, so `created_at` and the compiled SQL never move it.
+keys of the node or on the machine's time zone.
+
+`source_sha256` covers exactly the fields `generate` reads and nothing else of the node: the node's
+`resource_type`, `name`, `version`, `schema`, `alias`, `fqn`, `original_file_path`,
+`description`, `tags` and `deprecation_date`; from `config`, the keys the list above maps
+(`contract.enforced` and `freshness.build_after`'s `count` and `period` only, not the rest of
+`contract` or `freshness`); from `config.meta`, `owner`, `criticality` and `timeout_minutes`; and
+from `config.meta.continuo`, `readers` and `reads`. Any other `config` or `meta` key,
+`created_at`, `raw_code` and the compiled SQL never move it. A field it reads whose value canonical
+JSON cannot write, such as an integer outside -(2**53 - 1) to 2**53 - 1, raises `DbtNodeError`
+naming the field; such a value in a field it does not read changes nothing.
 
 ```python
 generated = generate(
@@ -617,12 +626,12 @@ generated.flags  # ()
 - `Generated`: what `generate` returns, a frozen dataclass with the fields `document` (the ODCS
   contract, a `dict`), `flags` (the marks of `FLAGS` the contract carries, a tuple) and
   `source_sha256` (the lowercase hex SHA-256 of the canonical JSON of the manifest fields
-  `generate` read for the node and its tests).
+  `generate` reads for the node and its tests, and of nothing else).
 - `generate`: `generate(node, tests, *, manifest) -> Generated` writes the ODCS contract of a node
   that `skip_reason` keeps, from the node, its tests as `tests_by_node` joins them and the
   manifest they come from. A field of the node in a shape it cannot read, such as a `config.meta`
-  that is not a mapping or a `config.meta.owner` that is not a non-empty string, raises
-  `DbtNodeError`.
+  that is not a mapping or a `config.meta.owner` that is not a non-empty string, or a field it
+  reads whose value canonical JSON cannot write, raises `DbtNodeError`.
 
 ## vocabulary
 

@@ -4,6 +4,8 @@ import copy
 import os
 import time
 
+from collections.abc import Mapping
+
 import pytest
 
 from dbt_fixtures import load_manifest
@@ -33,8 +35,9 @@ ROOT_ORDER = (
     "quoteColumns",
 )
 
-# Each top-level key of a manifest node that the generator reads, with another value for it of the
-# right shape: a change to any of them moves `source_sha256`.
+# Each field of a manifest node that the generator reads, as a dotted path, with another value for
+# it of the right shape: a change to any of them moves `source_sha256`. The paths are exactly the
+# fields the generator declares, so a field it starts to read is added here too.
 READ_FIELDS = (
     ("resource_type", "snapshot"),
     ("name", "governed_2"),
@@ -46,8 +49,47 @@ READ_FIELDS = (
     ("description", "Governed."),
     ("tags", ["hourly"]),
     ("deprecation_date", "2027-01-01T00:00:00+00:00"),
-    ("config", {"materialized": "view", "meta": {"owner": "cases"}}),
+    ("config.materialized", "view"),
+    ("config.unique_key", "id"),
+    ("config.incremental_strategy", "merge"),
+    ("config.on_schema_change", "fail"),
+    ("config.contract.enforced", True),
+    ("config.access", "public"),
+    ("config.group", "other_team"),
+    ("config.freshness.build_after.count", 8),
+    ("config.freshness.build_after.period", "day"),
+    ("config.grants", {"select": ["reporter"]}),
+    ("config.strategy", "check"),
+    ("config.updated_at", "updated_at"),
+    ("config.check_cols", ["status"]),
+    ("config.hard_deletes", "invalidate"),
+    ("config.snapshot_meta_column_names", {"dbt_scd_id": "scd_id"}),
+    ("config.dbt_valid_to_current", "to_date('9999-12-31')"),
+    ("config.quote_columns", False),
+    ("config.meta.owner", "finance"),
+    ("config.meta.criticality", "REGULATORY"),
+    ("config.meta.timeout_minutes", 30),
+    ("config.meta.continuo.readers", ["marketing"]),
+    ("config.meta.continuo.reads", ["analytics.orders"]),
 )
+
+
+def _get_path(node, path):
+    value = node
+    for key in path.split("."):
+        value = value.get(key) if isinstance(value, dict) else None
+    return value
+
+
+def _set_path(node, path, value):
+    """Set the field at the dotted `path` of `node`, making each mapping on the way."""
+    *parents, last = path.split(".")
+    target = node
+    for key in parents:
+        if not isinstance(target.get(key), dict):
+            target[key] = {}
+        target = target[key]
+    target[last] = value
 
 
 def _node(project, node_id):
@@ -440,13 +482,160 @@ def test_source_sha256_ignores_created_at_and_compiled_code():
     assert _generate(node, "finance").source_sha256 == before
 
 
+def test_read_fields_are_the_fields_the_generator_declares():
+    assert sorted(path for path, _ in READ_FIELDS) == sorted(dbt._READ_PATHS)
+
+
 @pytest.mark.parametrize(("field", "value"), READ_FIELDS)
 def test_source_sha256_moves_with_each_field_it_reads(field, value):
     node = _node("cases", "model.cases.governed")
     before = _generate(node, "cases").source_sha256
-    assert node[field] != value
-    node[field] = value
+    assert _get_path(node, field) != value
+    _set_path(node, field, value)
     assert _generate(node, "cases").source_sha256 != before
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("config.persist_docs", {"relation": True}),
+        ("config.post-hook", [{"sql": "grant select on {{ this }} to x"}]),
+        ("config.contract.alias_types", False),
+        ("config.freshness.build_after.updates_on", "all"),
+        ("config.meta.unrelated", "a note"),
+        ("config.meta.ticket", 2**70),
+        ("config.meta.continuo.entity", "Transaction"),
+        ("checksum", {"name": "sha256", "checksum": "0" * 64}),
+        ("unrendered_config", {"materialized": "view"}),
+    ],
+)
+def test_a_field_the_generator_does_not_read_moves_nothing(field, value):
+    node = _node("cases", "model.cases.governed")
+    before = _generate(node, "cases")
+    _set_path(node, field, value)
+    after = _generate(node, "cases")
+    assert after.source_sha256 == before.source_sha256
+    assert after.document == before.document
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        (
+            "config.meta.timeout_minutes",
+            2**70,
+            "config.meta.timeout_minutes: integer is outside -(2**53 - 1) to 2**53 - 1",
+        ),
+        (
+            "config.meta.timeout_minutes",
+            float("nan"),
+            "config.meta.timeout_minutes: NaN and the infinities are not JSON numbers",
+        ),
+        (
+            "config.unique_key",
+            ["id", 2**70],
+            "config.unique_key[1]: integer is outside -(2**53 - 1) to 2**53 - 1",
+        ),
+    ],
+)
+def test_a_read_value_canonical_json_cannot_write_raises_dbt_node_error(
+    field, value, message
+):
+    node = _node("cases", "model.cases.governed")
+    _set_path(node, field, value)
+    with pytest.raises(DbtNodeError) as raised:
+        _generate(node, "cases")
+    assert str(raised.value) == f"model.cases.governed: {message}"
+
+
+class _Recording(Mapping):
+    """A read-only view of a mapping that records the dotted path of every key read from it.
+
+    A value that is a mapping comes back as a `_Recording` too, so reads at any depth count.
+    """
+
+    def __init__(self, data, seen, prefix=""):
+        self._data = data
+        self._seen = seen
+        self._prefix = prefix
+
+    def __getitem__(self, key):
+        path = f"{self._prefix}{key}"
+        self._seen.add(path)
+        value = self._data[key]
+        if isinstance(value, Mapping):
+            return _Recording(value, self._seen, f"{path}.")
+        return value
+
+    def __iter__(self):
+        return iter(self._data)
+
+    def __len__(self):
+        return len(self._data)
+
+
+def _undeclared(seen, declared):
+    """Return the paths of `seen` that are neither a declared field, a field below one, nor a
+    mapping on the way to one. `unique_id` is read only to name a node in an error."""
+    allowed = {*declared, "unique_id"}
+
+    def inside(path):
+        return any(
+            path == field
+            or path.startswith(f"{field}.")
+            or field.startswith(f"{path}.")
+            for field in allowed
+        )
+
+    return sorted(path for path in seen if not inside(path))
+
+
+def _reads_of(project, node_id):
+    """Run `generate` on recording views of a node and its tests, and return what it read."""
+    manifest = load_manifest(project)
+    node_seen, test_seen = set(), set()
+    node = _Recording(manifest["nodes"][node_id], node_seen)
+    tests = [
+        _Recording(test, test_seen)
+        for test in dbt.tests_by_node(manifest).get(node_id, [])
+    ]
+    generated = dbt.generate(node, tests, manifest=manifest)
+    assert generated == _generated(project, node_id)
+    return node_seen, test_seen
+
+
+GUARDED_NODES = sorted(
+    {
+        ("finance", "model.finance.fx_transactions_eur"),
+        ("core", "seed.core.seed_users"),
+        ("cases", "model.cases.governed"),
+        ("cases", "model.cases.incr"),
+        ("cases", "model.cases.enforced"),
+        ("cases", "seed.cases.typed_seed"),
+        ("cases", "snapshot.cases.orders_snapshot"),
+        *(
+            (project, node_id)
+            for project in PROJECTS
+            for node_id in _kept(project)
+        ),
+    }
+)
+
+
+@pytest.mark.parametrize(("project", "node_id"), GUARDED_NODES)
+def test_the_generator_reads_only_the_fields_it_declares(project, node_id):
+    node_seen, test_seen = _reads_of(project, node_id)
+    assert _undeclared(node_seen, dbt._READ_PATHS) == []
+    assert _undeclared(test_seen, dbt._TEST_FIELDS) == []
+
+
+def test_the_read_guard_finds_a_field_that_is_not_declared():
+    node_seen, _ = _reads_of("cases", "model.cases.governed")
+    declared = [
+        path for path in dbt._READ_PATHS if path != "config.meta.timeout_minutes"
+    ]
+    assert _undeclared(node_seen, declared) == ["config.meta.timeout_minutes"]
+    assert "config.meta.ticket" not in node_seen
 
 
 def test_source_sha256_does_not_depend_on_key_order():

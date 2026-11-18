@@ -27,6 +27,8 @@ schedule: it is a dormant node that runs only by hand.
 
 `generate` writes the ODCS contract of a kept node from the node and its tests: the envelope,
 the identity, the owner, the tags, the roles, continuo's root properties and the schema object.
+It also gives the SHA-256 of the fields of the node and its tests that it reads, and of nothing
+else of them.
 
 A field of a node in a shape these functions cannot read raises `DbtNodeError`.
 """
@@ -37,7 +39,7 @@ from datetime import datetime
 from typing import Any, Final
 
 from continuo_contracts.canonical import canonical_json, normalise_text
-from continuo_contracts.errors import DbtNodeError
+from continuo_contracts.errors import CanonicalJsonError, DbtNodeError
 from continuo_contracts.hashing import sha256_hex
 from continuo_contracts.vocabulary import VENDOR
 
@@ -64,8 +66,12 @@ FLAGS: Final = (
     "primary_key_column_not_declared",
 )
 
-# The top-level keys of a manifest node that `generate` reads. `source_sha256` covers their values
-# and nothing else of the node, so `created_at` and the compiled SQL never move it.
+# The fields of a manifest node that `generate` reads, by where they sit: the node's own keys
+# (`config` apart), the keys of its `config`, of `config.meta` and of `config.meta.continuo`. A
+# name with a dot reaches further down, as `contract.enforced` is `config.contract.enforced`.
+# `source_sha256` covers the values of these fields and nothing else of the node, so `created_at`,
+# the compiled SQL and a `meta` key that continuo does not read never move it. The node's
+# `unique_id` is read too, but only to name the node in an error.
 _NODE_FIELDS: Final = (
     "resource_type",
     "name",
@@ -77,10 +83,38 @@ _NODE_FIELDS: Final = (
     "description",
     "tags",
     "deprecation_date",
-    "config",
+)
+_CONFIG_FIELDS: Final = (
+    "materialized",
+    "unique_key",
+    "incremental_strategy",
+    "on_schema_change",
+    "contract.enforced",
+    "access",
+    "group",
+    "freshness.build_after.count",
+    "freshness.build_after.period",
+    "grants",
+    "strategy",
+    "updated_at",
+    "check_cols",
+    "hard_deletes",
+    "snapshot_meta_column_names",
+    "dbt_valid_to_current",
+    "quote_columns",
+)
+_META_FIELDS: Final = ("owner", "criticality", "timeout_minutes")
+_CONTINUO_META_FIELDS: Final = ("readers", "reads")
+
+# Every field above as a dotted path from the node.
+_READ_PATHS: Final = (
+    *_NODE_FIELDS,
+    *(f"config.{name}" for name in _CONFIG_FIELDS),
+    *(f"config.meta.{name}" for name in _META_FIELDS),
+    *(f"config.meta.continuo.{name}" for name in _CONTINUO_META_FIELDS),
 )
 
-# The top-level keys of a test node that `generate` reads.
+# The fields of a test node that `generate` reads, as dotted paths from the test node.
 _TEST_FIELDS: Final[tuple[str, ...]] = ()
 
 # dbt's default of `config.on_schema_change` and of a model's `config.access`, which a contract
@@ -255,7 +289,8 @@ class Generated:
 
     `document` is the ODCS contract. `flags` names the marks of `FLAGS` that the contract carries.
     `source_sha256` is the lowercase hex SHA-256 of the canonical JSON of the manifest fields that
-    `generate` read, so it moves only when one of them does.
+    `generate` reads for the node and its tests and of nothing else, so it moves only when one of
+    them does.
     """
 
     document: dict[str, Any]
@@ -456,14 +491,51 @@ def _roles(
     return roles
 
 
+def _read_values(
+    source: Mapping[str, Any], paths: Sequence[str]
+) -> dict[str, Any]:
+    """Return the fields of `source` at the dotted `paths`, nested as `source` holds them.
+
+    A field that is missing is left out. A value on the way that is not a mapping, such as a null
+    `config.contract`, is kept as it is, since it is what the field's reader saw. A value that
+    canonical JSON cannot write raises `DbtNodeError`, which names the field.
+    """
+    picked: dict[str, Any] = {}
+    for path in paths:
+        _pick(source, source, path.split("."), picked, "")
+    return picked
+
+
+def _pick(
+    source: Mapping[str, Any],
+    value: object,
+    keys: list[str],
+    target: dict[str, Any],
+    prefix: str,
+) -> None:
+    """Copy the field `keys` of `value`, which sits at `prefix` in `source`, into `target`."""
+    key, rest = keys[0], keys[1:]
+    if not isinstance(value, Mapping) or key not in value:
+        return
+    child = value[key]
+    if rest and isinstance(child, Mapping):
+        _pick(source, child, rest, target.setdefault(key, {}), f"{prefix}{key}.")
+        return
+    try:
+        canonical_json(child)
+    except CanonicalJsonError as error:
+        raise DbtNodeError(
+            f"{_label(source)}: {prefix}{key}{str(error).removeprefix('$')}"
+        ) from None
+    target[key] = child
+
+
 def _source_sha256(
     node: Mapping[str, Any], tests: Sequence[Mapping[str, Any]]
 ) -> str:
-    read_tests = [
-        {key: test[key] for key in _TEST_FIELDS if key in test} for test in tests
-    ]
+    read_tests = [_read_values(test, _TEST_FIELDS) for test in tests]
     inputs = {
-        "node": {key: node[key] for key in _NODE_FIELDS if key in node},
+        "node": _read_values(node, _READ_PATHS),
         "tests": sorted(read_tests, key=canonical_json),
     }
     return sha256_hex(canonical_json(inputs))
@@ -485,8 +557,14 @@ def generate(
     out, and descriptions are trimmed. The result does not depend on the order of a mapping's
     keys or on the machine's time zone.
 
-    A field of `node` in a shape the generator cannot read raises `DbtNodeError`, whose message
-    starts with the node's id and names the field.
+    `source_sha256` covers only the fields of the node that the generator reads: its own keys
+    such as `name`, `tags` and `deprecation_date`, and the keys of `config`, `config.meta` and
+    `config.meta.continuo` that it maps. Another `config` or `meta` key, `created_at` and the
+    compiled SQL never move it.
+
+    A field of `node` in a shape the generator cannot read, or that it reads and canonical JSON
+    cannot write (such as an integer outside -(2**53 - 1) to 2**53 - 1), raises `DbtNodeError`,
+    whose message starts with the node's id and names the field.
     """
     config = _mapping(node, "config", node.get("config"))
     meta = _mapping(node, "config.meta", config.get("meta"))
