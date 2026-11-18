@@ -331,13 +331,16 @@ def normalise_dbt(
     The stored form is `doc` with the `continuo` property `reads` of the schema object holding the
     tables of `reads` joined with the tables that property lists in `doc`, their ASCII letters in
     lower case, sorted by code point and listed once, and left out when there are none; the
-    `primaryKeyPosition` of the only column with `primaryKey: true` is dropped. The result is then written in the
-    canonical form that the module describes. Storing a stored form again with no `reads` gives
-    it back unchanged.
+    `primaryKeyPosition` of the only column with `primaryKey: true` is dropped. The result is then
+    written in the canonical form that the module describes. Storing a stored form again with no
+    `reads` gives it back unchanged.
 
     Raises `HashInputError` when `reads` is a string, or when `reads` or the schema object's
     `reads` lists a table that is not a string of exactly two parts joined by a dot, neither
-    empty, with no whitespace and no control character.
+    empty, with no whitespace and no control character, and `CanonicalJsonError` when an item of a
+    set-like list holds a value that canonical JSON cannot write, such as a `mustBe` of 2**60. A
+    contract `dbt.generate` writes never holds one, but a stored contract passed back that
+    `validate.validate_dbt_contract` accepts can.
     """
     given = _reads(reads)
     stored: dict[str, Any] = _as_written(doc)

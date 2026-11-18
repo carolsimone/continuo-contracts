@@ -38,8 +38,8 @@
 --
 -- Known simplification: variable cost is allocated by acquisition cohort like
 -- everything else here, not by the user's own transaction volume. Per-user-
--- month amortization was ruled out of scope by this model's original design
--- (decision 5) and that still holds.
+-- month amortization was ruled out of scope by this model's original design,
+-- and that still holds.
 
 WITH acquisitions AS (
 
@@ -54,7 +54,7 @@ WITH acquisitions AS (
 cohort_size AS (
 
     -- How many users were acquired in each month -- the divisor. No channel
-    -- dimension: operational costs are company-wide (spec decision 4).
+    -- dimension: operational costs are company-wide.
     SELECT
         acquisition_month,
         COUNT(*) AS users_acquired

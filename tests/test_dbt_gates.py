@@ -13,7 +13,9 @@ from dbt_fixtures import load_manifest
 from continuo_contracts import dbt
 from continuo_contracts.errors import ContractsError, DbtNodeError
 
-GATES = Path(__file__).resolve().parent / "fixtures" / "dbt" / "todays_gates.json"
+GATES = (
+    Path(__file__).resolve().parent / "fixtures" / "dbt" / "recorded_gates.json"
+)
 PROJECTS = ("cases", "core", "finance", "marketing", "service_1")
 
 
@@ -71,9 +73,9 @@ def test_the_recorded_gates_cover_every_gate_and_the_nodes_that_pass():
 
 
 @pytest.mark.parametrize("project", PROJECTS)
-def test_skip_reason_matches_todays_gates_on_every_fixture_node(project):
-    # todays_gates.json holds what continuo's parse_manifest decided for each model, seed and
-    # snapshot of each fixture manifest: a skip reason, or null for a node it keeps.
+def test_skip_reason_matches_the_recorded_gates_on_every_fixture_node(project):
+    # recorded_gates.json holds the skip reason continuo's parser recorded for each model, seed
+    # and snapshot of each fixture manifest, or null for a node it keeps.
     recorded = json.loads(GATES.read_text(encoding="utf-8"))["projects"][project]
     m = load_manifest(project)
     service = dbt.project_service(m, "")

@@ -1011,9 +1011,15 @@ def test_the_fixed_input_names_are_distinct():
     assert len(set(FIXED_INPUT_NAMES)) == len(FIXED_INPUT_NAMES)
 
 
-# Terms the input-names section explains in prose: the `enforced` key of the dbt contract settings
-# and the function `shared_hash`. They are written in backticks and are not input names.
-_PROSE_TERMS = {"enforced", "shared_hash"}
+# Terms the input-names section explains in prose: the `enforced` key of the dbt contract settings,
+# the functions `shared_hash` and `contract_hash` and the list `contract_hash_exclusions`. They
+# are written in backticks and are not input names.
+_PROSE_TERMS = {
+    "enforced",
+    "shared_hash",
+    "contract_hash",
+    "contract_hash_exclusions",
+}
 _PATTERN_PREFIXES = ("config.", "projection.", "odcs.")
 
 

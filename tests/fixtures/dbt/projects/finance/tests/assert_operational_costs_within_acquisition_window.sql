@@ -1,4 +1,4 @@
--- Timeline-drift guard (spec decision 6): every cost month must fall inside
+-- Timeline-drift guard: every cost month must fall inside
 -- the acquisition window covered by core's seed_users. Months with costs but
 -- zero signups INSIDE the window are fine (unallocated by design); a cost
 -- month OUTSIDE the window means the two seeds' timelines have drifted apart

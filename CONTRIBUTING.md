@@ -72,6 +72,9 @@ a line with a test through the public functions, or delete it when no input can 
 - **Fingerprint declaration.** Change `continuo_contracts/fingerprints.yaml`, never
   `docs/fingerprints.md`; then run `uv run python scripts/render_fingerprints.py`. The test
   `test_the_docs_are_the_rendered_file` fails until you do.
+- **dbt fixtures.** A change to `tests/fixtures/dbt/projects` or `scripts/build_dbt_fixtures.py`
+  needs `uv run pytest -m dbt` by hand, which rebuilds the manifests with the pinned dbt; the
+  default run and CI leave those tests out.
 - **No per-file license headers.** See above.
 - **Hash stability.** A change that moves any hash pinned in `continuo_contracts/vectors/`
   or in the tests moves `content_hash` for every node of every install. It ships only
@@ -94,14 +97,15 @@ not a service, and layers would add indirection without a second implementation.
   repeated keys.
 - `dbt`: the gates of a dbt manifest node, the names a kept node gets and the join of its tests to
   it; `generate`, which writes the ODCS contract of a kept node with the flags it carries and the
-  SHA-256 of the manifest fields it read; `logical_type`, the ODCS logical type of a declared column
-  type; `run_facts`, which reads back from a contract what continuo runs the node with; and
-  `seed_header_issues`, the comparison of a seed's CSV header with its declared columns.
+  SHA-256 of the manifest fields it read, which `read_tree` names; `logical_type`, the ODCS
+  logical type of a declared column type; `run_facts`, which reads back from a contract what
+  continuo runs the node with; and `seed_header_issues`, the comparison of a seed's CSV header
+  with its declared columns.
 - `vocabulary`: the custom properties of the `continuo` vendor and where each may sit.
 - `validate`: the check of a Python node's or a dbt node's ODCS contract, the JSON schema and
   continuo's rules, with every problem as an `Issue` that has a path and a closed reason.
-- `contract`: the stored form of a Python node's ODCS contract, in the canonical form, and its
-  `contract_hash`.
+- `contract`: the stored form of a Python node's or a dbt node's ODCS contract, in the canonical
+  form, and its `contract_hash`.
 - `lite`: the producer's lite check of a dbt manifest, the report of the nodes it skips, the
   problems of each contract it generates and the seeds whose CSV header and declared columns
   differ.

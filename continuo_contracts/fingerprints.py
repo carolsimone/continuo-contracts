@@ -5,8 +5,8 @@ topology service and the guards that check them agree on it. It holds `version: 
 
 - `lists.hashed_config_denylist`: the dbt `config` keys that stay out of the hashed config.
 - `lists.projection_keys`: the keys of the Python code projection, in projection order.
-- `lists.contract_hash_exclusions`: the root keys of a Python contract's stored form that
-  `contract_hash` leaves out.
+- `lists.contract_hash_exclusions`: the root keys of the stored form that `contract_hash` leaves
+  out.
 - `families`: one list of entries for each of the eight sections, `every` (what every family
   shares) and the seven node families in `FAMILIES`.
 
@@ -36,8 +36,8 @@ form: `odcs` and then the ODCS names of the path as written (camelCase allowed),
 indexes dropped, such as `odcs.team.name` and `odcs.schema.properties.logicalType`. A `continuo`
 custom property is `odcs.custom.<property>` on the contract and `odcs.schema.custom.<property>` on
 the schema object, and `classify` leaves such a path to its entries: the `standard_field` rule never
-claims one. A dbt family has no such rule, so its entries name every `odcs.<path>` its contracts
-store.
+claims one. A dbt family has no such rule, so its entries name every `odcs.<path>` that
+`contract_hash` hashes (it leaves out the keys of `contract_hash_exclusions`).
 
 `parse_fingerprints` refuses a file that is not in this form with a `FingerprintsFileError` that
 names the location. A mapping that writes a key twice is refused too, naming the key and its line,
@@ -386,7 +386,7 @@ def projection_keys() -> tuple[str, ...]:
 
 
 def contract_hash_exclusions() -> frozenset[str]:
-    """Return the root keys of a Python contract's stored form that `contract_hash` leaves out."""
+    """Return the root keys of the stored form that `contract_hash` leaves out."""
     return load().contract_hash_exclusions
 
 
@@ -459,7 +459,8 @@ _NAME_MEANING = (
     "`odcs.schema.custom.<property>` on the schema object (`odcs.schema.custom.reads`). "
     "`odcs.*` covers every standard ODCS field that no entry names, which a Python family "
     "classifies as contract, and no continuo custom property. A dbt family has no such "
-    "rule: its entries name every `odcs.<path>` its contracts store.",
+    "rule: its entries name every `odcs.<path>` that `contract_hash` hashes (it leaves out the "
+    "keys of `contract_hash_exclusions`).",
 )
 _TERMS_MEANING = (
     "## Terms",

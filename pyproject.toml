@@ -49,6 +49,10 @@ exclude = [
     ".grimp_cache",
     ".import_linter_cache",
     ".superpowers",
+    # What dbt writes into a fixture project when it runs there.
+    "tests/fixtures/dbt/projects/*/logs",
+    "tests/fixtures/dbt/projects/*/dbt_packages",
+    "tests/fixtures/dbt/projects/*/target",
 ]
 
 [tool.ruff]

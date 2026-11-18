@@ -14,7 +14,7 @@ from dbt_fixtures import load_manifest, source_sha256_of
 from continuo_contracts import dbt
 from continuo_contracts.canonical import canonical_json
 from continuo_contracts.contract import contract_hash, normalise_dbt
-from continuo_contracts.errors import HashInputError
+from continuo_contracts.errors import CanonicalJsonError, HashInputError
 from continuo_contracts.validate import validate_dbt_contract
 from continuo_contracts.vocabulary import VENDOR, continuo_values
 
@@ -421,3 +421,12 @@ def test_a_contract_with_no_criticality_runs_as_secondary():
     assert (
         dbt.run_facts(doc).criticality == dbt.DEFAULT_CRITICALITY == "SECONDARY"
     )
+
+
+def test_a_stored_contract_with_a_number_canonical_json_cannot_write_is_refused():
+    doc = copy.deepcopy(_golden("cases", "analytics.generic_tests")["stored"])
+    rule = doc["schema"][0]["properties"][0]["quality"][0]
+    rule["mustBe"] = 2**60
+    assert validate_dbt_contract(doc) == []
+    with pytest.raises(CanonicalJsonError, match="mustBe"):
+        normalise_dbt(doc, reads=[])

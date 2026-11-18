@@ -5,7 +5,7 @@
 -- operational_cost_per_user divides across the users acquired that month.
 --
 -- Category detail (COGS / R&D / G&A) lives here as breakdown columns; the
--- per-user model deliberately carries only the total (spec decision 3).
+-- per-user model deliberately carries only the total.
 --
 -- All amounts are EUR (pinned by the accepted_values test on the seed's
 -- currency column in schema.yml), so no conversion is needed here.

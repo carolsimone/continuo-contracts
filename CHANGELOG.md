@@ -7,57 +7,49 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- `continuo_contracts.vocabulary`: `ContinuoProperty` has a fourth field, `dbt`, that says what a dbt
-  contract does with the property: `written` (the generator writes it), `filled` (continuo fills
-  it, as it does `reads`) or `not_used`. A dbt contract may carry the fourteen root properties
-  `service`, `kind`, `schedule`, `criticality`, `timeoutMinutes`, `filePath`, `materialization`,
-  `contractEnforced`, `access`, `group`, `deprecationDate`, `freshnessBuildAfter`, `snapshot` and
-  `quoteColumns`, the schema property `reads` and the four quality properties; the nine
-  Python-only properties are `not_used`. The `python` answers do not change. A caller that builds a
-  `ContinuoProperty` by hand passes the new `dbt` argument.
 - `continuo_contracts.dbt`: the gates and the names of a dbt manifest node. `skip_reason` gives the
   reason continuo leaves a model, seed or snapshot out (`no_owner`, `local_stub` or
   `installed_package`, checked in that order) or `None` for a node it keeps, `node_service`,
   `project_service`, `schedule`, `table_name` and `unique_id` give its service, schedule and id, and
-  `tests_by_node` joins the tests of a manifest to the nodes they test. `skip_reason` gives the
-  reason continuo's parser gives today for every node of the five fixture manifests, which
-  `tests/fixtures/dbt/todays_gates.json` records. A field of a node in a shape these functions cannot
-  read raises the new `DbtNodeError`, and so does, from `project_service` and `tests_by_node`, a
-  manifest `metadata`, `nodes` or test field in a shape they cannot read.
+  `tests_by_node` joins the tests of a manifest to the nodes they test. For every node of the five
+  fixture manifests, `skip_reason` gives the skip reason continuo's parser recorded for that node,
+  which `tests/fixtures/dbt/recorded_gates.json` holds. A field of a node in a shape these
+  functions cannot read raises the new `DbtNodeError`, and so does, from `project_service` and
+  `tests_by_node`, a manifest `metadata`, `nodes` or test field in a shape they cannot read.
 - `continuo_contracts.dbt.generate` writes the ODCS contract of a kept dbt model, seed or snapshot
-  from its manifest node: the envelope, `id`, `name`, `description.purpose`, `team.name`, `tags`,
-  `roles` (readers and grants), the fourteen root `continuo` properties a dbt contract may carry,
-  each only when it has a value, and one schema object with its `physicalName`, `physicalType` and
-  declared `reads`. It returns a `Generated` with the document, the contract's flags (`FLAGS`) and
-  `source_sha256`, the SHA-256 of exactly the manifest fields it reads, down to the keys of
-  `config`, `config.meta` and `config.meta.continuo`, so another `config` or `meta` key never moves
-  it. A `deprecationDate` is the `YYYY-MM-DD` date part of `deprecation_date` as written, read by
-  a fixed pattern and checked as a calendar date, so it is the date the team wrote in every time
-  zone; a week date, a basic date or an ordinal date raises `DbtNodeError`. A reader or a grantee
-  that is empty or blank raises `DbtNodeError`. The contract shares no list with the manifest node.
-  A field of the node in a shape it cannot read, or a field it reads whose value canonical JSON
-  cannot write, raises `DbtNodeError`.
-- `continuo_contracts.dbt.generate` writes the schema object's `properties` and `quality`: the
-  declared columns in the order of the node's `columns`, each with its `physicalType` (a seed's
-  `config.column_types` wins over `data_type`), its `logicalType`, description, tags,
-  `classification` and a model's `primaryKey` (with `primaryKeyPosition` in a key of two or more
-  columns), then a snapshot's history columns under the names `snapshot_meta_column_names` gives
-  them. Each dbt test becomes a rule: `not_null`, `unique` and `accepted_values` are the library
-  metrics `nullValues`, `duplicateValues` and `invalidValues`, and make a column `required` or
-  `unique` only with severity `error`, no `where` and dbt's default thresholds, and an
-  `accepted_values` rule's arguments are its `values` as `validValues` and its other kwargs as
-  written (such as `quote`); a strict `relationships` test (the same rule) is a relationship to
-  `<target id>.<field>`, and one that is not strict is a `custom` rule with its severity and
-  `where`; any other generic test is a `custom` rule with
-  `implementation: {test, arguments}`; a singular test is a `custom` rule on the schema object, as
-  is each table test of `config.meta.continuo.tests` (`engine: data-quality`). A rule carries
-  `severity` when it is not `error`, the test's description and tags, and `where`, `warnIf`,
-  `errorIf` and `failCalc` when they are not dbt's defaults. The contract is flagged
-  `jinja_in_test_arguments`, `test_column_not_declared` or `primary_key_column_not_declared`.
-  `source_sha256` now also covers the column fields and their order, the test fields and the
-  fields of each relationship's target that `generate` reads, and nothing else of them. A test
-  field in a shape it cannot read raises `DbtNodeError`, whose message names the node, then the
-  test.
+  from its manifest node and its tests:
+  - the envelope, `id`, `name`, `description.purpose`, `team.name`, `tags`, `roles` (readers and
+    grants; an empty or blank one raises `DbtNodeError`), the fourteen root `continuo` properties
+    a dbt contract may carry, each only when it has a value, and one schema object with its
+    `physicalName`, `physicalType` and declared `reads`. A `deprecationDate` is the `YYYY-MM-DD`
+    date part of `deprecation_date` as written, read by a fixed pattern and checked as a calendar
+    date, so it is the date the team wrote in every time zone; a week date, a basic date or an
+    ordinal date raises `DbtNodeError`.
+  - the schema object's `properties`: the declared columns in the order of the node's `columns`,
+    each with its `physicalType` (a seed's `config.column_types` wins over `data_type`), its
+    `logicalType`, description, tags, `classification` and a model's `primaryKey` (with
+    `primaryKeyPosition` in a key of two or more columns), then a snapshot's history columns
+    under the names `snapshot_meta_column_names` gives them.
+  - a rule for each dbt test: `not_null`, `unique` and `accepted_values` are the library metrics
+    `nullValues`, `duplicateValues` and `invalidValues`, and a strict test (severity `error`, no
+    `where` and dbt's default thresholds) makes a column `required` or `unique`; an
+    `accepted_values` rule's arguments are its `values` as `validValues` and its other kwargs as
+    written (such as `quote`); a strict `relationships` test is a relationship to
+    `<target id>.<field>`, and one that is not strict is a `custom` rule with its severity and
+    `where`; any other generic test is a `custom` rule with `implementation: {test, arguments}`;
+    a singular test is a `custom` rule on the schema object, as is each table test of
+    `config.meta.continuo.tests` (`engine: data-quality`). A rule carries `severity` when it is
+    not `error`, the test's description and tags, and `where`, `warnIf`, `errorIf` and
+    `failCalc` when they are not dbt's defaults.
+
+  It returns a `Generated` with the document, the contract's flags (`FLAGS`:
+  `jinja_in_test_arguments`, `test_column_not_declared`, `primary_key_column_not_declared`) and
+  `source_sha256`, the SHA-256 of exactly the manifest fields it reads: the node's, down to the
+  keys of `config`, `config.meta` and `config.meta.continuo`, its columns in their order, its
+  tests' and those of each relationship's target, so another `config` or `meta` key never moves
+  it. The contract shares no list with the manifest node. A field of the node or of a test in a
+  shape it cannot read, or a field it reads whose value canonical JSON cannot write, raises
+  `DbtNodeError`, whose message names the node, then the test.
 - `continuo_contracts.dbt.logical_type` gives the ODCS logical type of a declared column type, by
   its name before `(` in lower case (`float4` among the numbers), with `maxLength` for a string
   type that gives a length from 1 to 2**53 - 1 in ASCII digits, read with its leading zeros left
@@ -67,39 +59,46 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   covers, of a node, a test and a relationship's target, as trees. The README writes down the
   structure `source_sha256` hashes, `{node, tests, targets}`, so another implementation can
   compute it.
-- Test fixtures for dbt nodes: `tests/fixtures/dbt/projects` holds the dbt projects `core`,
-  `finance`, `marketing` and `service_1`, copied from continuo-demo at commit
-  `d92d371223107e77f5ca9291bfff5f6bb25e1703`, and a `cases` project with a local package `cases_pkg`
-  that covers each mapping rule. `scripts/build_dbt_fixtures.py` parses each project with dbt
-  1.12.0b1 (Python 3.12, `TZ=Asia/Tokyo`) and writes
-  `tests/fixtures/dbt/manifests/<project>.json.gz`, the same bytes on every rebuild.
-  `tests/dbt_fixtures.py` loads them, and the `dbt` pytest marker names the test that rebuilds them
-  by hand.
-- `continuo_contracts.contract.normalise_dbt` writes the stored form of a dbt contract: the tables
-  the node's compiled SQL names, which the caller passes, joined with its declared `reads` on the
-  schema object, in lower case, sorted and listed once; the `primaryKeyPosition` of a key of one
-  column dropped; then the canonical form of a Python contract. A table that is not
-  `<schema>.<table>` raises `HashInputError`. `contract_hash` hashes the result as it hashes a
-  Python contract's.
 - `continuo_contracts.dbt.run_facts` reads back from a generated or stored dbt contract what
   continuo runs the node with, as a `RunFacts`: its id, schema, table, physical name, service,
   kind, schedule (`""` for a dormant node), criticality, timeout (`None` when unset), file path,
   owner and materialization.
+- `continuo_contracts.dbt.seed_header_issues(declared, header)` compares the column names a seed's
+  contract declares with the names in its CSV header, and gives one message for each column the
+  two disagree on: `<column> is in the CSV header but not declared`, in header order, then
+  `<column> is declared but not in the CSV header`, in declared order. Names are compared exactly
+  as written.
+- Test fixtures for dbt nodes: `tests/fixtures/dbt/projects` holds the dbt projects `core`,
+  `finance`, `marketing` and `service_1`, copied from continuo-demo, and a `cases` project with a
+  local package `cases_pkg` that covers each mapping rule. `scripts/build_dbt_fixtures.py` parses
+  each project with dbt 1.12.0b1 (Python 3.12, `TZ=Asia/Tokyo`) and writes
+  `tests/fixtures/dbt/manifests/<project>.json.gz`; a rebuild with that pinned dbt writes the same
+  bytes, which the test that the `dbt` pytest marker names checks when run by hand.
+  `tests/dbt_fixtures.py` loads the manifests.
+- `continuo_contracts.contract.normalise_dbt` writes the stored form of a dbt contract: the tables
+  the node's compiled SQL names, which the caller passes, joined with its declared `reads` on the
+  schema object, in lower case, sorted and listed once; the `primaryKeyPosition` of a key of one
+  column dropped; then the same canonical form as a Python contract's. A table that is not
+  `<schema>.<table>` raises `HashInputError`, and a value canonical JSON cannot write, which a
+  stored contract passed back can hold, raises `CanonicalJsonError`. `contract_hash` hashes the
+  result as it hashes a Python contract's.
 - `continuo_contracts.validate.validate_dbt_contract` checks a dbt contract, generated or stored,
   against the ODCS schema and then against `dbt_rule_issues`, the rules of a dbt contract: the
-  envelope, one schema object whose table has no slash, backslash or empty, `.` or `..` part
-  between its dots, with an `id` that is a schema part with no whitespace, dot or slash, a dot and
-  its table lowered in the id's own string as `unique_id` lowers it, `team.name`, the `continuo` properties (a name the vocabulary does not know is
-  `unknown_property`, one that dbt does not use, such as `script`, is `refused_property`, one
-  written twice is a `value` issue), `service`, `kind`, `filePath` and `materialization` written,
-  `service` and `filePath` text, `kind` one of the three dbt kinds, `materialization` a mapping
-  whose `materialized` is text, `criticality` one of `REGULATORY`, `CORE` and `SECONDARY`,
-  `schedule` at most 50 characters and `timeoutMinutes` a whole number from 1 to 10080. A value
-  issue is at the `value` of the property, as in `customProperties[3].value`. A contract that has
-  no issue is one `dbt.run_facts` reads whole, which a test shows by deleting each piece of every
-  golden contract and replacing it with a value of the wrong type, and a generated contract with
-  no issue has a stored form with no issue. A nested column is a `refused_field` issue, whose
-  message names no node family. The checks of a Python contract do not change.
+  envelope; one schema object whose table has no slash, backslash or empty, `.` or `..` part
+  between its dots; an `id` that is a schema part with no whitespace, dot or slash, a dot and the
+  table lowered in the id's own string as `unique_id` lowers it; `team.name`; the `continuo`
+  properties (a name the vocabulary does not know is `unknown_property`, one that dbt does not
+  use, such as `script`, is `refused_property`, one written twice is a `value` issue);
+  `service`, `kind`, `filePath` and `materialization` written; `service` and `filePath` text,
+  `kind` one of the three dbt kinds, `materialization` a mapping whose `materialized` is text,
+  `criticality` one of `REGULATORY`, `CORE` and `SECONDARY`, `schedule` at most 50 characters and
+  `timeoutMinutes` a whole number from 1 to 10080. The value issues of a dbt contract sit at the
+  `value` of the property, as in `customProperties[3].value`, where a Python contract's sit at
+  `customProperties[3]`. A nested column is a `refused_field` issue, whose message names no node
+  family. A contract that has no issue is one `dbt.run_facts` reads whole, which a test shows by
+  deleting each piece of every golden contract and replacing it with a value of the wrong type,
+  and a generated contract with no issue has a stored form with no issue. The checks of a Python
+  contract do not change.
 - The new vector file `vectors/dbt_contracts.json` pins the generated contract, the flags, the
   `source_sha256`, the stored form and the first `contract_hash` of nine dbt nodes, one for each
   rule of the generator, each with its node, tests and manifest pruned to the fields `generate`
@@ -112,65 +111,73 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   flags, the `source_sha256`, the stored form and the hash of every kept node of the five fixture
   manifests, and `scripts/write_dbt_goldens.py` writes both, the same bytes on every run, with the
   public `dbt.read_tree` for the fields it keeps. No 0.2.0 vector file changes.
-- `fingerprints.yaml` classifies every field of a dbt contract's stored form for `dbt-model`,
+- `fingerprints.yaml` classifies every field of a dbt contract's stored form that
+  `contract_hash` hashes (it leaves out the keys of `contract_hash_exclusions`) for `dbt-model`,
   `dbt-seed` and `dbt-snapshot`, in the `odcs.<path>` inputs the Python families use: the
   identity (`odcs.id`, `odcs.name`, `odcs.schema.name`, `odcs.schema.physicalName`), the
-  `materialization` and `schema[0].physicalType`, the tags and `schedule`, the owner, `criticality`
-  and `timeoutMinutes`, the `roles` of the readers and grants, the description, `service`, `kind`
-  and `filePath`, `contractEnforced` (with `config.contract.enforced`, `both` in a model, a seed
-  and a snapshot), the declared columns with their types, descriptions, tags and classification, a
-  model's primary key, and the rules and relationships the tests give with their `severity`,
-  `where` and thresholds. Each is `contract`, or `both` where it also moves `content_hash`, as the
-  entry that names it says. A new entry `sql_reads` in each dbt family classifies
-  `odcs.schema.custom.reads` as `contract`: the tables the compiled SQL names, with the declared
-  reads. The `dbt-test` family classifies no `odcs.` input, since a test's facts land on the tested
-  node's contract. The guard test walks the stored form of every golden contract and of the vector
-  case that reads tables, and one generated contract of each dbt kind that sets every field the
-  generator can write, and fails for a field no entry classifies; `docs/fingerprints.md` lists the
-  new entries and inputs. No Python family changes and no hash moves; the one input already
-  classified that moves is `config.contract.enforced` in a seed and a snapshot, from `content` to
-  `both`, because the contract now carries it.
-- `continuo_contracts.dbt.seed_header_issues(declared, header)` compares the column names a seed's
-  contract declares with the names in its CSV header, and gives one message for each column the two
-  disagree on: `<column> is in the CSV header but not declared`, in header order, then
-  `<column> is declared but not in the CSV header`, in declared order. Names are compared exactly
-  as written.
+  `materialization` and `schema[0].physicalType`, the tags and `schedule`, the owner,
+  `criticality` and `timeoutMinutes`, the `roles` of the readers and grants, the description,
+  `service`, `kind` and `filePath`, `contractEnforced` (with `config.contract.enforced`, `both` in
+  a model, a seed and a snapshot), the declared columns with their types, descriptions, tags and
+  classification, a model's primary key, and the rules and relationships the tests give with
+  their `severity`, `where` and thresholds. Each is `contract`, or `both` where it also moves
+  `content_hash`, as the entry that names it says. A new entry `sql_reads` in each dbt family
+  classifies `odcs.schema.custom.reads` as `contract`: the tables the compiled SQL names, with the
+  declared reads. The `dbt-test` family classifies no `odcs.` input, since a test's facts land on
+  the tested node's contract. The guard test walks the stored form of every golden contract and of
+  the vector case that reads tables, and one generated contract of each dbt kind that sets every
+  field the generator can write, and fails for a field no entry classifies; `docs/fingerprints.md`
+  lists the new entries and inputs. No Python family changes and no hash moves.
 - `continuo_contracts.lite`, a new module in a new layer between `cli` and `validate`: the lite
   check of a dbt service. `check_manifest(manifest, *, declared_service, read_header)` takes the
   manifest `dbt parse` writes and returns a `LiteReport` of `Line`s, ordered by node id and the
-  same for any order of the manifest. A node continuo skips and a dormant node (a kept model or
-  snapshot with no tag) give an `info` line. A node whose fields the library cannot read, each
-  issue of `validate_dbt_contract`, a declared read that is not a table, a seed whose CSV cannot
-  be read, each column a seed's header and declared columns disagree on, and a service whose every
-  node is skipped give an `error` line. A kept seed of an installed package gets an `info` line
-  that says its CSV header is not checked, since its CSV file is not in the project. `contracts` maps the id of each contract that has no issue
-  to its `contract_hash`, with no tables from compiled SQL; a contract with an issue has none. `BANNER` is the text that
-  says passing the check guarantees nothing about the release, and `RELEASE_ONLY` lists the six
-  things only the release does. The module reads no file and prints and logs nothing.
+  same for any order of the manifest. A node continuo skips, a dormant node (a kept model or
+  snapshot with no tag) and a kept seed of an installed package, whose CSV header is not checked
+  since its CSV file is not in the project, give an `info` line. A node whose fields the library
+  cannot read, each issue of `validate_dbt_contract`, a declared read that is not a table, a seed
+  whose CSV cannot be read, each column a seed's header and declared columns disagree on, and a
+  service whose every node is skipped give an `error` line. `contracts` maps the id of each
+  contract that has no issue to its `contract_hash`, with no tables from compiled SQL; a contract
+  with an issue has none. `BANNER` is the text that says passing the check does not guarantee
+  that continuo will create the service's contracts at release time, and `RELEASE_ONLY` lists the
+  six things only the release does. The module reads no file and prints and logs nothing.
 - `continuo-contracts dbt check PROJECT_DIR [--dbt PATH] [--profiles-dir DIR] [--target NAME]
-  [--manifest FILE] [--service NAME] [--json]`, the producer's lite check of a dbt project. It runs
-  `<dbt> parse --project-dir PROJECT_DIR --profiles-dir <DIR> --target-path <temporary folder>`,
-  with `dbt` on `PATH` or the executable `--dbt` names, as a new process, and reads the
-  `manifest.json` that dbt writes, so the command imports no dbt and runs on a Python of its own.
-  It gives the placeholder `continuo-lite-check` to each variable that `profiles.yml` reads with
-  `env_var('NAME')`, with no default, and that the environment does not set, and changes no other
-  variable. It reads the header of each seed from the first row of the seed's CSV file in the
-  project (UTF-8 with or without a byte order mark, the delimiter of the seed's `config`), checks
-  the manifest with `lite.check_manifest`, and logs the banner, each line of the report, the six
-  things only the release does and the banner again, at INFO or, for an error, at ERROR. With
-  `--json`, stdout is one document, `{"lite", "ok", "service", "lines", "contracts"}`. `--manifest`
-  reads a manifest that already exists and runs no dbt. The exit status is 0 when the check finds no
-  error, 1 for an error or a `dbt parse` that fails (the last 20 lines of its output, without its
-  colour codes, are logged at ERROR), and 2 when the command cannot run: no such project folder, no
-  `dbt` executable, or a manifest that cannot be read or whose `metadata` or tests are not the
-  shape of a dbt manifest. A seed delimiter `csv` refuses and a seed path with a NUL make the CSV
-  unreadable, an error line, and an `env_var` name that is not a plain identifier gets no
-  placeholder. dbt runs with no shell, so a folder or a target with spaces or shell
-  metacharacters reaches it as written. `--service` is the service of the project when the manifest names
-  none, by default the folder name with `_` written `-`.
+  [--manifest FILE] [--service NAME] [--json]`, the producer's lite check of a dbt project. It
+  runs `<dbt> parse --project-dir PROJECT_DIR --profiles-dir <DIR> --target-path <temporary
+  folder>`, with `dbt` on `PATH` or the executable `--dbt` names, as a new process with no shell,
+  and reads the `manifest.json` that dbt writes, so the command imports no dbt and runs on a
+  Python of its own; a folder or a target with spaces or shell metacharacters reaches dbt as
+  written. It gives the placeholder `continuo-lite-check` to each variable that `profiles.yml`
+  reads with `env_var('NAME')`, with no default and a plain identifier as its name, and that the
+  environment does not set, and changes no other variable. It reads the header of each seed of
+  the project from the first row of the seed's CSV file in the project (UTF-8 with or without a
+  byte order mark, the delimiter of the seed's `config`; a file it cannot read, a delimiter `csv`
+  refuses or a path with a NUL is an error line), checks the manifest with `lite.check_manifest`,
+  and logs the banner, each line of the report, the six things only the release does and the
+  banner again, at INFO or, for an error, at ERROR. With `--json`, stdout is one document,
+  `{"lite", "ok", "service", "lines", "contracts"}`. `--manifest` reads a manifest that already
+  exists and runs no dbt. The exit status is 0 when the check finds no error, 1 for an error or a
+  `dbt parse` that fails (the last 20 lines of its output, without its colour codes, are logged at
+  ERROR), and 2 when the command cannot run: no such project folder, no `dbt` executable, or a
+  manifest that cannot be read or whose `metadata` or tests are not the shape of a dbt manifest.
+  `--service` is the service of the project when the manifest names none, by default the folder
+  name with `_` written `-`.
 - The import-linter contract `subprocess-is-confined-to-cli`: no module but `cli` imports
   `subprocess`. `tests/test_architecture.py` holds it to the code, and checks that a planted import
   breaks it. The `validate` and `hash` commands do not change.
+
+### Changed
+
+- `continuo_contracts.vocabulary`: `ContinuoProperty` has a fourth required field, `dbt`, that says
+  what a dbt contract does with the property: `written` (the generator writes it), `filled`
+  (continuo fills it, as it does `reads`) or `not_used`. A caller that builds a
+  `ContinuoProperty` by hand passes the new `dbt` argument. A dbt contract may carry the fourteen
+  root properties `service`, `kind`, `schedule`, `criticality`, `timeoutMinutes`, `filePath`,
+  `materialization`, `contractEnforced`, `access`, `group`, `deprecationDate`,
+  `freshnessBuildAfter`, `snapshot` and `quoteColumns`, the schema property `reads` and the four
+  quality properties; nine properties are `not_used`. The `python` answers do not change.
+- `fingerprints.yaml`: `config.contract.enforced` of a seed and a snapshot moves from `content`
+  (through `other_config`) to an explicit `both` entry, because the contract carries it.
 
 ## [0.2.0] - 2026-11-15
 

@@ -4,8 +4,8 @@ version: 1
 lists:
   hashed_config_denylist: [access, description, docs, freshness, grants, group, meta, tags]
   projection_keys: [schema, table, kind, script, reads, output_columns, extra_columns, config, secret_ref, mode_type, primary_key, assets]
-  # The root keys of a Python contract's stored form that contract_hash leaves out. Editing this
-  # list moves the contract_hash of every Python contract.
+  # The root keys of the stored form that contract_hash leaves out. Editing this list moves the
+  # contract_hash of every contract.
   contract_hash_exclusions: [apiVersion, kind, status, version]
 families:
   every:

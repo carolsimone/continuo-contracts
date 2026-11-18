@@ -148,11 +148,17 @@ Package root: `continuo_contracts/`.
      `importlib.resources` and cached once. `schema` checks the schema's bytes
      against their pinned SHA-256.
    - `cli` is the only module that reads files named by its arguments, logs and
-     prints. It logs through a module-level logger and configures `logging` to
-     stderr inside `main`, never at import. Its two `print` calls, the JSON
-     document and the hash, are the machine-read stdout and each carries a
-     `# noqa: T201` with its reason. Flag a third `print`, a `print` without
-     that reason, a log line on stdout and logging configured at import time.
+     prints. For `dbt check` it also runs the `dbt` executable it is given as a
+     new process (`subprocess`), reads `os.environ` and passes dbt a copy with
+     placeholders, makes and removes a temporary folder, and reads the files of
+     the dbt project: the manifest, `profiles.yml` and the seed CSVs. The
+     `subprocess-is-confined-to-cli` contract keeps `subprocess` in `cli`, so
+     flag any of these in another module. It logs through a module-level logger
+     and configures `logging` to stderr inside `main`, never at import. Its two
+     `print` calls, the JSON document and the hash, are the machine-read stdout
+     and each carries a `# noqa: T201` with its reason. Flag a third `print`, a
+     `print` without that reason, a log line on stdout and logging configured at
+     import time.
    - Every other module of the package logs and prints nothing. The
      `only-cli-logs` contract and the AST test of rule 1 enforce the `logging`
      part, so a library module that logs, prints or writes to stderr is a
@@ -257,13 +263,13 @@ Package root: `continuo_contracts/`.
 9. **Public text.** The repository is public and the private design is not.
    Flag, in code, comments, docstrings, tests, workflows and every Markdown
    file: design ids (a capital letter or two followed by digits, such as
-   `C14`, `N2`, `K9`, `OD2b`, `D14`), design section numbers, pull request
-   references, citations of files in other repositories, the words "Review
-   Focus", and sentences that are no longer true or that describe history
-   ("previously", "after the cutover") instead of the present. All tracked text
-   is ASCII. Diagnostics use `logging` to stderr, in `scripts/` and in `cli`;
-   `print(` appears only in `continuo_contracts/cli.py`, twice, each with a
-   `# noqa: T201` reason, for the machine-read stdout (rule 2).
+   `X1`, `YZ9`), design section numbers, pull request references, citations
+   of files in other repositories, the words "Review Focus", and sentences
+   that are no longer true or that describe history ("previously", "after the
+   cutover") instead of the present. All tracked text is ASCII. Diagnostics
+   use `logging` to stderr, in `scripts/` and in `cli`; `print(` appears only
+   in `continuo_contracts/cli.py`, twice, each with a `# noqa: T201` reason,
+   for the machine-read stdout (rule 2).
 10. **Packaging and release.**
     - The wheel ships `fingerprints.yaml`, `odcs-json-schema-v3.2.0.json`,
       every file in `continuo_contracts/vectors/` and `py.typed`;

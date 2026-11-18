@@ -154,7 +154,7 @@ def test_fx_transactions_eur_reads_as_the_designs_contract():
     ]
 
 
-def test_seed_users_today_has_no_columns_and_the_singular_test_it_feeds():
+def test_seed_users_has_no_columns_and_the_singular_test_it_feeds():
     # The core fixture declares no column of `seed_users`. The singular test that reads it and
     # `daily_transactions` counts for both, as `tests_by_node` joins it.
     schema = _doc("core", "seed.core.seed_users")["schema"][0]
