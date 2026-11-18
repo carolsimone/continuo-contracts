@@ -26,22 +26,27 @@ schedule: it is a dormant node that runs only by hand.
 `tests_by_node` joins the tests of a manifest to the nodes they test, the way dbt counts them.
 
 `generate` writes the ODCS contract of a kept node from the node and its tests: the envelope,
-the identity, the owner, the tags, the roles, continuo's root properties and the schema object.
-It also gives the SHA-256 of the fields of the node and its tests that it reads, and of nothing
-else of them.
+the identity, the owner, the tags, the roles, continuo's root properties and the schema object,
+with the declared columns, their types, and the quality rules and relationships the tests give.
+It also gives the SHA-256 of the fields of the node, of its tests and of the nodes its
+relationships point to that it reads, and of nothing else of them. `logical_type` gives the ODCS
+logical type of a declared column type.
 
 A field of a node in a shape these functions cannot read raises `DbtNodeError`.
 """
 
-from collections.abc import Mapping, Sequence
+import re
+
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from types import MappingProxyType
 from typing import Any, Final
 
 from continuo_contracts.canonical import canonical_json, normalise_text
 from continuo_contracts.errors import CanonicalJsonError, DbtNodeError
 from continuo_contracts.hashing import sha256_hex
-from continuo_contracts.vocabulary import VENDOR
+from continuo_contracts.vocabulary import VENDOR, continuo_values
 
 RESOURCE_TYPES: Final = ("model", "seed", "snapshot")
 
@@ -67,11 +72,12 @@ FLAGS: Final = (
 )
 
 # The fields of a manifest node that `generate` reads, by where they sit: the node's own keys
-# (`config` apart), the keys of its `config`, of `config.meta` and of `config.meta.continuo`. A
-# name with a dot reaches further down, as `contract.enforced` is `config.contract.enforced`.
-# `source_sha256` covers the values of these fields and nothing else of the node, so `created_at`,
-# the compiled SQL and a `meta` key that continuo does not read never move it. The node's
-# `unique_id` is read too, but only to name the node in an error.
+# (`config` and `columns` apart), the keys of its `config`, of `config.meta`, of
+# `config.meta.continuo` and of each of its columns. A name with a dot reaches further down, as
+# `contract.enforced` is `config.contract.enforced`, and a `*` stands for every key of a mapping
+# or every item of a list, in order. `source_sha256` covers the values of these fields and nothing
+# else of the node, so `created_at`, the compiled SQL and a `meta` key that continuo does not read
+# never move it. The node's `unique_id` is read too, but only to name the node in an error.
 _NODE_FIELDS: Final = (
     "resource_type",
     "name",
@@ -83,7 +89,16 @@ _NODE_FIELDS: Final = (
     "description",
     "tags",
     "deprecation_date",
+    "primary_key",
 )
+_COLUMN_FIELDS: Final = (
+    "name",
+    "description",
+    "data_type",
+    "tags",
+    "meta.continuo.classification",
+)
+_TABLE_TEST_FIELDS: Final = ("name", "enabled", "granularity", "params")
 _CONFIG_FIELDS: Final = (
     "materialized",
     "unique_key",
@@ -102,9 +117,14 @@ _CONFIG_FIELDS: Final = (
     "snapshot_meta_column_names",
     "dbt_valid_to_current",
     "quote_columns",
+    "column_types",
 )
 _META_FIELDS: Final = ("owner", "criticality", "timeout_minutes")
-_CONTINUO_META_FIELDS: Final = ("readers", "reads")
+_CONTINUO_META_FIELDS: Final = (
+    "readers",
+    "reads",
+    *(f"tests.*.{name}" for name in _TABLE_TEST_FIELDS),
+)
 
 # Every field above as a dotted path from the node.
 _READ_PATHS: Final = (
@@ -112,10 +132,124 @@ _READ_PATHS: Final = (
     *(f"config.{name}" for name in _CONFIG_FIELDS),
     *(f"config.meta.{name}" for name in _META_FIELDS),
     *(f"config.meta.continuo.{name}" for name in _CONTINUO_META_FIELDS),
+    *(f"columns.*.{name}" for name in _COLUMN_FIELDS),
 )
 
-# The fields of a test node that `generate` reads, as dotted paths from the test node.
-_TEST_FIELDS: Final[tuple[str, ...]] = ()
+# The fields of a test node that `generate` reads, as dotted paths from the test node. Of the
+# test's kwargs it reads every one but `_UNREAD_KWARGS`: dbt fills `model` with the Jinja that
+# selects the tested node, and `column_name` repeats the test's own `column_name`. The test's
+# `unique_id` is read only to name the test in an error.
+_KWARGS_FIELD: Final = "test_metadata.kwargs.*"
+_TEST_FIELDS: Final = (
+    "name",
+    "column_name",
+    "attached_node",
+    "depends_on.nodes",
+    "test_metadata.name",
+    "test_metadata.namespace",
+    _KWARGS_FIELD,
+    "description",
+    "tags",
+    "config.severity",
+    "config.where",
+    "config.warn_if",
+    "config.error_if",
+    "config.fail_calc",
+)
+_UNREAD_KWARGS: Final = ("model", "column_name")
+
+# The fields of the manifest node or source that a `relationships` test points to, which give
+# its id, and the same as dotted paths from the manifest.
+_TARGET_FIELDS: Final = (
+    ("nodes", ("schema", "name", "version")),
+    ("sources", ("schema", "identifier", "name")),
+)
+_MANIFEST_PATHS: Final = tuple(
+    f"{kind}.*.{name}" for kind, names in _TARGET_FIELDS for name in names
+)
+
+# The tests dbt ships, which a contract writes as ODCS rules, and the metric of each library rule.
+_NOT_NULL, _UNIQUE, _ACCEPTED_VALUES, _RELATIONSHIPS = (
+    "not_null",
+    "unique",
+    "accepted_values",
+    "relationships",
+)
+_METRICS: Final = MappingProxyType(
+    {
+        _NOT_NULL: "nullValues",
+        _UNIQUE: "duplicateValues",
+        _ACCEPTED_VALUES: "invalidValues",
+    }
+)
+# The column field that a strict `not_null` or `unique` test sets.
+_COLUMN_FACTS: Final = MappingProxyType(
+    {_NOT_NULL: "required", _UNIQUE: "unique"}
+)
+
+# A test's `config` keys that become quality properties, under their names there, with dbt's
+# default of each, which a contract leaves out.
+_TEST_SETTINGS: Final = (
+    ("where", "where", ""),
+    ("warn_if", "warnIf", "!= 0"),
+    ("error_if", "errorIf", "!= 0"),
+    ("fail_calc", "failCalc", "count(*)"),
+)
+_SEVERITIES: Final = MappingProxyType({"error": None, "warn": "warning"})
+_JINJA_MARKS: Final = ("{{", "{%")
+
+# The columns dbt adds to a snapshot's table, by their default names, and the one it adds when
+# `hard_deletes` is `new_record`.
+_HISTORY_COLUMNS: Final = (
+    "dbt_scd_id",
+    "dbt_updated_at",
+    "dbt_valid_from",
+    "dbt_valid_to",
+)
+_DELETED_COLUMN: Final = "dbt_is_deleted"
+_NEW_RECORD: Final = "new_record"
+
+# The logical type of each type name `logical_type` knows, and the string types that may carry a
+# length.
+_STRING_TYPES: Final = frozenset(
+    ("text", "string", "varchar", "character varying", "char", "character")
+)
+_LOGICAL_TYPES: Final = MappingProxyType(
+    {
+        **dict.fromkeys(
+            ("int", "integer", "int4", "bigint", "int8", "smallint", "int2"),
+            "integer",
+        ),
+        **dict.fromkeys(
+            (
+                "numeric",
+                "decimal",
+                "double precision",
+                "float",
+                "float8",
+                "real",
+                "double",
+            ),
+            "number",
+        ),
+        **dict.fromkeys(_STRING_TYPES, "string"),
+        "date": "date",
+        **dict.fromkeys(
+            (
+                "timestamp",
+                "timestamptz",
+                "timestamp with time zone",
+                "timestamp without time zone",
+                "datetime",
+            ),
+            "timestamp",
+        ),
+        **dict.fromkeys(("boolean", "bool"), "boolean"),
+    }
+)
+# The length after a string type's `(`: at most 16 digits, so `int` never reads a huge number.
+_LENGTH: Final = re.compile(r"\s*(\d{1,16})\s*\)")
+_MAX_LENGTH: Final = 2**53 - 1
 
 # dbt's default of `config.on_schema_change` and of a model's `config.access`, which a contract
 # leaves out.
@@ -146,11 +280,17 @@ def _label(node: Mapping[str, Any]) -> str:
     return "<unknown node>"
 
 
+# Where a field sits, for an error: a node, whose label `_label` gives, or the label itself, such
+# as `<node id>: test <test id>` for a field of a test.
+type _Where = Mapping[str, Any] | str
+
+
 def _refusal(
-    node: Mapping[str, Any], field: str, must_be: str, value: object
+    where: _Where, field: str, must_be: str, value: object
 ) -> DbtNodeError:
+    label = where if isinstance(where, str) else _label(where)
     shown = "an empty string" if value == "" else type(value).__name__
-    return DbtNodeError(f"{_label(node)}: {field} must be {must_be}, got {shown}")
+    return DbtNodeError(f"{label}: {field} must be {must_be}, got {shown}")
 
 
 def _tags(node: Mapping[str, Any]) -> list[str]:
@@ -166,9 +306,13 @@ def _tags(node: Mapping[str, Any]) -> list[str]:
 
 def _text(node: Mapping[str, Any], field: str) -> str:
     """Return the string `field` of `node`, which must not be empty."""
-    value = node.get(field)
+    return _required_string(node, field, node.get(field))
+
+
+def _required_string(where: _Where, field: str, value: object) -> str:
+    """Return `value`, the field `field`, which must be a non-empty string."""
     if not isinstance(value, str) or not value:
-        raise _refusal(node, field, "a non-empty string", value)
+        raise _refusal(where, field, "a non-empty string", value)
     return value
 
 
@@ -302,36 +446,42 @@ def _is_empty(value: object) -> bool:
     return value is None or value == "" or value == [] or value == {}
 
 
-def _mapping(
-    node: Mapping[str, Any], field: str, value: object
-) -> Mapping[str, Any]:
-    """Return `value`, the field `field` of `node`, as a mapping; null is an empty one."""
+def _without_empty(written: Mapping[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in written.items() if not _is_empty(value)}
+
+
+def _mapping(where: _Where, field: str, value: object) -> Mapping[str, Any]:
+    """Return `value`, the field `field`, as a mapping; null is an empty one."""
     if value is None:
         return {}
     if not isinstance(value, Mapping):
-        raise _refusal(node, field, "a mapping", value)
+        raise _refusal(where, field, "a mapping", value)
     return value
 
 
-def _strings(node: Mapping[str, Any], field: str, value: object) -> list[str]:
-    """Return `value`, the field `field` of `node`, as a list of strings; null is none."""
+def _strings(where: _Where, field: str, value: object) -> list[str]:
+    """Return `value`, the field `field`, as a new list of strings; null is none."""
     if value is None:
         return []
     if not isinstance(value, list):
-        raise _refusal(node, field, "a list of strings", value)
+        raise _refusal(where, field, "a list of strings", value)
     for index, item in enumerate(value):
         if not isinstance(item, str):
-            raise _refusal(node, f"{field}[{index}]", "a string", item)
-    return value
+            raise _refusal(where, f"{field}[{index}]", "a string", item)
+    return list(value)
 
 
 def _optional_text(node: Mapping[str, Any], field: str) -> str:
     """Return the field `field` of `node` as a string; a missing or null one is `""`."""
-    value = node.get(field)
+    return _optional_string(node, field, node.get(field))
+
+
+def _optional_string(where: _Where, field: str, value: object) -> str:
+    """Return `value`, the field `field`, as a string; null is `""`."""
     if value is None:
         return ""
     if not isinstance(value, str):
-        raise _refusal(node, field, "a string", value)
+        raise _refusal(where, field, "a string", value)
     return value
 
 
@@ -491,52 +641,509 @@ def _roles(
     return roles
 
 
-def _read_values(
-    source: Mapping[str, Any], paths: Sequence[str]
-) -> dict[str, Any]:
-    """Return the fields of `source` at the dotted `paths`, nested as `source` holds them.
+def logical_type(data_type: str) -> dict[str, Any] | None:
+    """Return the ODCS logical type of the declared column type `data_type`, or `None`.
 
-    A field that is missing is left out. A value on the way that is not a mapping, such as a null
-    `config.contract`, is kept as it is, since it is what the field's reader saw. A value that
-    canonical JSON cannot write raises `DbtNodeError`, which names the field.
+    The type is read by its name before `(`, in lower case and with each run of whitespace read
+    as one space, so `Character  Varying(10)` is `character varying`. `int`, `integer`, `int4`,
+    `bigint`, `int8`, `smallint` and `int2` are `integer`; `numeric`, `decimal`,
+    `double precision`, `float`, `float8`, `real` and `double` are `number`; `text`, `string`,
+    `varchar`, `character varying`, `char` and `character` are `string`, with the
+    `logicalTypeOptions` `{"maxLength": n}` when the type gives a length `n` from 1 to
+    2**53 - 1; `date` is `date`; `timestamp`, `timestamptz`, `timestamp with time zone`,
+    `timestamp without time zone` and `datetime` are `timestamp`; `boolean` and `bool` are
+    `boolean`. Any other type has none. The result is a new dict, such as
+    `{"logicalType": "integer"}`.
     """
-    picked: dict[str, Any] = {}
-    for path in paths:
-        _pick(source, source, path.split("."), picked, "")
+    name, _, rest = " ".join(data_type.lower().split()).partition("(")
+    logical = _LOGICAL_TYPES.get(name.strip())
+    if logical is None:
+        return None
+    written: dict[str, Any] = {"logicalType": logical}
+    match = _LENGTH.match(rest) if logical == "string" else None
+    if match is not None and 1 <= (length := int(match.group(1))) <= _MAX_LENGTH:
+        written["logicalTypeOptions"] = {"maxLength": length}
+    return written
+
+
+@dataclass(frozen=True)
+class _Run:
+    """What one call of `generate` shares while it reads a node's tests.
+
+    `label` names the node in an error. `flags` collects the marks of `FLAGS` the contract
+    carries, and `targets` the manifest node or source each relationship points to, by its
+    manifest key, with its kind (`nodes` or `sources`) and the label of the test that read it.
+    """
+
+    node: Mapping[str, Any]
+    manifest: Mapping[str, Any]
+    label: str
+    flags: set[str]
+    targets: dict[str, tuple[str, Mapping[str, Any], str]]
+
+
+def _column_types(
+    node: Mapping[str, Any], config: Mapping[str, Any]
+) -> dict[str, str]:
+    """Return a seed's `config.column_types`, each type as a string; another node has none."""
+    if node.get("resource_type") != "seed":
+        return {}
+    types = _mapping(node, "config.column_types", config.get("column_types"))
+    return {
+        key: _optional_string(node, f"config.column_types.{key}", types[key])
+        for key in types
+    }
+
+
+def _column(
+    node: Mapping[str, Any], field: str, value: object, types: Mapping[str, str]
+) -> dict[str, Any]:
+    """Return the property of the declared column `value`, at `field` of `node`.
+
+    Its `primaryKey`, `required`, `unique`, `relationships` and `quality` start empty, for the
+    node's key and tests to fill.
+    """
+    column = _mapping(node, field, value)
+    name = _required_string(node, f"{field}.name", column.get("name"))
+    data_type = _optional_string(
+        node, f"{field}.data_type", column.get("data_type")
+    )
+    physical = types.get(name, "").strip() or data_type.strip()
+    meta = _mapping(node, f"{field}.meta", column.get("meta"))
+    continuo = _mapping(node, f"{field}.meta.continuo", meta.get("continuo"))
+    description = _optional_string(
+        node, f"{field}.description", column.get("description")
+    )
+    return {
+        "name": name,
+        "physicalType": physical,
+        **(logical_type(physical) or {}),
+        "description": normalise_text(description),
+        "tags": _strings(node, f"{field}.tags", column.get("tags")),
+        "classification": _optional_string(
+            node,
+            f"{field}.meta.continuo.classification",
+            continuo.get("classification"),
+        ),
+        "primaryKey": None,
+        "primaryKeyPosition": None,
+        "required": None,
+        "unique": None,
+        "relationships": [],
+        "quality": [],
+    }
+
+
+def _primary_key(run: _Run, columns: Mapping[str, dict[str, Any]]) -> None:
+    """Mark the columns of a model's `primary_key`, with their positions in a key of two or more.
+
+    A key column the node does not declare is left out, and the contract is flagged.
+    """
+    node = run.node
+    if node.get("resource_type") != "model":
+        return
+    key = _strings(node, "primary_key", node.get("primary_key"))
+    for position, name in enumerate(key, start=1):
+        column = columns.get(name)
+        if column is None:
+            run.flags.add("primary_key_column_not_declared")
+            continue
+        column["primaryKey"] = True
+        if len(key) > 1:
+            column["primaryKeyPosition"] = position
+
+
+def _history_columns(
+    node: Mapping[str, Any], config: Mapping[str, Any], declared: Iterable[str]
+) -> list[dict[str, Any]]:
+    """Return the columns dbt adds to a snapshot's table that the snapshot does not declare.
+
+    Each has the name `config.snapshot_meta_column_names` gives it, else its default name.
+    """
+    field = "config.snapshot_meta_column_names"
+    names = _mapping(node, field, config.get("snapshot_meta_column_names"))
+    defaults: tuple[str, ...] = _HISTORY_COLUMNS
+    if config.get("hard_deletes") == _NEW_RECORD:
+        defaults += (_DELETED_COLUMN,)
+    seen = set(declared)
+    written = []
+    for default in defaults:
+        name = (
+            _optional_string(node, f"{field}.{default}", names.get(default))
+            or default
+        )
+        if name not in seen:
+            seen.add(name)
+            written.append({"name": name})
+    return written
+
+
+def _table_tests(
+    node: Mapping[str, Any], continuo: Mapping[str, Any]
+) -> list[dict[str, Any]]:
+    """Return the table tests of `config.meta.continuo.tests` as quality rules, in their order."""
+    field = "config.meta.continuo.tests"
+    items = continuo.get("tests")
+    if items is None:
+        return []
+    if not isinstance(items, list):
+        raise _refusal(node, field, "a list", items)
+    rules = []
+    for index, item in enumerate(items):
+        where = f"{field}[{index}]"
+        if not isinstance(item, Mapping):
+            raise _refusal(node, where, "a mapping", item)
+        test = item
+        enabled = test.get("enabled")
+        if enabled is None:
+            enabled = True
+        if not isinstance(enabled, bool):
+            raise _refusal(node, f"{where}.enabled", "a boolean", enabled)
+        implementation = {
+            "enabled": enabled,
+            "granularity": _optional_string(
+                node, f"{where}.granularity", test.get("granularity")
+            ),
+            "params": _writable(
+                _mapping(node, f"{where}.params", test.get("params")),
+                _label(node),
+                f"{where}.params",
+            ),
+        }
+        rules.append(
+            {
+                "type": "custom",
+                "engine": "data-quality",
+                "name": _required_string(node, f"{where}.name", test.get("name")),
+                "implementation": _without_empty(implementation),
+            }
+        )
+    return rules
+
+
+def _has_jinja(value: object) -> bool:
+    """Say whether a string in `value`, at any depth, holds `{{` or `{%`."""
+    if isinstance(value, str):
+        return any(mark in value for mark in _JINJA_MARKS)
+    if isinstance(value, Mapping):
+        return any(_has_jinja(value[key]) for key in value)
+    if isinstance(value, list):
+        return any(_has_jinja(item) for item in value)
+    return False
+
+
+def _severity(label: str, config: Mapping[str, Any]) -> str:
+    """Return a test's severity, `error` or `warn`, read in any case; null is `error`."""
+    value = config.get("severity")
+    if value is None:
+        return "error"
+    severity = value.lower() if isinstance(value, str) else ""
+    if severity not in _SEVERITIES:
+        raise _refusal(label, "config.severity", "warn or error", value)
+    return severity
+
+
+def _source_id(source: Mapping[str, Any]) -> str:
+    """Return the id of a manifest source: `<schema>.<identifier or name>` in lower case."""
+    schema = _text(source, "schema")
+    name = _text(source, "name")
+    identifier = _optional_text(source, "identifier")
+    return f"{schema}.{identifier or name}".lower()
+
+
+def _relationship_target(run: _Run, test: Mapping[str, Any], label: str) -> str:
+    """Return the id of the node or source that the `relationships` test `test` points to.
+
+    It is the entry of the test's `depends_on.nodes` other than its `attached_node`, and the
+    tested node itself when there is none.
+    """
+    depends_on = _mapping(label, "depends_on", test.get("depends_on"))
+    nodes = _strings(label, "depends_on.nodes", depends_on.get("nodes"))
+    attached = test.get("attached_node")
+    others = list(dict.fromkeys(entry for entry in nodes if entry != attached))
+    if not others:
+        return unique_id(run.node)
+    if len(others) > 1:
+        raise DbtNodeError(
+            f"{label}: depends_on.nodes must name one node besides attached_node, "
+            f"got {len(others)}"
+        )
+    (key,) = others
+    for kind, _ in _TARGET_FIELDS:
+        target = (run.manifest.get(kind) or {}).get(key)
+        if isinstance(target, Mapping):
+            run.targets.setdefault(key, (kind, target, label))
+            try:
+                return (
+                    unique_id(target) if kind == "nodes" else _source_id(target)
+                )
+            except DbtNodeError as error:
+                raise DbtNodeError(f"{label}: {error}") from None
+    raise DbtNodeError(
+        f"{label}: depends_on.nodes names {key}, which is neither a node nor a source "
+        "of the manifest"
+    )
+
+
+def _rule_settings(
+    label: str, test: Mapping[str, Any]
+) -> tuple[bool, dict[str, Any]]:
+    """Return whether the test `test` is strict, and the fields every rule from it carries.
+
+    A strict test has severity `error`, no `where` and dbt's default thresholds, so a `not_null`
+    or `unique` one makes its column `required` or `unique`. The fields are the `severity`
+    (`warning` for `warn`, none for `error`), the `description`, the `tags`, and `where`,
+    `warnIf`, `errorIf` and `failCalc` as quality properties when they are not dbt's defaults.
+    """
+    config = _mapping(label, "config", test.get("config"))
+    severity = _severity(label, config)
+    settings: dict[str, str] = {}
+    for key, prop, default in _TEST_SETTINGS:
+        value = _optional_string(label, f"config.{key}", config.get(key))
+        if value not in ("", default):
+            settings[prop] = value
+    description = _optional_string(label, "description", test.get("description"))
+    common = {
+        "severity": _SEVERITIES[severity],
+        "description": normalise_text(description),
+        "tags": _strings(label, "tags", test.get("tags")),
+        "customProperties": [
+            {"vendor": VENDOR, "property": prop, "value": value}
+            for prop, value in settings.items()
+        ],
+    }
+    return severity == "error" and not settings, common
+
+
+def _add_test(
+    run: _Run,
+    test: Mapping[str, Any],
+    columns: Mapping[str, dict[str, Any]],
+    table_rules: list[dict[str, Any]],
+) -> None:
+    """Write what the dbt test `test` says on the column it tests, else on the schema object.
+
+    A singular test, and a test on no declared column, gives a rule on the schema object; the
+    latter keeps its `column_name` in its arguments and flags the contract. dbt's `not_null`,
+    `unique` and `accepted_values` give library rules, a `relationships` test on a declared
+    column gives a relationship, and any other generic test gives a `custom` rule with the
+    generic test and its arguments as its `implementation`.
+    """
+    label = f"{run.label}: test {_label(test)}"
+    name = _required_string(label, "name", test.get("name"))
+    strict, common = _rule_settings(label, test)
+    metadata = _mapping(label, "test_metadata", test.get("test_metadata"))
+    generic = _optional_string(label, "test_metadata.name", metadata.get("name"))
+    kwargs = _mapping(label, "test_metadata.kwargs", metadata.get("kwargs"))
+    arguments = {
+        key: _writable(kwargs[key], label, f"test_metadata.kwargs.{key}")
+        for key in kwargs
+        if key not in _UNREAD_KWARGS
+    }
+    where = continuo_values(common["customProperties"]).get("where", "")
+    if _has_jinja([arguments, where]):
+        run.flags.add("jinja_in_test_arguments")
+    rule: dict[str, Any]
+    if not generic:
+        rule = {"id": name, "name": name, "type": "custom", "engine": "dbt"}
+        table_rules.append(
+            _without_empty({**rule, "implementation": name, **common})
+        )
+        return
+    namespace = _optional_string(
+        label, "test_metadata.namespace", metadata.get("namespace")
+    )
+    column_name = _optional_string(label, "column_name", test.get("column_name"))
+    column = columns.get(column_name)
+    if column_name and column is None:
+        run.flags.add("test_column_not_declared")
+        arguments["column_name"] = column_name
+    built_in = "" if namespace else generic
+    if built_in == _RELATIONSHIPS and column is not None:
+        field = _required_string(
+            label, "test_metadata.kwargs.field", arguments.get("field")
+        )
+        target = _relationship_target(run, test, label)
+        column["relationships"].append({"to": f"{target}.{field}"})
+        return
+    if built_in in _METRICS:
+        written = {
+            "validValues": arguments.get("values")
+            if built_in == _ACCEPTED_VALUES
+            else None,
+            "column_name": arguments.get("column_name")
+            if column is None
+            else None,
+        }
+        rule = {
+            "id": name,
+            "metric": _METRICS[built_in],
+            "mustBe": 0,
+            "arguments": _without_empty(written),
+        }
+        if strict and column is not None and built_in in _COLUMN_FACTS:
+            column[_COLUMN_FACTS[built_in]] = True
+    else:
+        implementation = {
+            "test": f"{namespace}.{generic}" if namespace else generic,
+            "arguments": arguments,
+        }
+        rule = {
+            "id": name,
+            "name": name,
+            "type": "custom",
+            "engine": "dbt",
+            "implementation": _without_empty(implementation),
+        }
+    rules = table_rules if column is None else column["quality"]
+    rules.append(_without_empty({**rule, **common}))
+
+
+def _in_order(rules: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return sorted(rules, key=canonical_json)
+
+
+def _schema_parts(
+    run: _Run,
+    tests: Sequence[Mapping[str, Any]],
+    config: Mapping[str, Any],
+    continuo: Mapping[str, Any],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Return the properties and the quality rules of the node's schema object.
+
+    The properties are the declared columns in the order of `columns`, then a snapshot's history
+    columns. The quality rules are the rules of the tests that sit on no column, then the table
+    tests in their written order.
+    """
+    node = run.node
+    declared = _mapping(node, "columns", node.get("columns"))
+    types = _column_types(node, config)
+    properties = [
+        _column(node, f"columns.{key}", declared[key], types) for key in declared
+    ]
+    columns = {column["name"]: column for column in properties}
+    _primary_key(run, columns)
+    table_rules: list[dict[str, Any]] = []
+    for test in tests:
+        _add_test(run, test, columns, table_rules)
+    written = []
+    for column in properties:
+        column["relationships"] = _in_order(column["relationships"])
+        column["quality"] = _in_order(column["quality"])
+        written.append(_without_empty(column))
+    if node.get("resource_type") == "snapshot":
+        written += _history_columns(node, config, columns)
+    return written, _in_order(table_rules) + _table_tests(node, continuo)
+
+
+def _tree(paths: Iterable[Sequence[str]]) -> dict[str, Any]:
+    """Return the paths, each a sequence of keys, as a tree of nested dicts; a leaf is `{}`."""
+    tree: dict[str, Any] = {}
+    for keys in paths:
+        branch = tree
+        for key in keys:
+            branch = branch.setdefault(key, {})
+    return tree
+
+
+_NODE_TREE: Final = _tree(path.split(".") for path in _READ_PATHS)
+_TARGET_TREES: Final = MappingProxyType(
+    {kind: _tree([name] for name in names) for kind, names in _TARGET_FIELDS}
+)
+
+
+def _test_tree(test: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the tree of the fields of `test` that `generate` reads.
+
+    It is `_TEST_FIELDS`, with the kwargs wildcard written as the test's own kwargs but
+    `_UNREAD_KWARGS`.
+    """
+    metadata = test.get("test_metadata") or {}
+    kwargs = metadata.get("kwargs") or {}
+    paths = [field.split(".") for field in _TEST_FIELDS if field != _KWARGS_FIELD]
+    paths += [
+        ["test_metadata", "kwargs", key]
+        for key in kwargs
+        if key not in _UNREAD_KWARGS
+    ]
+    return _tree(paths)
+
+
+def _select(source: Any, tree: Mapping[str, Any], label: str, name: str) -> Any:
+    """Return the fields of `source` that `tree` names, nested as `source` holds them.
+
+    A `*` step gives a list in the order of `source`: `[key, value]` pairs for a mapping and the
+    items of a list, so the order of a node's columns reaches the hash. A field that is missing is
+    left out. A value on the way that is not a mapping or a list is kept as it is, since it is
+    what the field's reader saw. A value that canonical JSON cannot write raises `DbtNodeError`,
+    which starts with `label` and names the field.
+    """
+    if "*" in tree:
+        each = tree["*"]
+        if isinstance(source, Mapping):
+            return [
+                [key, _field(source[key], each, label, f"{name}.{key}")]
+                for key in source
+            ]
+        return [
+            _field(item, each, label, f"{name}[{index}]")
+            for index, item in enumerate(source)
+        ]
+    picked = {}
+    for key, branch in tree.items():
+        if key in source:
+            picked[key] = _field(
+                source[key], branch, label, f"{name}.{key}" if name else key
+            )
     return picked
 
 
-def _pick(
-    source: Mapping[str, Any],
-    value: object,
-    keys: list[str],
-    target: dict[str, Any],
-    prefix: str,
-) -> None:
-    """Copy the field `keys` of `value`, which sits at `prefix` in `source`, into `target`."""
-    key, rest = keys[0], keys[1:]
-    if not isinstance(value, Mapping) or key not in value:
-        return
-    child = value[key]
-    if rest and isinstance(child, Mapping):
-        _pick(source, child, rest, target.setdefault(key, {}), f"{prefix}{key}.")
-        return
+def _field(value: Any, tree: Mapping[str, Any], label: str, name: str) -> Any:
+    if isinstance(value, Mapping) and tree:
+        return _select(value, tree, label, name)
+    if isinstance(value, list) and "*" in tree:
+        return _select(value, tree, label, name)
+    return _writable(value, label, name)
+
+
+def _writable(value: Any, label: str, name: str) -> Any:
+    """Return a copy of `value`, the field `name`, which canonical JSON must be able to write.
+
+    The copy holds plain dicts and lists, so a change to the contract never reaches the manifest.
+    """
     try:
-        canonical_json(child)
+        canonical_json(value)
     except CanonicalJsonError as error:
         raise DbtNodeError(
-            f"{_label(source)}: {prefix}{key}{str(error).removeprefix('$')}"
+            f"{label}: {name}{str(error).removeprefix('$')}"
         ) from None
-    target[key] = child
+    return _plain(value)
 
 
-def _source_sha256(
-    node: Mapping[str, Any], tests: Sequence[Mapping[str, Any]]
-) -> str:
-    read_tests = [_read_values(test, _TEST_FIELDS) for test in tests]
+def _plain(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {key: _plain(value[key]) for key in value}
+    if isinstance(value, list):
+        return [_plain(item) for item in value]
+    return value
+
+
+def _source_sha256(run: _Run, tests: Sequence[Mapping[str, Any]]) -> str:
+    """Return the SHA-256 of the fields `generate` reads.
+
+    They are the fields of the node, of its tests and of their relationship targets.
+    """
+    read_tests = [
+        _select(test, _test_tree(test), f"{run.label}: test {_label(test)}", "")
+        for test in tests
+    ]
     inputs = {
-        "node": _read_values(node, _READ_PATHS),
+        "node": _select(run.node, _NODE_TREE, run.label, ""),
         "tests": sorted(read_tests, key=canonical_json),
+        "targets": {
+            key: _select(target, _TARGET_TREES[kind], f"{label}: {key}", "")
+            for key, (kind, target, label) in run.targets.items()
+        },
     }
     return sha256_hex(canonical_json(inputs))
 
@@ -553,18 +1160,26 @@ def generate(
     its tests, as `tests_by_node` joins them. The contract has `id` `unique_id(node)`, `name`
     `table_name(node)`, `version` `"0"`, `status` `active`, the owner as `team.name`, the node's
     tags as dbt lists them, the readers and the grants as `roles`, continuo's root properties and
-    one schema object whose `physicalName` is the node's alias. A field with no value is left
-    out, and descriptions are trimmed. The result does not depend on the order of a mapping's
-    keys or on the machine's time zone.
+    one schema object whose `physicalName` is the node's alias.
 
-    `source_sha256` covers only the fields of the node that the generator reads: its own keys
-    such as `name`, `tags` and `deprecation_date`, and the keys of `config`, `config.meta` and
-    `config.meta.continuo` that it maps. Another `config` or `meta` key, `created_at` and the
-    compiled SQL never move it.
+    The schema object's `properties` are the declared columns in the order of the node's
+    `columns`, each with its type (a seed's `config.column_types` wins over `data_type`) and the
+    `logicalType` that `logical_type` gives for it, its description, tags and
+    `meta.continuo.classification`, the key of a model's `primary_key`, and what the tests on it
+    say; a snapshot's history columns follow. Its `quality` holds the rules of the tests that sit
+    on no declared column, then the table tests of `config.meta.continuo.tests`. A field with no
+    value is left out, and descriptions are trimmed. The result does not depend on the order of
+    the tests, of a mapping's keys other than `columns`, or on the machine's time zone.
 
-    A field of `node` in a shape the generator cannot read, or that it reads and canonical JSON
-    cannot write (such as an integer outside -(2**53 - 1) to 2**53 - 1), raises `DbtNodeError`,
-    whose message starts with the node's id and names the field.
+    `source_sha256` covers only the fields of the node, of its tests and of the nodes and sources
+    its `relationships` tests point to that the generator reads, with the order of the columns.
+    Another `config` or `meta` key, a test's `model` kwarg, `created_at` and the compiled SQL
+    never move it.
+
+    A field in a shape the generator cannot read, or that it reads and canonical JSON cannot write
+    (such as an integer outside -(2**53 - 1) to 2**53 - 1), raises `DbtNodeError`, whose message
+    starts with the node's id and names the field. A field of a test also names the test, as
+    `<node id>: test <test id>: <field> ...`.
     """
     config = _mapping(node, "config", node.get("config"))
     meta = _mapping(node, "config.meta", config.get("meta"))
@@ -575,6 +1190,8 @@ def generate(
     alias = _optional_text(node, "alias")
     description = normalise_text(_optional_text(node, "description"))
     reads = _strings(node, "config.meta.continuo.reads", continuo.get("reads"))
+    run = _Run(node, manifest, _label(node), set(), {})
+    properties, quality = _schema_parts(run, tests, config, continuo)
     schema_object: dict[str, Any] = {
         "name": table,
         "physicalName": alias or table,
@@ -585,6 +1202,8 @@ def generate(
         ]
         if reads
         else [],
+        "properties": properties,
+        "quality": quality,
     }
     document: dict[str, Any] = {
         "apiVersion": "v3.2.0",
@@ -598,10 +1217,10 @@ def generate(
         "tags": _tags(node),
         "roles": _roles(node, config, continuo),
         "customProperties": _root_properties(node, config, meta, materialized),
-        "schema": [{k: v for k, v in schema_object.items() if not _is_empty(v)}],
+        "schema": [_without_empty(schema_object)],
     }
     return Generated(
-        document={k: v for k, v in document.items() if not _is_empty(v)},
-        flags=(),
-        source_sha256=_source_sha256(node, tests),
+        document=_without_empty(document),
+        flags=tuple(flag for flag in FLAGS if flag in run.flags),
+        source_sha256=_source_sha256(run, tests),
     )

@@ -19,8 +19,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   reason continuo leaves a model, seed or snapshot out (`no_owner`, `local_stub` or
   `installed_package`, checked in that order) or `None` for a node it keeps, `node_service`,
   `project_service`, `schedule`, `table_name` and `unique_id` give its service, schedule and id, and
-  `tests_by_node` joins the tests of a manifest to the nodes they test. Each answers as continuo's
-  parser does today for every node of the five fixture manifests, which
+  `tests_by_node` joins the tests of a manifest to the nodes they test. `skip_reason` gives the
+  reason continuo's parser gives today for every node of the five fixture manifests, which
   `tests/fixtures/dbt/todays_gates.json` records. A field of a node in a shape these functions cannot
   read raises the new `DbtNodeError`.
 - `continuo_contracts.dbt.generate` writes the ODCS contract of a kept dbt model, seed or snapshot
@@ -33,6 +33,27 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   it. A `deprecationDate` is the date the team wrote in every time zone. A field of the node in a
   shape it cannot read, or a field it reads whose value canonical JSON cannot write, raises
   `DbtNodeError`.
+- `continuo_contracts.dbt.generate` writes the schema object's `properties` and `quality`: the
+  declared columns in the order of the node's `columns`, each with its `physicalType` (a seed's
+  `config.column_types` wins over `data_type`), its `logicalType`, description, tags,
+  `classification` and a model's `primaryKey` (with `primaryKeyPosition` in a key of two or more
+  columns), then a snapshot's history columns under the names `snapshot_meta_column_names` gives
+  them. Each dbt test becomes a rule: `not_null`, `unique` and `accepted_values` are the library
+  metrics `nullValues`, `duplicateValues` and `invalidValues`, and make a column `required` or
+  `unique` only with severity `error`, no `where` and dbt's default thresholds; `relationships` is
+  a relationship to `<target id>.<field>`; any other generic test is a `custom` rule with
+  `implementation: {test, arguments}`; a singular test is a `custom` rule on the schema object, as
+  is each table test of `config.meta.continuo.tests` (`engine: data-quality`). A rule carries
+  `severity` when it is not `error`, the test's description and tags, and `where`, `warnIf`,
+  `errorIf` and `failCalc` when they are not dbt's defaults. The contract is flagged
+  `jinja_in_test_arguments`, `test_column_not_declared` or `primary_key_column_not_declared`.
+  `source_sha256` now also covers the column fields and their order, the test fields and the
+  fields of each relationship's target that `generate` reads, and nothing else of them. A test
+  field in a shape it cannot read raises `DbtNodeError`, whose message names the node, then the
+  test.
+- `continuo_contracts.dbt.logical_type` gives the ODCS logical type of a declared column type, by
+  its name before `(` in lower case, with `maxLength` for a string type that gives a length, or
+  `None` for a type it does not know.
 - Test fixtures for dbt nodes: `tests/fixtures/dbt/projects` holds the dbt projects `core`,
   `finance`, `marketing` and `service_1`, copied from continuo-demo at commit
   `d92d371223107e77f5ca9291bfff5f6bb25e1703`, and a `cases` project with a local package `cases_pkg`

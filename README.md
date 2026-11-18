@@ -498,6 +498,7 @@ from continuo_contracts.dbt import (
     SKIP_REASONS,
     Generated,
     generate,
+    logical_type,
     node_service,
     project_service,
     schedule,
@@ -566,17 +567,76 @@ the database or the compiled SQL:
   `quoteColumns` (a seed's `config.quote_columns` when set);
 - one schema object with `name` the table, `physicalName` the alias (else the table),
   `physicalType` `view` for a view, `ephemeral` for an ephemeral model and `table` otherwise, the
-  node's description, and `config.meta.continuo.reads` as its `reads` custom property.
+  node's description, `config.meta.continuo.reads` as its `reads` custom property, its
+  `properties` and its `quality`.
+
+The `properties` are the columns the node declares, in the order of its `columns` (dbt's declared
+order), then, on a snapshot, the columns dbt adds to its table: `dbt_scd_id`, `dbt_updated_at`,
+`dbt_valid_from`, `dbt_valid_to`, and `dbt_is_deleted` when `hard_deletes` is `new_record`, each
+under the name `snapshot_meta_column_names` gives it and left out when the snapshot declares it.
+A declared column has:
+
+- `name`, `description` (trimmed) and `tags`;
+- `physicalType`, the declared `data_type` trimmed, or on a seed the column's
+  `config.column_types` entry, which wins; and the `logicalType` (and `logicalTypeOptions`) that
+  `logical_type` gives for it;
+- `classification` from the column's `meta.continuo.classification`;
+- `primaryKey: true` when a model's `primary_key` lists it, with `primaryKeyPosition`, its place
+  in that list counted from 1, when the key has two or more columns;
+- what the tests on it say, below.
+
+Each dbt test the node has becomes a quality rule, or a relationship:
+
+- `not_null` is `{id: <test name>, metric: nullValues, mustBe: 0}`, `unique` the same with
+  `duplicateValues`, and `accepted_values` `{id, metric: invalidValues, mustBe: 0, arguments:
+  {validValues: <values>}}`. A `not_null` test makes its column `required: true`, and a `unique`
+  test makes it `unique: true`, only when the test has severity `error`, no `where`, and dbt's
+  default `warn_if`, `error_if` and `fail_calc`.
+- `relationships` adds `{to: "<target id>.<field>"}` to the column's `relationships`. The target is
+  the entry of the test's `depends_on.nodes` other than its `attached_node`: a manifest node is
+  named by `unique_id`, a source by `<schema>.<identifier or name>` in lower case, and with no
+  other entry the target is the node itself.
+- Any other generic test is `{id, name: <test name>, type: custom, engine: dbt, implementation:
+  {test, arguments}}`, where `test` is the generic test's name, written `<namespace>.<name>` for a
+  test from a package (so `not_null` from a package is not dbt's), and `arguments` are its kwargs
+  but `model` and `column_name`, left out when there are none.
+- A singular test is `{id, name, type: custom, engine: dbt, implementation: <test name>}` on the
+  schema object.
+- Every rule from a test carries `severity` when it is not `error` (`warn` is written `warning`),
+  the test's `description` and `tags`, and `where`, `warnIf`, `errorIf` and `failCalc` as
+  `continuo` properties when they are set and are not dbt's defaults. A relationship has no field
+  for them.
+- A test on a column the node does not declare goes on the schema object, as the same rule with
+  `column_name` in its arguments (inside `implementation` for a `custom` rule); a `relationships`
+  test there is a `custom` rule.
+
+The rules on a column, and the test rules on the schema object, come in the order of their
+canonical JSON. The schema object's table tests follow them in the order the team writes them:
+each item `{name, enabled, granularity, params}` of `config.meta.continuo.tests` is
+`{type: custom, engine: data-quality, name, implementation: {enabled, granularity, params}}`, with
+`enabled` `true` when it is not set.
+
+`flags` names the marks of `FLAGS` the contract carries: `jinja_in_test_arguments` when a test's
+kwargs (but `model` and `column_name`) or its `where` hold `{{` or `{%`, which the rule keeps as
+written; `test_column_not_declared`; and `primary_key_column_not_declared` when a model's
+`primary_key` names a column the node does not declare, which is left out.
 
 A field with no value is left out of the document. The result does not depend on the order of the
-keys of the node or on the machine's time zone.
+tests, on the order of the keys of the node other than `columns`, or on the machine's time zone.
 
 `source_sha256` covers exactly the fields `generate` reads and nothing else of the node: the node's
 `resource_type`, `name`, `version`, `schema`, `alias`, `fqn`, `original_file_path`,
-`description`, `tags` and `deprecation_date`; from `config`, the keys the list above maps
-(`contract.enforced` and `freshness.build_after`'s `count` and `period` only, not the rest of
-`contract` or `freshness`); from `config.meta`, `owner`, `criticality` and `timeout_minutes`; and
-from `config.meta.continuo`, `readers` and `reads`. Any other `config` or `meta` key,
+`description`, `tags`, `deprecation_date` and `primary_key`; from `config`, the keys the lists
+above map (`contract.enforced` and `freshness.build_after`'s `count` and `period` only, not the
+rest of `contract` or `freshness`, and `column_types`); from `config.meta`, `owner`, `criticality`
+and `timeout_minutes`; from `config.meta.continuo`, `readers`, `reads` and each table test's
+`name`, `enabled`, `granularity` and `params`; and from each column, in their order, its `name`,
+`description`, `data_type`, `tags` and `meta.continuo.classification`. Of each test it covers the
+`name`, `column_name`, `attached_node`, `depends_on.nodes`, `test_metadata`'s `name`,
+`namespace` and kwargs (but `model` and `column_name`), `description`, `tags`, and `config`'s
+`severity`, `where`, `warn_if`, `error_if` and `fail_calc`; and of a relationship's target, a
+node's `schema`, `name` and `version` or a source's `schema`, `identifier` and `name`. Any other
+`config` or `meta` key, a column's `quote` or `constraints`, a test's `limit` or `store_failures`,
 `created_at`, `raw_code` and the compiled SQL never move it. A field it reads whose value canonical
 JSON cannot write, such as an integer outside -(2**53 - 1) to 2**53 - 1, raises `DbtNodeError`
 naming the field; such a value in a field it does not read changes nothing.
@@ -586,7 +646,14 @@ generated = generate(
     node, tests_by_node(manifest).get(node["unique_id"], []), manifest=manifest
 )
 generated.document["id"]  # "analytics.fx_transactions_eur"
+generated.document["schema"][0]["properties"][0]
+# {"name": "transaction_id", "primaryKey": True, "required": True, "unique": True,
+#  "quality": [{"id": "not_null_fx_transactions_eur_transaction_id", "metric": "nullValues",
+#               "mustBe": 0}, {"id": "unique_fx_transactions_eur_transaction_id",
+#               "metric": "duplicateValues", "mustBe": 0}]}
 generated.flags  # ()
+logical_type("varchar(64)")
+# {"logicalType": "string", "logicalTypeOptions": {"maxLength": 64}}
 ```
 
 ### Public names
@@ -629,9 +696,22 @@ generated.flags  # ()
   `generate` reads for the node and its tests, and of nothing else).
 - `generate`: `generate(node, tests, *, manifest) -> Generated` writes the ODCS contract of a node
   that `skip_reason` keeps, from the node, its tests as `tests_by_node` joins them and the
-  manifest they come from. A field of the node in a shape it cannot read, such as a `config.meta`
-  that is not a mapping or a `config.meta.owner` that is not a non-empty string, or a field it
-  reads whose value canonical JSON cannot write, raises `DbtNodeError`.
+  manifest they come from, which holds the targets of its `relationships` tests. A field of the
+  node, of a test or of a target in a shape it cannot read, such as a `config.meta` that is not a
+  mapping, a `config.meta.owner` that is not a non-empty string or a test `severity` other than
+  `warn` or `error`, or a field it reads whose value canonical JSON cannot write, raises
+  `DbtNodeError`. The message starts with the node's id; for a test it then names the test, as in
+  `model.shop.orders: test test.shop.not_null_orders_id.1a2b: config.where must be a string, got
+  int`.
+- `logical_type`: `logical_type(data_type) -> dict[str, Any] | None` returns the ODCS logical type
+  of a declared column type, read by its name before `(` in lower case: `int`, `integer`, `int4`,
+  `bigint`, `int8`, `smallint` and `int2` are `integer`; `numeric`, `decimal`,
+  `double precision`, `float`, `float8`, `real` and `double` are `number`; `text`, `string`,
+  `varchar`, `character varying`, `char` and `character` are `string`, with
+  `logicalTypeOptions: {maxLength: n}` when the type gives a length from 1 to 2**53 - 1; `date` is
+  `date`; `timestamp`, `timestamptz`, `timestamp with time zone`, `timestamp without time zone`
+  and `datetime` are `timestamp`; `boolean` and `bool` are `boolean`. Any other type gives `None`.
+  The result is a new dict, such as `{"logicalType": "integer"}`.
 
 ## vocabulary
 

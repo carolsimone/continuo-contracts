@@ -71,22 +71,50 @@ READ_FIELDS = (
     ("config.meta.timeout_minutes", 30),
     ("config.meta.continuo.readers", ["marketing"]),
     ("config.meta.continuo.reads", ["analytics.orders"]),
+    ("primary_key", ["id"]),
+    ("config.column_types", {"id": "bigint"}),
+    ("config.meta.continuo.tests.*.name", "rows"),
+    ("config.meta.continuo.tests.*.enabled", False),
+    ("config.meta.continuo.tests.*.granularity", "hourly"),
+    ("config.meta.continuo.tests.*.params", {"min": 2}),
+    ("columns.*.name", "e_mail"),
+    ("columns.*.description", "Mail."),
+    ("columns.*.data_type", "text"),
+    ("columns.*.tags", ["sensitive"]),
+    ("columns.*.meta.continuo.classification", "restricted"),
 )
+
+
+def _concrete(path):
+    """Return `path` with each `*` written as a key the governed model has: its column `email`, or
+    its first table test."""
+    return path.replace("columns.*", "columns.email").replace(
+        "tests.*", "tests.0"
+    )
+
+
+def _step(value, key):
+    if isinstance(value, list) and key.isdigit():
+        return value[int(key)]
+    return value.get(key) if isinstance(value, dict) else None
 
 
 def _get_path(node, path):
     value = node
-    for key in path.split("."):
-        value = value.get(key) if isinstance(value, dict) else None
+    for key in _concrete(path).split("."):
+        value = _step(value, key)
     return value
 
 
 def _set_path(node, path, value):
     """Set the field at the dotted `path` of `node`, making each mapping on the way."""
-    *parents, last = path.split(".")
+    *parents, last = _concrete(path).split(".")
     target = node
     for key in parents:
-        if not isinstance(target.get(key), dict):
+        if isinstance(target, list):
+            target = target[int(key)]
+            continue
+        if not isinstance(target.get(key), dict | list):
             target[key] = {}
         target = target[key]
     target[last] = value
@@ -549,22 +577,25 @@ def test_a_read_value_canonical_json_cannot_write_raises_dbt_node_error(
 
 
 class _Recording(Mapping):
-    """A read-only view of a mapping that records the dotted path of every key read from it.
+    """A read-only view of a mapping that records the path of every key read from it.
 
-    A value that is a mapping comes back as a `_Recording` too, so reads at any depth count.
+    A path is the tuple of the keys from the top, so a key with a dot in it, such as a node id, is
+    one step. A value that is a mapping comes back as a `_Recording` too, so reads at any depth
+    count. A list comes back as it is: the generator checks that a list is a `list`, so the reads
+    inside one are not recorded.
     """
 
-    def __init__(self, data, seen, prefix=""):
+    def __init__(self, data, seen, path=()):
         self._data = data
         self._seen = seen
-        self._prefix = prefix
+        self._path = path
 
     def __getitem__(self, key):
-        path = f"{self._prefix}{key}"
+        path = (*self._path, key)
         self._seen.add(path)
         value = self._data[key]
         if isinstance(value, Mapping):
-            return _Recording(value, self._seen, f"{path}.")
+            return _Recording(value, self._seen, path)
         return value
 
     def __iter__(self):
@@ -574,34 +605,61 @@ class _Recording(Mapping):
         return len(self._data)
 
 
+def _pattern(field):
+    """Return the declared dotted `field` as a tuple of keys, where `*` stands for any one key."""
+    return tuple(field.split("."))
+
+
+def _matches(path, pattern):
+    return len(path) == len(pattern) and all(
+        part in ("*", key) for key, part in zip(path, pattern, strict=True)
+    )
+
+
 def _undeclared(seen, declared):
-    """Return the paths of `seen` that are neither a declared field, a field below one, nor a
-    mapping on the way to one. `unique_id` is read only to name a node in an error."""
-    allowed = {*declared, "unique_id"}
+    """Return, as dotted strings, the paths of `seen` that are neither a declared field, a field
+    below one, nor a mapping on the way to one. `unique_id` is read only to name a node in an
+    error."""
+    patterns = [_pattern(field) for field in (*declared, "unique_id")]
 
     def inside(path):
         return any(
-            path == field
-            or path.startswith(f"{field}.")
-            or field.startswith(f"{path}.")
-            for field in allowed
+            _matches(path[: len(pattern)], pattern[: len(path)])
+            for pattern in patterns
         )
 
-    return sorted(path for path in seen if not inside(path))
+    return sorted(".".join(path) for path in seen if not inside(path))
+
+
+# The declared fields that sit inside a list, which `_Recording` cannot see into: the reverse
+# check looks for a read of the list itself.
+LISTS = (("config", "meta", "continuo", "tests"),)
+
+
+def _visible(field):
+    """Return the part of the declared `field` that a recording view can see read."""
+    pattern = _pattern(field)
+    for prefix in LISTS:
+        if pattern[: len(prefix)] == prefix:
+            return prefix
+    return pattern
 
 
 def _reads_of(project, node_id):
-    """Run `generate` on recording views of a node and its tests, and return what it read."""
+    """Run `generate` on recording views of a node, its tests and its manifest, and return what it
+    read of each."""
     manifest = load_manifest(project)
-    node_seen, test_seen = set(), set()
+    node_seen, test_seen, manifest_seen = set(), set(), set()
     node = _Recording(manifest["nodes"][node_id], node_seen)
     tests = [
         _Recording(test, test_seen)
         for test in dbt.tests_by_node(manifest).get(node_id, [])
     ]
-    generated = dbt.generate(node, tests, manifest=manifest)
+    generated = dbt.generate(
+        node, tests, manifest=_Recording(manifest, manifest_seen)
+    )
     assert generated == _generated(project, node_id)
-    return node_seen, test_seen
+    return node_seen, test_seen, manifest_seen
 
 
 GUARDED_NODES = sorted(
@@ -611,6 +669,8 @@ GUARDED_NODES = sorted(
         ("cases", "model.cases.governed"),
         ("cases", "model.cases.incr"),
         ("cases", "model.cases.enforced"),
+        ("cases", "model.cases.generic_tests"),
+        ("cases", "model.cases.singular_target"),
         ("cases", "seed.cases.typed_seed"),
         ("cases", "snapshot.cases.orders_snapshot"),
         *(
@@ -624,18 +684,51 @@ GUARDED_NODES = sorted(
 
 @pytest.mark.parametrize(("project", "node_id"), GUARDED_NODES)
 def test_the_generator_reads_only_the_fields_it_declares(project, node_id):
-    node_seen, test_seen = _reads_of(project, node_id)
+    node_seen, test_seen, manifest_seen = _reads_of(project, node_id)
     assert _undeclared(node_seen, dbt._READ_PATHS) == []
     assert _undeclared(test_seen, dbt._TEST_FIELDS) == []
+    assert _undeclared(manifest_seen, dbt._MANIFEST_PATHS) == []
+    unread_kwargs = {
+        ("test_metadata", "kwargs", key) for key in dbt._UNREAD_KWARGS
+    }
+    assert test_seen & unread_kwargs == set()
+
+
+def test_every_declared_field_is_read_for_some_fixture_node(monkeypatch):
+    # With the hash stubbed out, only the reads that build the document are recorded, so a
+    # declared field that nothing reads any more shows up here.
+    monkeypatch.setattr(dbt, "_source_sha256", lambda *args: "")
+    seen = {"node": set(), "test": set(), "manifest": set()}
+    for project, node_id in GUARDED_NODES:
+        for place, paths in zip(seen, _reads_of(project, node_id), strict=True):
+            seen[place] |= paths
+    for place, declared in (
+        ("node", dbt._READ_PATHS),
+        ("test", dbt._TEST_FIELDS),
+        ("manifest", dbt._MANIFEST_PATHS),
+    ):
+        unread = [
+            field
+            for field in declared
+            if not any(_matches(path, _visible(field)) for path in seen[place])
+        ]
+        assert unread == [], place
 
 
 def test_the_read_guard_finds_a_field_that_is_not_declared():
-    node_seen, _ = _reads_of("cases", "model.cases.governed")
+    _, test_seen, _ = _reads_of("cases", "model.cases.generic_tests")
     declared = [
         path for path in dbt._READ_PATHS if path != "config.meta.timeout_minutes"
     ]
+    node_seen, _, _ = _reads_of("cases", "model.cases.governed")
     assert _undeclared(node_seen, declared) == ["config.meta.timeout_minutes"]
-    assert "config.meta.ticket" not in node_seen
+    assert ("config", "meta", "ticket") not in node_seen
+    without_where = [path for path in dbt._TEST_FIELDS if path != "config.where"]
+    assert "config.where" in _undeclared(test_seen, without_where)
+    without_columns = [
+        path for path in dbt._READ_PATHS if not path.startswith("columns.")
+    ]
+    assert "columns.id.name" in _undeclared(node_seen, without_columns)
 
 
 def test_source_sha256_does_not_depend_on_key_order():
@@ -749,6 +842,14 @@ def _set(path, value):
             _set(("config", "freshness", "build_after"), 4),
             "config.freshness.build_after must be a mapping, got int",
         ),
+        (_set(("tags",), "daily"), "tags must be a list of strings, got str"),
+        (_set(("tags",), ["daily", 1]), "tags[1] must be a string, got int"),
+        (_set(("fqn",), "cases"), "fqn must be a list, got str"),
+        (_set(("fqn",), [1]), "fqn[0] must be a string, got int"),
+        (
+            _set(("version",), [2]),
+            "version must be a string or a number, got list",
+        ),
         (
             _set(("deprecation_date",), 20261201),
             "deprecation_date must be an ISO 8601 date and time, got int",
@@ -765,6 +866,27 @@ def test_a_field_of_the_wrong_shape_raises_dbt_node_error(change, message):
     with pytest.raises(DbtNodeError) as raised:
         _generate(node, "cases")
     assert str(raised.value) == f"model.cases.governed: {message}"
+
+
+def test_a_node_with_no_fqn_has_no_service():
+    for fqn in (None, []):
+        node = _node("cases", "model.cases.governed")
+        node["fqn"] = fqn
+        root = continuo_values(
+            _generate(node, "cases").document["customProperties"]
+        )
+        assert "service" not in root
+
+
+def test_a_node_with_no_id_and_no_name_is_named_unknown():
+    node = _node("cases", "model.cases.governed")
+    node["unique_id"] = None
+    node["name"] = ""
+    with pytest.raises(DbtNodeError) as raised:
+        dbt.generate(node, [], manifest=load_manifest("cases"))
+    assert str(raised.value) == (
+        "<unknown node>: name must be a non-empty string, got an empty string"
+    )
 
 
 def test_snapshot_meta_column_names_that_are_not_a_mapping_raise_dbt_node_error():
