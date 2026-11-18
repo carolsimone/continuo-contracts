@@ -2759,5 +2759,59 @@
    "version": "0"
   },
   "tests": []
+ },
+ {
+  "issues": [
+   {
+    "path": "customProperties[3].value",
+    "reason": "value"
+   }
+  ],
+  "manifest": {
+   "nodes": {},
+   "sources": {}
+  },
+  "name": "bad_criticality",
+  "node": {
+   "alias": "bad_criticality",
+   "columns": {},
+   "config": {
+    "access": "protected",
+    "column_types": {},
+    "contract": {
+     "enforced": false
+    },
+    "freshness": null,
+    "grants": {},
+    "group": null,
+    "incremental_strategy": null,
+    "materialized": "table",
+    "meta": {
+     "criticality": "high",
+     "owner": "cases"
+    },
+    "on_schema_change": "ignore",
+    "unique_key": null
+   },
+   "deprecation_date": null,
+   "description": "",
+   "fqn": [
+    "cases",
+    "tagged",
+    "bad_criticality"
+   ],
+   "name": "bad_criticality",
+   "original_file_path": "models/tagged/bad_criticality.sql",
+   "primary_key": [],
+   "resource_type": "model",
+   "schema": "analytics",
+   "tags": [
+    "project_tag"
+   ],
+   "unique_id": "model.cases.bad_criticality",
+   "version": null
+  },
+  "reads": [],
+  "tests": []
  }
 ]

@@ -75,9 +75,21 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   continuo runs the node with, as a `RunFacts`: its id, schema, table, physical name, service,
   kind, schedule (`""` for a dormant node), criticality, timeout (`None` when unset), file path,
   owner and materialization.
+- `continuo_contracts.validate.validate_dbt_contract` checks a dbt contract, generated or stored,
+  against the ODCS schema and then against `dbt_rule_issues`, the rules of a dbt contract: the
+  envelope, one schema object with an `id` that is a schema part, a dot and its table in lower
+  case, `team.name`, the `continuo` properties (a name the vocabulary does not know is
+  `unknown_property`, one that dbt does not use, such as `script`, is `refused_property`, one
+  written twice is a `value` issue), `service` and `kind` written, `kind` one of the three dbt
+  kinds, `criticality` one of `REGULATORY`, `CORE` and `SECONDARY`, `schedule` at most 50
+  characters and `timeoutMinutes` a whole number from 1 to 10080. A value issue is at the `value`
+  of the property, as in `customProperties[3].value`. The checks of a Python contract do not
+  change.
 - The new vector file `vectors/dbt_contracts.json` pins the generated contract, the flags, the
   stored form and the first `contract_hash` of nine dbt nodes, one for each rule of the
-  generator, each with its node, tests and manifest pruned to the fields `generate` reads.
+  generator, each with its node, tests and manifest pruned to the fields `generate` reads, and a
+  tenth case, `bad_criticality`, that lists the issues `validate_dbt_contract` finds in the
+  generated contract of a model whose criticality is `high`.
   `tests/fixtures/dbt/golden/<project>/<id>.json` holds the generated contract, the flags, the
   stored form and the hash of every kept node of the five fixture manifests, and
   `scripts/write_dbt_goldens.py` writes both, the same bytes on every run. No 0.2.0 vector file

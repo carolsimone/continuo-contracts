@@ -10,10 +10,12 @@ document `dbt.generate` writes (`generated`), its `flags`, its stored form
 removes a golden file that belongs to no kept node.
 
 It also writes `continuo_contracts/vectors/dbt_contracts.json`, one case for each rule in
-`CONTRACT_CASES`. A case holds the node, its tests and the part of its manifest that `generate`
-reads, each pruned to the fields `generate` reads (`pruned_node`, `pruned_test`,
-`pruned_manifest`), the `reads` passed to `normalise_dbt`, and what the library gives for them:
-`generated`, `flags`, `stored` and `contract_hash`.
+`CONTRACT_CASES` and then one for each node in `ISSUES_CASES`. A case holds the node, its tests and
+the part of its manifest that `generate` reads, each pruned to the fields `generate` reads
+(`pruned_node`, `pruned_test`, `pruned_manifest`), the `reads` passed to `normalise_dbt`, and what
+the library gives for them. A contract case holds `generated`, `flags`, `stored` and
+`contract_hash`. An issues case is a node whose generated contract is not valid, and holds `issues`,
+the `{path, reason}` of each issue that `validate.validate_dbt_contract` finds in it, in order.
 
 Each file is JSON with one space of indent and ASCII only, and ends with a newline. The keys of
 every object are sorted, except a node's `columns` in the vector, which keep the order in which
@@ -34,6 +36,7 @@ from typing import Any, Final
 
 from continuo_contracts import dbt
 from continuo_contracts.contract import contract_hash, normalise_dbt
+from continuo_contracts.validate import validate_dbt_contract
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +65,12 @@ CONTRACT_CASES: Final[tuple[tuple[str, str, str, tuple[str, ...]], ...]] = (
         "model.cases.governed",
         ("Analytics.Orders", "analytics.orders", "raw.events"),
     ),
+)
+
+# The cases of the vector whose generated contract is not valid, in the same form: the name of the
+# case, the fixture project, the manifest key of the node and the tables its compiled SQL names.
+ISSUES_CASES: Final[tuple[tuple[str, str, str, tuple[str, ...]], ...]] = (
+    ("bad_criticality", "cases", "model.cases.bad_criticality", ()),
 )
 
 
@@ -205,9 +214,29 @@ def contract_case(
     }
 
 
+def issues_case(
+    name: str, project: str, key: str, reads: Sequence[str]
+) -> dict[str, Any]:
+    """Return the vector case `name`, whose generated contract has issues."""
+    case = case_inputs(name, project, key, reads)
+    generated = dbt.generate(
+        case["node"], case["tests"], manifest=case["manifest"]
+    )
+    return {
+        **case,
+        "issues": [
+            {"path": issue.path, "reason": issue.reason}
+            for issue in validate_dbt_contract(generated.document)
+        ],
+    }
+
+
 def vector_cases() -> list[dict[str, Any]]:
-    """Return the cases of the vector, in the order of `CONTRACT_CASES`."""
-    return [contract_case(*case) for case in CONTRACT_CASES]
+    """Return the cases of the vector: those of `CONTRACT_CASES`, then those of `ISSUES_CASES`."""
+    return [
+        *(contract_case(*case) for case in CONTRACT_CASES),
+        *(issues_case(*case) for case in ISSUES_CASES),
+    ]
 
 
 def vector_text() -> str:
@@ -251,7 +280,7 @@ def main() -> int:
     logger.info(
         "wrote %d golden contracts and %d vector cases",
         len(texts),
-        len(CONTRACT_CASES),
+        len(CONTRACT_CASES) + len(ISSUES_CASES),
     )
     return 0
 

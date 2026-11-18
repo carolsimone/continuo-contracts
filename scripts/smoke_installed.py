@@ -43,7 +43,10 @@ from continuo_contracts.python import (
     code_projection,
     projection_hash,
 )
-from continuo_contracts.validate import validate_python_contract
+from continuo_contracts.validate import (
+    validate_dbt_contract,
+    validate_python_contract,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -273,7 +276,11 @@ def _contract_failures(cases: list[dict[str, Any]]) -> list[str]:
 
 
 def _dbt_contract_failures(cases: list[dict[str, Any]]) -> list[str]:
-    """Return the dbt contract vector cases whose contract, flags, stored form or hash differ."""
+    """Return the dbt contract vector cases whose contract, flags, stored form, hash or issues differ.
+
+    A case with `issues` is a node whose generated contract is not valid, and `issues` lists what
+    `validate_dbt_contract` finds in it. The generated contract of any other case is valid.
+    """
     failures: list[str] = []
     for case in cases:
         name = case["name"]
@@ -281,11 +288,25 @@ def _dbt_contract_failures(cases: list[dict[str, Any]]) -> list[str]:
             generated = generate(
                 case["node"], case["tests"], manifest=case["manifest"]
             )
+            issues = [
+                {"path": issue.path, "reason": issue.reason}
+                for issue in validate_dbt_contract(generated.document)
+            ]
+            if "issues" in case:
+                if issues != case["issues"]:
+                    failures.append(
+                        f"dbt contract vector {name!r}: the issues are {issues!r}"
+                    )
+                continue
             stored = normalise_dbt(generated.document, reads=case["reads"])
             digest = contract_hash(stored)
         except ContractsError as error:
             failures.append(f"dbt contract vector {name!r}: refused: {error}")
             continue
+        if issues:
+            failures.append(
+                f"dbt contract vector {name!r}: the generated contract has issues {issues!r}"
+            )
         if generated.document != case["generated"]:
             failures.append(
                 f"dbt contract vector {name!r}: the generated contract differs"

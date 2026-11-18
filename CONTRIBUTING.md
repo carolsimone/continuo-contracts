@@ -94,8 +94,8 @@ not a service, and layers would add indirection without a second implementation.
   repeated keys.
 - `dbt`: the gates of a dbt manifest node, the names a kept node gets and the join of its tests.
 - `vocabulary`: the custom properties of the `continuo` vendor and where each may sit.
-- `validate`: the check of a Python node's ODCS contract, the JSON schema and continuo's rules, with
-  every problem as an `Issue` that has a path and a closed reason.
+- `validate`: the check of a Python node's or a dbt node's ODCS contract, the JSON schema and
+  continuo's rules, with every problem as an `Issue` that has a path and a closed reason.
 - `contract`: the stored form of a Python node's ODCS contract, in the canonical form, and its
   `contract_hash`.
 - `cli`: the `continuo-contracts` command, `validate` and `hash`, over contract files.
@@ -103,13 +103,13 @@ not a service, and layers would add indirection without a second implementation.
 `errors` and `vocabulary` import nothing from the package. `canonical`, `hashing`, `fingerprints`
 and `schema` import only `errors` (`fingerprints` also PyYAML), `yaml_strict` imports `canonical`,
 `errors` and PyYAML, `dbt` imports only `errors`, `python` imports `canonical`, `errors`,
-`hashing`, `fingerprints` and `vocabulary`, `validate` imports `canonical`, `contract`, `errors`,
-`python`, `schema`, `vocabulary` and jsonschema, `contract` imports `canonical`, `errors`, `fingerprints`, `hashing`,
-`python` and `vocabulary`, `cli` imports `contract`, `errors`, `validate` and `yaml_strict`, and
-nothing imports `scripts` or `tests`. The only files the package reads are the packaged
-`fingerprints.yaml`, in `fingerprints.load()`, the packaged ODCS schema, in `schema.load()`, and the
-contract files that the arguments of `cli` name. A split into layers is proposed only when a module
-gets a second reason to change.
+`hashing`, `fingerprints` and `vocabulary`, `validate` imports `canonical`, `contract`, `dbt`,
+`errors`, `python`, `schema`, `vocabulary` and jsonschema, `contract` imports `canonical`, `errors`,
+`fingerprints`, `hashing`, `python` and `vocabulary`, `cli` imports `contract`, `errors`,
+`validate` and `yaml_strict`, and nothing imports `scripts` or `tests`. The only files the
+package reads are the packaged `fingerprints.yaml`, in `fingerprints.load()`, the packaged ODCS
+schema, in `schema.load()`, and the contract files that the arguments of `cli` name. A split into
+layers is proposed only when a module gets a second reason to change.
 
 import-linter (`uv run lint-imports`) enforces the ordering of these modules and the confinement of
 the libraries, with the contracts under `[tool.importlinter]` in `pyproject.toml` and no

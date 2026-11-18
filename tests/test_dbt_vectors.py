@@ -13,6 +13,7 @@ from dbt_fixtures import load_manifest
 
 from continuo_contracts import dbt
 from continuo_contracts.contract import contract_hash, normalise_dbt
+from continuo_contracts.validate import validate_dbt_contract
 from continuo_contracts.vocabulary import continuo_values
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,17 +30,9 @@ def _vectors(name):
 
 
 CASES = _vectors("dbt_contracts.json")
-CONTRACT_FIELDS = {
-    "name",
-    "node",
-    "tests",
-    "manifest",
-    "reads",
-    "generated",
-    "flags",
-    "stored",
-    "contract_hash",
-}
+INPUT_FIELDS = {"name", "node", "tests", "manifest", "reads"}
+CONTRACT_FIELDS = INPUT_FIELDS | {"generated", "flags", "stored", "contract_hash"}
+ISSUES_FIELDS = INPUT_FIELDS | {"issues"}
 # The case of each rule of the generator, with the manifest key of its node.
 RULES = {
     "model_with_tests": "model.cases.generic_tests",
@@ -52,6 +45,12 @@ RULES = {
     "governed": "model.cases.governed",
     "sql_reads": "model.cases.governed",
 }
+# The case of each node whose generated contract is not valid, with the manifest key of its node.
+ISSUES = {"bad_criticality": "model.cases.bad_criticality"}
+
+# The SHA-256 of the file as it was written with its nine contract cases and no other: the text
+# of those cases, a list that ends after the ninth, which no later case may change.
+NINE_CASES = "fd2b2da40f72cccfe70a5701fdf5885160c12a2369d25de31b41203e411cae58"
 
 # The SHA-256 of each vector file of 0.2.0, which no later change may move.
 OLDER_VECTORS = {
@@ -68,8 +67,20 @@ def _case(name):
     return next(case for case in CASES if case["name"] == name)
 
 
+def _issues(document):
+    """The `{path, reason}` of each issue that `validate_dbt_contract` finds in `document`."""
+    return [
+        {"path": issue.path, "reason": issue.reason}
+        for issue in validate_dbt_contract(document)
+    ]
+
+
 def _root(doc):
     return continuo_values(doc["customProperties"])
+
+
+CONTRACT_CASES = [case for case in CASES if "issues" not in case]
+ISSUES_CASES = [case for case in CASES if "issues" in case]
 
 
 @pytest.mark.parametrize("case", CASES, ids=lambda c: c["name"])
@@ -77,6 +88,10 @@ def test_dbt_contract_vector(case):
     generated = dbt.generate(
         case["node"], case["tests"], manifest=case["manifest"]
     )
+    # A contract case is valid, and an issues case has the issues that it lists.
+    assert _issues(generated.document) == case.get("issues", [])
+    if "issues" in case:
+        return
     assert generated.document == case["generated"]
     assert list(generated.flags) == case["flags"]
     stored = normalise_dbt(generated.document, reads=case["reads"])
@@ -84,16 +99,27 @@ def test_dbt_contract_vector(case):
     assert contract_hash(stored) == case["contract_hash"]
 
 
-@pytest.mark.parametrize("case", CASES, ids=lambda c: c["name"])
+@pytest.mark.parametrize("case", CONTRACT_CASES, ids=lambda c: c["name"])
 def test_the_pinned_hash_is_the_hash_of_the_pinned_stored_form(case):
     assert contract_hash(case["stored"]) == case["contract_hash"]
     assert normalise_dbt(case["generated"], reads=case["reads"]) == case["stored"]
+    assert _issues(case["stored"]) == []
 
 
 def test_the_file_holds_one_case_for_each_rule_with_the_documented_fields():
-    assert [case["name"] for case in CASES] == list(RULES)
-    for case in CASES:
+    assert [case["name"] for case in CONTRACT_CASES] == list(RULES)
+    for case in CONTRACT_CASES:
         assert set(case) == CONTRACT_FIELDS, case["name"]
+
+
+def test_the_file_ends_with_the_cases_of_the_nodes_that_have_issues():
+    assert [case["name"] for case in CASES] == [*RULES, *ISSUES]
+    assert [case["name"] for case in ISSUES_CASES] == list(ISSUES)
+    for case in ISSUES_CASES:
+        assert set(case) == ISSUES_FIELDS, case["name"]
+        assert case["reads"] == []
+        for issue in case["issues"]:
+            assert set(issue) == {"path", "reason"}
 
 
 def test_the_file_is_the_writers_output():
@@ -103,12 +129,22 @@ def test_the_file_is_the_writers_output():
     assert [(name, key) for name, _, key, _ in writer.CONTRACT_CASES] == list(
         RULES.items()
     )
+    assert [(name, key) for name, _, key, _ in writer.ISSUES_CASES] == list(
+        ISSUES.items()
+    )
+
+
+def test_the_nine_contract_cases_are_the_ones_of_the_first_version_of_the_file():
+    first = CASES[: len(RULES)]
+    assert [case["name"] for case in first] == list(RULES)
+    text = json.dumps(first, indent=1, ensure_ascii=True) + "\n"
+    assert hashlib.sha256(text.encode("ascii")).hexdigest() == NINE_CASES
 
 
 @pytest.mark.parametrize("case", CASES, ids=lambda c: c["name"])
 def test_the_pruned_inputs_generate_what_the_whole_manifest_generates(case):
     manifest = load_manifest("cases")
-    key = RULES[case["name"]]
+    key = {**RULES, **ISSUES}[case["name"]]
     tests = dbt.tests_by_node(manifest).get(key, [])
     whole = dbt.generate(manifest["nodes"][key], tests, manifest=manifest)
     pruned = dbt.generate(case["node"], case["tests"], manifest=case["manifest"])
@@ -253,8 +289,34 @@ def test_the_sql_reads_join_the_declared_reads_once_in_lower_case():
 
 
 def test_the_hashes_of_the_cases_differ():
-    hashes = [case["contract_hash"] for case in CASES]
+    hashes = [case["contract_hash"] for case in CONTRACT_CASES]
     assert len(set(hashes)) == len(hashes)
+
+
+def test_the_bad_criticality_case_has_the_one_issue_of_its_criticality():
+    case = _case("bad_criticality")
+    assert case["node"]["config"]["meta"]["criticality"] == "high"
+    generated = dbt.generate(
+        case["node"], case["tests"], manifest=case["manifest"]
+    )
+    properties = generated.document["customProperties"]
+    index = next(
+        i
+        for i, item in enumerate(properties)
+        if item["property"] == "criticality"
+    )
+    assert properties[index]["value"] == "high"
+    assert case["issues"] == [
+        {"path": f"customProperties[{index}].value", "reason": "value"}
+    ]
+    assert case["issues"] == [
+        {"path": "customProperties[3].value", "reason": "value"}
+    ]
+
+
+def test_the_generated_contract_of_every_contract_case_is_valid():
+    for case in CONTRACT_CASES:
+        assert _issues(case["generated"]) == [], case["name"]
 
 
 def test_no_older_vector_moved():
