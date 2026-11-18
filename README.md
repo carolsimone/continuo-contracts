@@ -335,7 +335,8 @@ mapping of the file with a `FingerprintsFileError` that names the key and its li
   names and whose key is not in the denylist belongs to the family's `other_config` entry. It does
   not classify a sub-key of a denylisted key (`config.meta.owner` gives `None`), and a dotted name
   such as `config.contract.enforced` is classified only where an entry declares it as its own
-  input (the dbt model has one), so in another dbt family it belongs to `other_config`. In a
+  input (the dbt model, seed and snapshot each have one), so in the dbt test family it belongs to
+  `other_config`. In a
   Python family, an `odcs.<path>` that no entry names belongs to the family's `standard_field`
   entry, which classifies every standard ODCS field of the stored form as `contract`; a `continuo`
   custom property (`odcs.custom.<property>` or `odcs.schema.custom.<property>`) is classified only

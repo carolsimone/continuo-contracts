@@ -603,6 +603,7 @@ def _full_dbt_stored(case_name):
     config = node["config"]
     config["grants"] = {"select": ["analyst"]}
     config["group"] = "finance"
+    config["contract"] = {"enforced": True}
     config["meta"] = {
         "owner": "cases",
         "criticality": "CORE",
@@ -620,7 +621,6 @@ def _full_dbt_stored(case_name):
         node["deprecation_date"] = "2030-01-01"
         config["access"] = "public"
         config["freshness"] = {"build_after": {"count": 1, "period": "day"}}
-        config["contract"] = {"enforced": True}
     target = "model.cases.customer.v2"
     manifest = cases["model_with_tests"]["manifest"]
     tests = [
@@ -667,6 +667,7 @@ def test_every_field_a_dbt_contract_can_hold_is_classified(case, family):
     assert _kind(stored) == family
     names = _odcs_inputs(stored)
     assert {
+        "odcs.custom.contractEnforced",
         "odcs.schema.custom.reads",
         "odcs.schema.properties.logicalTypeOptions",
         "odcs.schema.properties.quality.custom.failCalc",
@@ -708,6 +709,28 @@ def test_every_odcs_input_a_dbt_family_names_is_written_by_a_contract(
         if name.startswith("odcs.")
     }
     assert sorted(declared - written) == []
+
+
+@pytest.mark.parametrize(
+    ("case", "family"),
+    [
+        ("model_with_tests", "dbt-model"),
+        ("seed_with_column_types", "dbt-seed"),
+        ("snapshot", "dbt-snapshot"),
+    ],
+)
+def test_the_enforced_flag_of_every_dbt_kind_is_both(case, family):
+    stored = _full_dbt_stored(case)
+    assert continuo_values(stored["customProperties"])["contractEnforced"] is True
+    for name in ("config.contract.enforced", "odcs.custom.contractEnforced"):
+        entry = fingerprints.classify(family, name)
+        assert entry is not None, name
+        assert (entry.id, entry.fingerprint, entry.parts) == (
+            "contract_enforced",
+            "both",
+            ("config",),
+        )
+    assert "odcs.custom.contractEnforced" in _odcs_inputs(stored)
 
 
 def test_a_composite_primary_key_is_classified_for_a_model():
@@ -1019,8 +1042,8 @@ def test_every_fixed_name_in_the_rendered_input_names_is_a_fixed_input_name():
 ENTRY_COUNTS = {
     "every": 3,
     "dbt-model": 39,
-    "dbt-seed": 26,
-    "dbt-snapshot": 23,
+    "dbt-seed": 27,
+    "dbt-snapshot": 24,
     "dbt-test": 18,
     "python-node": 39,
     "python-csv": 32,

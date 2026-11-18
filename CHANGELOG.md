@@ -102,7 +102,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   identity (`odcs.id`, `odcs.name`, `odcs.schema.name`, `odcs.schema.physicalName`), the
   `materialization` and `schema[0].physicalType`, the tags and `schedule`, the owner, `criticality`
   and `timeoutMinutes`, the `roles` of the readers and grants, the description, `service`, `kind`
-  and `filePath`, the declared columns with their types, descriptions, tags and classification, a
+  and `filePath`, `contractEnforced` (with `config.contract.enforced`, `both` in a model, a seed
+  and a snapshot), the declared columns with their types, descriptions, tags and classification, a
   model's primary key, and the rules and relationships the tests give with their `severity`,
   `where` and thresholds. Each is `contract`, or `both` where it also moves `content_hash`, as the
   entry that names it says. A new entry `sql_reads` in each dbt family classifies
@@ -111,8 +112,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   node's contract. The guard test walks the stored form of every golden contract and of the vector
   case that reads tables, and one generated contract of each dbt kind that sets every field the
   generator can write, and fails for a field no entry classifies; `docs/fingerprints.md` lists the
-  new entries and inputs. No existing classification and no Python family changes, and no hash
-  moves.
+  new entries and inputs. No Python family changes and no hash moves; the one input already
+  classified that moves is `config.contract.enforced` in a seed and a snapshot, from `content` to
+  `both`, because the contract now carries it.
 
 ## [0.2.0] - 2026-11-15
 

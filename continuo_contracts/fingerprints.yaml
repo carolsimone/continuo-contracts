@@ -206,7 +206,7 @@ families:
       field: "`grants`"
       source: "`config`"
       fingerprint: "contract"
-      why: "`roles`; outside `hashed_config`"
+      why: "`roles`, one per grantee of each privilege; outside `hashed_config`. The roles of `meta.continuo.readers` are the same field, and the content side of that input is classified on `meta_continuo`"
       inputs: ["config.grants", "odcs.roles.role", "odcs.roles.access"]
     - id: "description"
       field: "Description"
@@ -277,7 +277,7 @@ families:
       field: "Tests on the model"
       source: "test nodes"
       fingerprint: "contract"
-      why: "`required`, `unique`, `relationships` and quality rules on this contract: a rule's `id`, metric, arguments or implementation, and the property it sits on. The test's code is in the test node's own `content_hash`, never in this node's. The table tests of `meta.continuo.tests` write the same rule fields"
+      why: "`required`, `unique`, `relationships` and quality rules on this contract: a rule's `id`, metric, arguments or implementation, and the property it sits on. The test's code is in the test node's own `content_hash`, never in this node's. The table tests of `meta.continuo.tests` write the same rule fields, and the content side of that input is classified on `meta_continuo`"
       inputs: ["odcs.schema.properties.required", "odcs.schema.properties.unique",
                "odcs.schema.properties.relationships.to", "odcs.schema.properties.quality.id",
                "odcs.schema.properties.quality.metric", "odcs.schema.properties.quality.mustBe",
@@ -364,6 +364,13 @@ families:
       parts: ["config"]
       why: "content: `hashed_config`; contract: `materialization`, and `schema[0].physicalType`, always `table` for a seed"
       inputs: ["config.materialized", "odcs.custom.materialization", "odcs.schema.physicalType"]
+    - id: "contract_enforced"
+      field: "`contract.enforced`"
+      source: "`config`"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "content: `hashed_config`, since `contract` is outside the denylist; contract: `contractEnforced`, written whenever the setting is true, as for a model"
+      inputs: ["config.contract.enforced", "odcs.custom.contractEnforced"]
     - id: "column_types"
       field: "`column_types`"
       source: "`config`"
@@ -421,7 +428,7 @@ families:
       field: "`grants`"
       source: "`config`"
       fingerprint: "contract"
-      why: "`roles`"
+      why: "`roles`, one per grantee of each privilege. The roles of `meta.continuo.readers` are the same field, and the content side of that input is classified on `meta_contract`"
       inputs: ["config.grants", "odcs.roles.role", "odcs.roles.access"]
     - id: "group"
       field: "`group`"
@@ -452,14 +459,14 @@ families:
       field: "Column `data_type`"
       source: "`schema.yml`"
       fingerprint: "contract"
-      why: "`physicalType` where `column_types` gives none, with the `logicalType` derived from it; dbt never reads it for a seed. A type from `config.column_types` wins, and that input has its own row"
+      why: "`physicalType` where `column_types` gives none, with the `logicalType` derived from it; dbt never reads it for a seed. A type from `config.column_types` wins; the content side of that input is classified on its own row"
       inputs: ["odcs.schema.properties.physicalType", "odcs.schema.properties.logicalType",
                "odcs.schema.properties.logicalTypeOptions"]
     - id: "tests"
       field: "Tests on the seed"
       source: "test nodes"
       fingerprint: "contract"
-      why: "`required`, `unique`, `relationships` and quality rules on this contract: a rule's `id`, metric, arguments or implementation, and the property it sits on. The test's code is in the test node's own `content_hash`, never in this node's. The table tests of `meta.continuo.tests` write the same rule fields"
+      why: "`required`, `unique`, `relationships` and quality rules on this contract: a rule's `id`, metric, arguments or implementation, and the property it sits on. The test's code is in the test node's own `content_hash`, never in this node's. The table tests of `meta.continuo.tests` write the same rule fields, and the content side of that input is classified on `meta_contract`"
       inputs: ["odcs.schema.properties.required", "odcs.schema.properties.unique",
                "odcs.schema.properties.relationships.to", "odcs.schema.properties.quality.id",
                "odcs.schema.properties.quality.metric", "odcs.schema.properties.quality.mustBe",
@@ -569,6 +576,13 @@ families:
       parts: ["config"]
       why: "content: `hashed_config`; contract: `materialization`, and `schema[0].physicalType`, always `table` for a snapshot"
       inputs: ["config.materialized", "odcs.custom.materialization", "odcs.schema.physicalType"]
+    - id: "contract_enforced"
+      field: "`contract.enforced`"
+      source: "`config`"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "content: `hashed_config`, since `contract` is outside the denylist; contract: `contractEnforced`, written whenever the setting is true, as for a model"
+      inputs: ["config.contract.enforced", "odcs.custom.contractEnforced"]
     - id: "other_config"
       field: "Every other config key outside the denylist"
       source: "`config`"
@@ -609,7 +623,7 @@ families:
       field: "`grants`"
       source: "`config`"
       fingerprint: "contract"
-      why: "`roles`"
+      why: "`roles`, one per grantee of each privilege. The roles of `meta.continuo.readers` are the same field, and the content side of that input is classified on `tags_meta`"
       inputs: ["config.grants", "odcs.roles.role", "odcs.roles.access"]
     - id: "group"
       field: "`group`"
@@ -628,7 +642,7 @@ families:
       field: "Declared columns, and each column's `data_type`, description and tags"
       source: "`schema.yml`"
       fingerprint: "contract"
-      why: "`properties` in declared order, each with its `physicalType`, the `logicalType` derived from it, description and tags, as for a model's columns without an enforced dbt contract. The history columns follow them and have their own row"
+      why: "`properties` in declared order, each with its `physicalType`, the `logicalType` derived from it, description and tags, as for a model's columns without an enforced dbt contract. The history columns follow them and have their own row; the content side of the snapshot config keys that name them is classified on `snapshot_config`"
       inputs: ["odcs.schema.properties.name", "odcs.schema.properties.physicalType",
                "odcs.schema.properties.logicalType", "odcs.schema.properties.logicalTypeOptions",
                "odcs.schema.properties.description", "odcs.schema.properties.tags"]
@@ -636,7 +650,7 @@ families:
       field: "Tests on the snapshot"
       source: "test nodes"
       fingerprint: "contract"
-      why: "`required`, `unique`, `relationships` and quality rules on this contract: a rule's `id`, metric, arguments or implementation, and the property it sits on. The test's code is in the test node's own `content_hash`, never in this node's. The table tests of `meta.continuo.tests` write the same rule fields"
+      why: "`required`, `unique`, `relationships` and quality rules on this contract: a rule's `id`, metric, arguments or implementation, and the property it sits on. The test's code is in the test node's own `content_hash`, never in this node's. The table tests of `meta.continuo.tests` write the same rule fields, and the content side of that input is classified on `tags_meta`"
       inputs: ["odcs.schema.properties.required", "odcs.schema.properties.unique",
                "odcs.schema.properties.relationships.to", "odcs.schema.properties.quality.id",
                "odcs.schema.properties.quality.metric", "odcs.schema.properties.quality.mustBe",
