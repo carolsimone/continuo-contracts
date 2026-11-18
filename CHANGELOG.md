@@ -127,8 +127,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   snapshot with no tag) give an `info` line. A node whose fields the library cannot read, each
   issue of `validate_dbt_contract`, a declared read that is not a table, a seed whose CSV cannot
   be read, each column a seed's header and declared columns disagree on, and a service whose every
-  node is skipped give an `error` line. `contracts` maps the id of each contract the check
-  generated to its `contract_hash`, with no tables from compiled SQL. `BANNER` is the text that
+  node is skipped give an `error` line. `contracts` maps the id of each contract that has no issue
+  to its `contract_hash`, with no tables from compiled SQL; a contract with an issue has none. `BANNER` is the text that
   says passing the check guarantees nothing about the release, and `RELEASE_ONLY` lists the six
   things only the release does. The module reads no file and prints and logs nothing.
 

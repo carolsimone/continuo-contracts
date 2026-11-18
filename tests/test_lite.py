@@ -18,6 +18,8 @@ from continuo_contracts.lite import Line, LiteReport
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "dbt"
 PROJECTS = ("cases", "core", "finance", "marketing", "service_1")
+# The contracts of the `cases` project that fail validation.
+INVALID = ("analytics.bad_criticality", "analytics.long_tag")
 
 NO_OWNER = "no owner, continuo skips it"
 LOCAL_STUB = "local stub, continuo skips it"
@@ -444,10 +446,42 @@ def test_the_report_gives_each_kept_node_its_contract_hash(project):
 
     report = _check(manifest, read_header=_csv_header(project))
 
-    assert report.contracts == _golden_hashes(project)
+    expected = {
+        contract_id: hashed
+        for contract_id, hashed in _golden_hashes(project).items()
+        if contract_id not in INVALID
+    }
+    assert report.contracts == expected
     assert all(
         re.fullmatch(r"sha256:[0-9a-f]{64}", h) for h in report.contracts.values()
     )
+
+
+def test_every_valid_kept_node_of_cases_has_the_hash_of_its_stored_form():
+    manifest = load_manifest("cases")
+    tests = dbt.tests_by_node(manifest)
+
+    report = _check(manifest)
+
+    kept = [
+        key
+        for key, node in manifest["nodes"].items()
+        if node["resource_type"] in dbt.RESOURCE_TYPES
+        and dbt.skip_reason(node, project="cases") is None
+    ]
+    expected = {}
+    for key in kept:
+        generated = dbt.generate(
+            manifest["nodes"][key], tests.get(key, []), manifest=manifest
+        )
+        expected[generated.document["id"]] = contract_hash(
+            normalise_dbt(generated.document, reads=[])
+        )
+    assert len(expected) == 17
+    assert {k: v for k, v in expected.items() if k not in INVALID} == (
+        report.contracts
+    )
+    assert len(report.contracts) == 15
 
 
 def test_the_hash_is_the_one_of_the_stored_form_with_no_compiled_reads():
@@ -481,15 +515,18 @@ def test_the_contracts_are_listed_in_the_order_of_the_node_ids():
     ]
 
 
-def test_a_node_with_problems_still_has_the_hash_of_its_contract():
+def test_a_contract_with_a_validation_issue_has_error_lines_and_no_hash():
     report = _check(load_manifest("cases"))
 
-    hashes = _golden_hashes("cases")
-    assert (
-        report.contracts["analytics.bad_criticality"]
-        == hashes["analytics.bad_criticality"]
-    )
-    assert report.contracts["analytics.long_tag"] == hashes["analytics.long_tag"]
+    for node_id, contract_id in (
+        ("model.cases.bad_criticality", "analytics.bad_criticality"),
+        ("model.cases.long_tag", "analytics.long_tag"),
+    ):
+        assert contract_id not in report.contracts
+        assert [
+            line.level for line in report.lines if line.node_id == node_id
+        ] == ["error"]
+    assert not set(INVALID) & set(report.contracts)
 
 
 # Nodes the generator or the gates cannot read.
@@ -564,6 +601,7 @@ def test_the_problems_of_one_node_come_in_a_fixed_order():
 
     report = _check(_manifest(node), read_header=lambda _: ["b"])
 
+    assert report.contracts == {}
     assert [line.message for line in report.lines] == [
         "customProperties[3].value: `criticality` is 'high', it must be one of "
         "REGULATORY, CORE, SECONDARY",

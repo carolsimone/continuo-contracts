@@ -1209,9 +1209,11 @@ report.contracts["analytics.fx_transactions_eur"]
 # "sha256:6a1e6606f0d6c8acb0cc6120b93029dba8d1d2782763de8ced721a36285cdd84"
 ```
 
-The nodes are taken by node id (the key of the node in the manifest, such as
-`model.shop.orders`), in code point order, so the report is the same for any order of the
-manifest. For each node, in this order:
+The nodes are taken in the code point order of their node ids, so the report is the same for any
+order of the manifest. The `node_id` of a line is the key of its node in the manifest, such as
+`model.shop.orders` (`""` for the line about the whole service), and a key of `contracts` is a
+contract id, `<schema>.<table>` in lower case, such as `analytics.orders`. For each node, in this
+order:
 
 1. A node `dbt.skip_reason` leaves out gives one `info` line, and nothing else: `no owner,
    continuo skips it`, `local stub, continuo skips it` or `from an installed package and has no
@@ -1222,9 +1224,11 @@ manifest. For each node, in this order:
 3. `dbt.generate` writes the contract. A field it cannot read (`DbtNodeError`) gives one `error`
    line, and the node has no more lines. The message of such a line does not repeat the node id.
 4. Each issue of `validate.validate_dbt_contract` gives an `error` line, `<path>: <message>`.
-5. The stored form of the contract is hashed, and `contracts` holds the hash even for a contract
-   with issues. A declared read that is not `<schema>.<table>` gives an `error` line and no hash,
-   because the stored form cannot be written.
+5. A contract with no issue has its stored form hashed, and `contracts` holds the hash. A
+   contract with an issue has no hash, since only a valid contract gets one, so a hash in
+   `contracts` never suggests that the release creates a contract it would reject. A declared read
+   that is not `<schema>.<table>` gives an `error` line and no hash, because the stored form cannot
+   be written.
 6. For a kept seed, `read_header(node)` gives the names in the first row of its CSV file, or
    `None` when the file cannot be read, which gives one `error` line. Otherwise
    `dbt.seed_header_issues` compares them with the seed's declared columns, the names of the
@@ -1238,7 +1242,8 @@ as one that is not skipped.
 The contract of the lite check is the one `dbt.generate` writes, stored with no tables from
 compiled SQL, since `dbt parse` compiles nothing. Its hash is the `contract_hash` of that stored
 form, so it differs from the hash the release stores for a node whose compiled SQL names a table
-the node does not declare.
+the node does not declare. A seed whose header differs from its declared columns still has a hash,
+because its contract is valid.
 
 ### Public names
 
@@ -1254,8 +1259,8 @@ the node does not declare.
 - `LiteReport`: what `check_manifest` returns, a frozen dataclass with the fields `service` (the
   service the gates compare each node with, as `dbt.project_service` gives it), `lines` (a tuple of
   `Line`, by node id, with the line about the whole service last), `contracts` (the `contract_hash`
-  of each contract the check generated, by contract id, in the order of the node ids) and the
-  property `ok`, `True` when no line is an `error`.
+  of each contract that was generated, has no issue and can be stored, by contract id, in the order
+  of the node ids) and the property `ok`, `True` when no line is an `error`.
 - `check_manifest`: `check_manifest(manifest, *, declared_service, read_header) -> LiteReport`
   checks the manifest `json.load` returns. `declared_service` is the service of the project when
   the manifest names none, as in `dbt.project_service`. `read_header` takes a seed's manifest node

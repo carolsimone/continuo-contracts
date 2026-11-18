@@ -105,7 +105,9 @@ class LiteReport:
     `service` is the service the gates compare each node with, `dbt.project_service` of the
     manifest. `lines` are the lines of the check, by node id and, for one node, in the order
     `check_manifest` describes, with the line about the whole service last. `contracts` maps the
-    id of each contract the check generated to its `contract_hash`.
+    id of each contract that was generated, has no issue and can be stored to its
+    `contract_hash`. A node whose contract has an issue has no entry, and a seed whose header
+    differs from its declared columns has one.
     """
 
     service: str
@@ -154,7 +156,8 @@ def _check_kept_node(
 ) -> tuple[list[Line], tuple[str, str] | None]:
     """Return the lines of a node that continuo keeps, and its contract id and hash.
 
-    The hash is `None` when the contract cannot be generated or stored.
+    The hash is `None` unless the contract is generated, has no validation issue and can be
+    stored.
     """
     lines: list[Line] = []
     try:
@@ -164,17 +167,16 @@ def _check_kept_node(
     except DbtNodeError as error:
         return [*lines, _refusal(node_id, error)], None
     document = generated.document
-    lines.extend(
-        Line(_ERROR, node_id, str(issue))
-        for issue in validate.validate_dbt_contract(document)
-    )
+    issues = validate.validate_dbt_contract(document)
+    lines.extend(Line(_ERROR, node_id, str(issue)) for issue in issues)
     hashed: tuple[str, str] | None = None
-    try:
-        stored = contract.normalise_dbt(document, reads=[])
-    except HashInputError as error:
-        lines.append(Line(_ERROR, node_id, str(error)))
-    else:
-        hashed = (document["id"], contract.contract_hash(stored))
+    if not issues:
+        try:
+            stored = contract.normalise_dbt(document, reads=[])
+        except HashInputError as error:
+            lines.append(Line(_ERROR, node_id, str(error)))
+        else:
+            hashed = (document["id"], contract.contract_hash(stored))
     if node.get("resource_type") == "seed":
         lines.extend(_header_lines(node_id, node, document, read_header))
     return lines, hashed
@@ -203,10 +205,10 @@ def check_manifest(
     3. `dbt.generate` writes the contract. A field it cannot read (`DbtNodeError`) gives one
        `error` line, and the node has no more lines.
     4. Each issue of `validate.validate_dbt_contract` gives an `error` line, `<path>: <message>`.
-    5. The stored form that `contract.normalise_dbt` gives, with no reads from compiled SQL, is
-       hashed with `contract.contract_hash`, and `contracts` maps the contract's id to the hash,
-       even when the contract has issues. A declared read that is not a table gives an `error`
-       line and no hash.
+    5. A contract with no issue has its stored form, which `contract.normalise_dbt` gives with no
+       reads from compiled SQL, hashed with `contract.contract_hash`, and `contracts` maps the
+       contract's id to the hash. A contract with an issue has no hash, as only a valid contract
+       gets one. A declared read that is not a table gives an `error` line and no hash.
     6. For a kept seed, `read_header` gives its header. `None` gives an `error` line. Otherwise
        each column the header and the declared columns disagree on gives an `error` line, as
        `dbt.seed_header_issues` words it. The declared columns are the names of the contract's
