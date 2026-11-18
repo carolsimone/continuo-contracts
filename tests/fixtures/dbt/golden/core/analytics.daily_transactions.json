@@ -1,0 +1,241 @@
+{
+ "contract_hash": "sha256:73a0d1d210327d9596dd2f02e84173b2a2b4aa420a240f5b0e6f95810bc2a319",
+ "flags": [],
+ "generated": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "service",
+    "value": "core",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "daily",
+    "vendor": "continuo"
+   },
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/daily_transactions.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   }
+  ],
+  "description": {
+   "purpose": "Basic union of core card transactions and finance FX transactions, valued in EUR. transaction_id is not unique across sources; use `source` to disambiguate."
+  },
+  "id": "analytics.daily_transactions",
+  "kind": "DataContract",
+  "name": "daily_transactions",
+  "schema": [
+   {
+    "description": "Basic union of core card transactions and finance FX transactions, valued in EUR. transaction_id is not unique across sources; use `source` to disambiguate.",
+    "name": "daily_transactions",
+    "physicalName": "daily_transactions",
+    "physicalType": "table",
+    "properties": [
+     {
+      "description": "Source-local transaction id (not unique across sources).",
+      "name": "transaction_id",
+      "quality": [
+       {
+        "id": "not_null_daily_transactions_transaction_id",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "Transaction value in EUR. Card amounts are treated as already-EUR; FX amounts come pre-converted from fx_transactions_eur.",
+      "name": "amount_eur",
+      "quality": [
+       {
+        "id": "not_null_daily_transactions_amount_eur",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "Revenue: the fee the company earned on this transaction, in EUR. Card fees are already EUR; FX fees come pre-converted from fx_transactions_eur.",
+      "name": "fee_amount_eur",
+      "quality": [
+       {
+        "id": "not_null_daily_transactions_fee_amount_eur",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "Origin of the row: 'card' (seed_card_transactions) or 'fx' (analytics.fx_transactions_eur).",
+      "name": "source",
+      "quality": [
+       {
+        "id": "not_null_daily_transactions_source",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     }
+    ],
+    "quality": [
+     {
+      "engine": "dbt",
+      "id": "assert_transactions_after_acquisition",
+      "implementation": "assert_transactions_after_acquisition",
+      "name": "assert_transactions_after_acquisition",
+      "type": "custom"
+     }
+    ]
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "daily"
+  ],
+  "team": {
+   "name": "core"
+  },
+  "version": "0"
+ },
+ "source_sha256": "45313f88c8a6d963ac9a87fd8323983d49a7ba428720dcddf170f96e7bfb9627",
+ "stored": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/daily_transactions.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "daily",
+    "vendor": "continuo"
+   },
+   {
+    "property": "service",
+    "value": "core",
+    "vendor": "continuo"
+   }
+  ],
+  "description": {
+   "purpose": "Basic union of core card transactions and finance FX transactions, valued in EUR. transaction_id is not unique across sources; use `source` to disambiguate."
+  },
+  "id": "analytics.daily_transactions",
+  "kind": "DataContract",
+  "name": "daily_transactions",
+  "schema": [
+   {
+    "description": "Basic union of core card transactions and finance FX transactions, valued in EUR. transaction_id is not unique across sources; use `source` to disambiguate.",
+    "name": "daily_transactions",
+    "physicalName": "daily_transactions",
+    "physicalType": "table",
+    "properties": [
+     {
+      "description": "Source-local transaction id (not unique across sources).",
+      "name": "transaction_id",
+      "quality": [
+       {
+        "id": "not_null_daily_transactions_transaction_id",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "Transaction value in EUR. Card amounts are treated as already-EUR; FX amounts come pre-converted from fx_transactions_eur.",
+      "name": "amount_eur",
+      "quality": [
+       {
+        "id": "not_null_daily_transactions_amount_eur",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "Revenue: the fee the company earned on this transaction, in EUR. Card fees are already EUR; FX fees come pre-converted from fx_transactions_eur.",
+      "name": "fee_amount_eur",
+      "quality": [
+       {
+        "id": "not_null_daily_transactions_fee_amount_eur",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "Origin of the row: 'card' (seed_card_transactions) or 'fx' (analytics.fx_transactions_eur).",
+      "name": "source",
+      "quality": [
+       {
+        "id": "not_null_daily_transactions_source",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     }
+    ],
+    "quality": [
+     {
+      "engine": "dbt",
+      "id": "assert_transactions_after_acquisition",
+      "implementation": "assert_transactions_after_acquisition",
+      "name": "assert_transactions_after_acquisition",
+      "type": "custom"
+     }
+    ]
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "daily"
+  ],
+  "team": {
+   "name": "core"
+  },
+  "version": "0"
+ }
+}

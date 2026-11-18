@@ -1,0 +1,8 @@
+sources:
+  - name: raw
+    schema: raw
+    tables:
+      - name: events
+        columns:
+          - name: id
+      - name: orders

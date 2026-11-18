@@ -8,10 +8,11 @@ tests cover what it cannot say by itself:
   cannot sit outside the graph;
 - each third-party confinement names every module but the ones that may use the library,
   so a new module cannot import the library unnoticed;
-- no file of the package, `__init__.py` included, imports `cli`, `logging` or a confined
-  library outside the modules that may, and none imports `scripts` or `tests`: a contract
-  that named `__init__` would name every module of the package with it, and the other two
-  are outside the package, so import-linter cannot say this by itself;
+- no file of the package, `__init__.py` included, imports `cli`, `lite` or a confined
+  library (`jsonschema`, `yaml`, `logging` or `subprocess`) outside the modules that may, and
+  none imports `scripts` or `tests`: a contract that named `__init__` would name every module
+  of the package with it, and the other two are outside the package, so import-linter cannot
+  say this by itself;
 - the contracts fail when an import crosses them, so they cannot silently stop working.
 """
 
@@ -36,11 +37,16 @@ CONFINED = {
     "jsonschema": {"validate"},
     "yaml": {"fingerprints", "yaml_strict"},
     "logging": {"cli"},
+    "subprocess": {"cli"},
 }
 
 # What a file of the package may not import unless its module is named: `cli` is imported by
-# no module, and each confined library only by its users.
-GUARDED = {"continuo_contracts.cli": set(), **CONFINED}
+# no module, `lite` only by `cli`, and each confined library only by its users.
+GUARDED = {
+    "continuo_contracts.cli": set(),
+    "continuo_contracts.lite": {"cli"},
+    **CONFINED,
+}
 
 
 def _contracts() -> list[dict]:
@@ -138,6 +144,13 @@ def test_the_layers_name_every_module_of_the_package_once() -> None:
     )
 
 
+def test_lite_sits_between_cli_and_validate() -> None:
+    [graph] = [c for c in _contracts() if c["type"] == "layers"]
+    top_three = [_layer_modules(layer) for layer in graph["layers"][:3]]
+
+    assert top_three == [["cli"], ["lite"], ["validate"]]
+
+
 def test_cli_is_the_top_layer_and_the_bottom_layer_imports_nothing() -> None:
     [graph] = [c for c in _contracts() if c["type"] == "layers"]
     top, *_, bottom = graph["layers"]
@@ -203,7 +216,9 @@ def test_a_planted_import_of_scripts_or_tests_is_found(tmp_path: Path) -> None:
     assert _outside_the_package(planted) == {"scripts", "tests"}
 
 
-def test_no_file_imports_cli_or_a_confined_library_outside_its_users() -> None:
+def test_no_file_imports_cli_lite_or_a_confined_library_outside_its_users() -> (
+    None
+):
     """`__init__.py` is scanned with the modules: no contract reaches it."""
     assert _guarded_imports(PACKAGE) == {}
 
@@ -211,6 +226,9 @@ def test_no_file_imports_cli_or_a_confined_library_outside_its_users() -> None:
 # Each way a file may import a guarded module, and the module it is found importing.
 PLANTED_IMPORTS = {
     "import logging": "logging",
+    "import subprocess": "subprocess",
+    "from subprocess import run": "subprocess",
+    "import subprocess as sp": "subprocess",
     "import yaml": "yaml",
     "import jsonschema.exceptions": "jsonschema",
     "from yaml.reader import ReaderError": "yaml",
@@ -219,6 +237,11 @@ PLANTED_IMPORTS = {
     "from continuo_contracts.cli import main": "continuo_contracts.cli",
     "from . import cli": "continuo_contracts.cli",
     "from .cli import main": "continuo_contracts.cli",
+    "from continuo_contracts import lite": "continuo_contracts.lite",
+    "import continuo_contracts.lite": "continuo_contracts.lite",
+    "from continuo_contracts.lite import check_manifest": "continuo_contracts.lite",
+    "from . import lite": "continuo_contracts.lite",
+    "from .lite import check_manifest": "continuo_contracts.lite",
 }
 
 
@@ -312,6 +335,66 @@ OFFENCES = {
         "import-graph",
         "continuo_contracts.canonical is not allowed to import",
     ),
+    "dbt imports python, which sits in its layer": (
+        "dbt",
+        "from continuo_contracts import python\n",
+        "import-graph",
+        "continuo_contracts.dbt is not allowed to import",
+    ),
+    "yaml_strict imports dbt, which sits in its layer": (
+        "yaml_strict",
+        "from continuo_contracts import dbt\n",
+        "import-graph",
+        "continuo_contracts.yaml_strict is not allowed to import",
+    ),
+    "dbt imports a higher layer": (
+        "dbt",
+        "from continuo_contracts import contract\n",
+        "import-graph",
+        "continuo_contracts.dbt is not allowed to import",
+    ),
+    "lite imports cli, the layer above it": (
+        "lite",
+        "from continuo_contracts import cli\n",
+        "import-graph",
+        "continuo_contracts.lite is not allowed to import",
+    ),
+    "validate imports lite, the layer above it": (
+        "validate",
+        "from continuo_contracts import lite\n",
+        "import-graph",
+        "continuo_contracts.validate is not allowed to import",
+    ),
+    "dbt imports lite, a higher layer": (
+        "dbt",
+        "from continuo_contracts import lite\n",
+        "import-graph",
+        "continuo_contracts.dbt is not allowed to import",
+    ),
+    "jsonschema in lite": (
+        "lite",
+        "import jsonschema\n",
+        "jsonschema-is-confined-to-validate",
+        "continuo_contracts.lite is not allowed to import jsonschema",
+    ),
+    "yaml in lite": (
+        "lite",
+        "import yaml\n",
+        "yaml-is-confined-to-fingerprints-and-yaml-strict",
+        "continuo_contracts.lite is not allowed to import yaml",
+    ),
+    "logging in lite": (
+        "lite",
+        "import logging\n",
+        "only-cli-logs",
+        "continuo_contracts.lite is not allowed to import logging",
+    ),
+    "subprocess in lite": (
+        "lite",
+        "import subprocess\n",
+        "subprocess-is-confined-to-cli",
+        "continuo_contracts.lite is not allowed to import subprocess",
+    ),
     "jsonschema in a module that may not use it": (
         "canonical",
         "import jsonschema\n",
@@ -329,6 +412,12 @@ OFFENCES = {
         "import logging\n",
         "only-cli-logs",
         "continuo_contracts.validate is not allowed to import logging",
+    ),
+    "subprocess in a library module": (
+        "validate",
+        "import subprocess\n",
+        "subprocess-is-confined-to-cli",
+        "continuo_contracts.validate is not allowed to import subprocess",
     ),
 }
 

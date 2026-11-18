@@ -1,0 +1,115 @@
+{
+ "contract_hash": "sha256:901da717ed33d91eb618f14d1f84a6ba89995d0690f136fa96ebcc6488f338ab",
+ "flags": [],
+ "generated": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "service",
+    "value": "service-1",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "hourly",
+    "vendor": "continuo"
+   },
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/ftable_b.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.ftable_b",
+  "kind": "DataContract",
+  "name": "ftable_b",
+  "schema": [
+   {
+    "name": "ftable_b",
+    "physicalName": "ftable_b",
+    "physicalType": "table"
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "hourly"
+  ],
+  "team": {
+   "name": "test"
+  },
+  "version": "0"
+ },
+ "source_sha256": "a4dd16419fc617310d49870086f027af22ce7ee2f34ebdbd2560195312074c90",
+ "stored": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/ftable_b.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "hourly",
+    "vendor": "continuo"
+   },
+   {
+    "property": "service",
+    "value": "service-1",
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.ftable_b",
+  "kind": "DataContract",
+  "name": "ftable_b",
+  "schema": [
+   {
+    "name": "ftable_b",
+    "physicalName": "ftable_b",
+    "physicalType": "table"
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "hourly"
+  ],
+  "team": {
+   "name": "test"
+  },
+  "version": "0"
+ }
+}

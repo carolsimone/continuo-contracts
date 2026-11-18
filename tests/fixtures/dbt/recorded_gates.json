@@ -1,0 +1,66 @@
+{
+  "continuo_commit": "eafa2d9568f02cf843090e867c5db650c6739774",
+  "projects": {
+    "cases": {
+      "model.cases.a_view": null,
+      "model.cases.bad_criticality": null,
+      "model.cases.customer.v1": null,
+      "model.cases.customer.v2": null,
+      "model.cases.default_access": null,
+      "model.cases.dormant": null,
+      "model.cases.enforced": null,
+      "model.cases.eph": null,
+      "model.cases.generic_tests": null,
+      "model.cases.governed": null,
+      "model.cases.incr": null,
+      "model.cases.long_tag": null,
+      "model.cases.no_owner": "no_owner",
+      "model.cases.singular_target": null,
+      "model.cases.stub": "local_stub",
+      "model.cases_pkg.pkg_tagged": null,
+      "model.cases_pkg.pkg_untagged": "installed_package",
+      "seed.cases.typed_seed": null,
+      "seed.cases.untyped_seed": null,
+      "snapshot.cases.orders_snapshot": null
+    },
+    "core": {
+      "model.core.daily_transactions": null,
+      "model.core.dbt_daily_kpis": null,
+      "model.core.read_order": null,
+      "model.core.read_order_v2": null,
+      "model.core.revenue_per_user": null,
+      "seed.core.seed_card_transactions": null,
+      "seed.core.seed_fx_transactions": null,
+      "seed.core.seed_users": null
+    },
+    "finance": {
+      "model.finance.fx_transactions_eur": null,
+      "model.finance.ltv_per_user": null,
+      "model.finance.operation_cost_per_user_view": null,
+      "model.finance.operational_cost_per_user": null,
+      "model.finance.operational_costs_monthly": null,
+      "seed.finance.seed_fx_rates_eur": null,
+      "seed.finance.seed_operational_costs": null
+    },
+    "marketing": {
+      "model.marketing.dormant_probe": null,
+      "model.marketing.marketing_cost_per_user": null,
+      "model.marketing.marketing_spend_monthly": null,
+      "seed.marketing.seed_marketing_spend": null,
+      "seed.marketing.seed_user_acquisition": null
+    },
+    "service_1": {
+      "model.service_1.ftable_a": null,
+      "model.service_1.ftable_b": null,
+      "model.service_1.probe_reads_raw_name": null,
+      "model.service_1.probe_reads_source": null,
+      "model.service_1.table_a": null,
+      "model.service_1.table_aa": null,
+      "model.service_1.table_b": null,
+      "model.service_1.table_c": null,
+      "seed.service_1.seed_table_1": null,
+      "seed.service_1.seed_table_2": null,
+      "seed.service_1.seed_table_3": null
+    }
+  }
+}

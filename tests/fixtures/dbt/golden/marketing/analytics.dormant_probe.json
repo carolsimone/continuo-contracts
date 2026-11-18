@@ -1,0 +1,107 @@
+{
+ "contract_hash": "sha256:e84288f4aa5066084abe3dc2ce319e4fa5d04f43c8a4e95baad95a2578b31e03",
+ "flags": [],
+ "generated": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "service",
+    "value": "marketing",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/dormant_probe.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   }
+  ],
+  "description": {
+   "purpose": "Spend per paid channel: campaign count and total EUR. It has an owner and no tag, so it has no schedule: no cron runs it, and you run it by hand from its node page."
+  },
+  "id": "analytics.dormant_probe",
+  "kind": "DataContract",
+  "name": "dormant_probe",
+  "schema": [
+   {
+    "description": "Spend per paid channel: campaign count and total EUR. It has an owner and no tag, so it has no schedule: no cron runs it, and you run it by hand from its node page.",
+    "name": "dormant_probe",
+    "physicalName": "dormant_probe",
+    "physicalType": "table"
+   }
+  ],
+  "status": "active",
+  "team": {
+   "name": "marketing"
+  },
+  "version": "0"
+ },
+ "source_sha256": "137735b5b936fbb49b700c559dd6278cbebf896096dede847453d3a227114b16",
+ "stored": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/dormant_probe.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "service",
+    "value": "marketing",
+    "vendor": "continuo"
+   }
+  ],
+  "description": {
+   "purpose": "Spend per paid channel: campaign count and total EUR. It has an owner and no tag, so it has no schedule: no cron runs it, and you run it by hand from its node page."
+  },
+  "id": "analytics.dormant_probe",
+  "kind": "DataContract",
+  "name": "dormant_probe",
+  "schema": [
+   {
+    "description": "Spend per paid channel: campaign count and total EUR. It has an owner and no tag, so it has no schedule: no cron runs it, and you run it by hand from its node page.",
+    "name": "dormant_probe",
+    "physicalName": "dormant_probe",
+    "physicalType": "table"
+   }
+  ],
+  "status": "active",
+  "team": {
+   "name": "marketing"
+  },
+  "version": "0"
+ }
+}

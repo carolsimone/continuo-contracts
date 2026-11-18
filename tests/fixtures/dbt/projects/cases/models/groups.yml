@@ -1,0 +1,4 @@
+groups:
+  - name: finance_team
+    owner:
+      name: Finance

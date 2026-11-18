@@ -1,0 +1,38 @@
+name: cases
+version: '1.0.0'
+config-version: 2
+profile: default
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+snapshot-paths: ["snapshots"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+
+vars:
+  allowed: [active, closed]
+
+# dbt appends the tags of every level and never removes one, so the project tag
+# applies to the folder whose models take it: `tagged` holds the models that run
+# on the project tag, `untagged` the ones that keep their own tags or none.
+models:
+  # Applies to the models of every package, so `cases_pkg` has an owner too.
+  +meta:
+    owner: cases
+    criticality: CORE
+  cases:
+    +materialized: table
+    tagged:
+      +tags: [project_tag]
+
+seeds:
+  cases:
+    +meta:
+      owner: cases
+      criticality: CORE
+
+snapshots:
+  cases:
+    +meta:
+      owner: cases
+      criticality: CORE

@@ -1,0 +1,187 @@
+{
+ "contract_hash": "sha256:6b018e6e636b25d21a15f1162d2290b4a29d12209df622ce953a91cd33f1761a",
+ "flags": [],
+ "generated": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "service",
+    "value": "finance",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-seed",
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "seed",
+    "vendor": "continuo"
+   },
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "seeds/seed_fx_rates_eur.csv",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "seed"
+    },
+    "vendor": "continuo"
+   }
+  ],
+  "description": {
+   "purpose": "Per-(currency, date) rate to convert a currency amount into EUR."
+  },
+  "id": "analytics.seed_fx_rates_eur",
+  "kind": "DataContract",
+  "name": "seed_fx_rates_eur",
+  "schema": [
+   {
+    "description": "Per-(currency, date) rate to convert a currency amount into EUR.",
+    "name": "seed_fx_rates_eur",
+    "physicalName": "seed_fx_rates_eur",
+    "physicalType": "table",
+    "properties": [
+     {
+      "name": "currency",
+      "quality": [
+       {
+        "id": "not_null_seed_fx_rates_eur_currency",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "name": "rate_date",
+      "quality": [
+       {
+        "id": "not_null_seed_fx_rates_eur_rate_date",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "name": "rate_to_eur",
+      "quality": [
+       {
+        "id": "not_null_seed_fx_rates_eur_rate_to_eur",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     }
+    ]
+   }
+  ],
+  "status": "active",
+  "team": {
+   "name": "finance"
+  },
+  "version": "0"
+ },
+ "source_sha256": "9a67baf2c2e6c5ce0d6dd61ebd455725013b8acb9c2f9d743216b671f6a27ddc",
+ "stored": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "seeds/seed_fx_rates_eur.csv",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-seed",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "seed"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "seed",
+    "vendor": "continuo"
+   },
+   {
+    "property": "service",
+    "value": "finance",
+    "vendor": "continuo"
+   }
+  ],
+  "description": {
+   "purpose": "Per-(currency, date) rate to convert a currency amount into EUR."
+  },
+  "id": "analytics.seed_fx_rates_eur",
+  "kind": "DataContract",
+  "name": "seed_fx_rates_eur",
+  "schema": [
+   {
+    "description": "Per-(currency, date) rate to convert a currency amount into EUR.",
+    "name": "seed_fx_rates_eur",
+    "physicalName": "seed_fx_rates_eur",
+    "physicalType": "table",
+    "properties": [
+     {
+      "name": "currency",
+      "quality": [
+       {
+        "id": "not_null_seed_fx_rates_eur_currency",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "name": "rate_date",
+      "quality": [
+       {
+        "id": "not_null_seed_fx_rates_eur_rate_date",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "name": "rate_to_eur",
+      "quality": [
+       {
+        "id": "not_null_seed_fx_rates_eur_rate_to_eur",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     }
+    ]
+   }
+  ],
+  "status": "active",
+  "team": {
+   "name": "finance"
+  },
+  "version": "0"
+ }
+}

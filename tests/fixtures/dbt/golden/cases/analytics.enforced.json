@@ -1,0 +1,161 @@
+{
+ "contract_hash": "sha256:b1eb3690c4572426aecb14182cd3b04c28f4ceb1d7384c038334af29b171d3c7",
+ "flags": [],
+ "generated": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "service",
+    "value": "cases",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "project_tag",
+    "vendor": "continuo"
+   },
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/tagged/enforced.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "contractEnforced",
+    "value": true,
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.enforced",
+  "kind": "DataContract",
+  "name": "enforced",
+  "schema": [
+   {
+    "name": "enforced",
+    "physicalName": "enforced",
+    "physicalType": "table",
+    "properties": [
+     {
+      "logicalType": "integer",
+      "name": "id",
+      "physicalType": "integer",
+      "primaryKey": true
+     },
+     {
+      "logicalType": "string",
+      "name": "name",
+      "physicalType": "text"
+     },
+     {
+      "logicalType": "timestamp",
+      "name": "created_at",
+      "physicalType": "timestamp"
+     }
+    ]
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "project_tag"
+  ],
+  "team": {
+   "name": "cases"
+  },
+  "version": "0"
+ },
+ "source_sha256": "1d43480aba2ed219b9e59d8c164f4b74ce7e2db319abe3dd020e7ea76434f355",
+ "stored": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "contractEnforced",
+    "value": true,
+    "vendor": "continuo"
+   },
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/tagged/enforced.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "project_tag",
+    "vendor": "continuo"
+   },
+   {
+    "property": "service",
+    "value": "cases",
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.enforced",
+  "kind": "DataContract",
+  "name": "enforced",
+  "schema": [
+   {
+    "name": "enforced",
+    "physicalName": "enforced",
+    "physicalType": "table",
+    "properties": [
+     {
+      "logicalType": "integer",
+      "name": "id",
+      "physicalType": "integer",
+      "primaryKey": true
+     },
+     {
+      "logicalType": "string",
+      "name": "name",
+      "physicalType": "text"
+     },
+     {
+      "logicalType": "timestamp",
+      "name": "created_at",
+      "physicalType": "timestamp"
+     }
+    ]
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "project_tag"
+  ],
+  "team": {
+   "name": "cases"
+  },
+  "version": "0"
+ }
+}

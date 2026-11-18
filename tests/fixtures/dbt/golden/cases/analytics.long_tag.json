@@ -1,0 +1,115 @@
+{
+ "contract_hash": "sha256:6fc37cbd690a8c73180cf66eceda5c557dc201a3aa68b4f760b2b733ee517c23",
+ "flags": [],
+ "generated": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "service",
+    "value": "cases",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "a_schedule_name_of_fifty_one_characters_in_total_ab",
+    "vendor": "continuo"
+   },
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/untagged/long_tag.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.long_tag",
+  "kind": "DataContract",
+  "name": "long_tag",
+  "schema": [
+   {
+    "name": "long_tag",
+    "physicalName": "long_tag",
+    "physicalType": "table"
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "a_schedule_name_of_fifty_one_characters_in_total_ab"
+  ],
+  "team": {
+   "name": "cases"
+  },
+  "version": "0"
+ },
+ "source_sha256": "97fe0f4d82a59fbdfddd9d4d46b6f96aaaab0cdd650b27dc094b425934812336",
+ "stored": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/untagged/long_tag.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "a_schedule_name_of_fifty_one_characters_in_total_ab",
+    "vendor": "continuo"
+   },
+   {
+    "property": "service",
+    "value": "cases",
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.long_tag",
+  "kind": "DataContract",
+  "name": "long_tag",
+  "schema": [
+   {
+    "name": "long_tag",
+    "physicalName": "long_tag",
+    "physicalType": "table"
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "a_schedule_name_of_fifty_one_characters_in_total_ab"
+  ],
+  "team": {
+   "name": "cases"
+  },
+  "version": "0"
+ }
+}

@@ -1,0 +1,163 @@
+{
+ "contract_hash": "sha256:e530cf73b73a3f58162611f2611ba07274a57a8f4a28455947826dd6f482d165",
+ "flags": [],
+ "generated": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "service",
+    "value": "service-1",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "daily",
+    "vendor": "continuo"
+   },
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/table_b.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   }
+  ],
+  "description": {
+   "purpose": "Passthrough of seed_table_2."
+  },
+  "id": "analytics.table_b",
+  "kind": "DataContract",
+  "name": "table_b",
+  "schema": [
+   {
+    "description": "Passthrough of seed_table_2.",
+    "name": "table_b",
+    "physicalName": "table_b",
+    "physicalType": "table",
+    "properties": [
+     {
+      "name": "id",
+      "primaryKey": true,
+      "quality": [
+       {
+        "id": "not_null_table_b_id",
+        "metric": "nullValues",
+        "mustBe": 0
+       },
+       {
+        "id": "unique_table_b_id",
+        "metric": "duplicateValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true,
+      "unique": true
+     }
+    ]
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "daily"
+  ],
+  "team": {
+   "name": "test"
+  },
+  "version": "0"
+ },
+ "source_sha256": "6afa4865f3cb1b271adecfc9822e240f190d40b711a42e5a69cbff80a0790387",
+ "stored": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/table_b.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "daily",
+    "vendor": "continuo"
+   },
+   {
+    "property": "service",
+    "value": "service-1",
+    "vendor": "continuo"
+   }
+  ],
+  "description": {
+   "purpose": "Passthrough of seed_table_2."
+  },
+  "id": "analytics.table_b",
+  "kind": "DataContract",
+  "name": "table_b",
+  "schema": [
+   {
+    "description": "Passthrough of seed_table_2.",
+    "name": "table_b",
+    "physicalName": "table_b",
+    "physicalType": "table",
+    "properties": [
+     {
+      "name": "id",
+      "primaryKey": true,
+      "quality": [
+       {
+        "id": "not_null_table_b_id",
+        "metric": "nullValues",
+        "mustBe": 0
+       },
+       {
+        "id": "unique_table_b_id",
+        "metric": "duplicateValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true,
+      "unique": true
+     }
+    ]
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "daily"
+  ],
+  "team": {
+   "name": "test"
+  },
+  "version": "0"
+ }
+}

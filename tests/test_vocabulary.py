@@ -38,6 +38,33 @@ ROOT_REFUSED = [
     "provenance",
 ]
 QUALITY_AUTHORED = ["where", "warnIf", "errorIf", "failCalc"]
+DBT_ROOT_WRITTEN = [
+    "service",
+    "kind",
+    "schedule",
+    "criticality",
+    "timeoutMinutes",
+    "filePath",
+    "materialization",
+    "contractEnforced",
+    "access",
+    "group",
+    "deprecationDate",
+    "freshnessBuildAfter",
+    "snapshot",
+    "quoteColumns",
+]
+NOT_USED_BY_DBT = [
+    "script",
+    "readQueries",
+    "csvSource",
+    "extraColumns",
+    "config",
+    "secretRef",
+    "modeType",
+    "assets",
+    "provenance",
+]
 ONTOLOGY = [
     "entity",
     "grain",
@@ -56,6 +83,14 @@ def _named(sits_on, python):
         name
         for name, prop in PROPERTIES.items()
         if prop.sits_on == sits_on and prop.python == python
+    }
+
+
+def _named_dbt(sits_on, dbt):
+    return {
+        name
+        for name, prop in PROPERTIES.items()
+        if prop.sits_on == sits_on and prop.dbt == dbt
     }
 
 
@@ -105,12 +140,60 @@ def test_the_python_refused_set():
 
 
 def test_reads_is_filled_by_continuo():
-    assert PROPERTIES["reads"] == ContinuoProperty("reads", "schema", "filled")
+    assert PROPERTIES["reads"] == ContinuoProperty(
+        "reads", "schema", "filled", "filled"
+    )
     assert _named("schema", "filled") == {"reads"}
 
 
 def test_the_quality_properties_an_author_may_write():
     assert _named("quality", "authored") == set(QUALITY_AUTHORED)
+
+
+def test_the_dbt_root_properties():
+    assert len(DBT_ROOT_WRITTEN) == 14
+    assert _named_dbt("root", "written") == set(DBT_ROOT_WRITTEN)
+
+
+def test_the_dbt_quality_properties():
+    assert _named_dbt("quality", "written") == set(QUALITY_AUTHORED)
+
+
+def test_reads_is_filled_for_both_families():
+    assert PROPERTIES["reads"].python == "filled"
+    assert PROPERTIES["reads"].dbt == "filled"
+    assert {
+        name for name, prop in PROPERTIES.items() if prop.dbt == "filled"
+    } == {"reads"}
+    assert _named_dbt("schema", "filled") == {"reads"}
+
+
+def test_the_python_only_properties_are_not_used_by_dbt():
+    assert len(NOT_USED_BY_DBT) == 9
+    not_used = {
+        name for name, prop in PROPERTIES.items() if prop.dbt == "not_used"
+    }
+    assert not_used == set(NOT_USED_BY_DBT)
+    assert not_used == _named_dbt("root", "not_used")
+
+
+def test_every_property_has_a_dbt_answer():
+    for prop in PROPERTIES.values():
+        assert prop.dbt in {"written", "filled", "not_used"}, prop
+    written = {name for name, prop in PROPERTIES.items() if prop.dbt == "written"}
+    assert written == {*DBT_ROOT_WRITTEN, *QUALITY_AUTHORED}
+    filled = {name for name, prop in PROPERTIES.items() if prop.dbt == "filled"}
+    not_used = {
+        name for name, prop in PROPERTIES.items() if prop.dbt == "not_used"
+    }
+    assert written | filled | not_used == set(PROPERTIES)
+    assert len(written) + len(filled) + len(not_used) == len(PROPERTIES)
+
+
+def test_the_dbt_answer_does_not_move_a_python_answer():
+    for name in DBT_ROOT_WRITTEN:
+        expected = "authored" if name in ROOT_AUTHORED else "refused"
+        assert PROPERTIES[name].python == expected, name
 
 
 def test_no_ontology_property_is_in_this_release():
@@ -124,7 +207,9 @@ def test_a_row_is_frozen():
 
 def test_the_table_cannot_be_changed():
     with pytest.raises(TypeError):
-        PROPERTIES["extra"] = ContinuoProperty("extra", "root", "authored")
+        PROPERTIES["extra"] = ContinuoProperty(
+            "extra", "root", "authored", "written"
+        )
 
 
 def test_continuo_values_skips_other_vendors():

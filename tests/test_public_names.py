@@ -24,9 +24,11 @@ MODULES = (
     "fingerprints",
     "schema",
     "yaml_strict",
+    "dbt",
     "vocabulary",
     "validate",
     "contract",
+    "lite",
     "cli",
     "errors",
 )

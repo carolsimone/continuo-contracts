@@ -1,0 +1,153 @@
+{
+ "contract_hash": "sha256:5d96df6153d40607cbfda124e8e4bca796880c3a4affe50749481c1d0a85363f",
+ "flags": [],
+ "generated": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "service",
+    "value": "cases",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-seed",
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "seed",
+    "vendor": "continuo"
+   },
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "seeds/typed_seed.csv",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "seed"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "quoteColumns",
+    "value": true,
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.typed_seed",
+  "kind": "DataContract",
+  "name": "typed_seed",
+  "schema": [
+   {
+    "name": "typed_seed",
+    "physicalName": "typed_seed",
+    "physicalType": "table",
+    "properties": [
+     {
+      "logicalType": "integer",
+      "name": "id",
+      "physicalType": "integer"
+     },
+     {
+      "logicalType": "number",
+      "name": "amount",
+      "physicalType": "numeric(12,2)"
+     },
+     {
+      "logicalType": "string",
+      "name": "label",
+      "physicalType": "text"
+     }
+    ]
+   }
+  ],
+  "status": "active",
+  "team": {
+   "name": "cases"
+  },
+  "version": "0"
+ },
+ "source_sha256": "0c20ca60868fc6432bf96cf88e64041524b0ba0f16520c38bf4a484fef55fb40",
+ "stored": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "seeds/typed_seed.csv",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-seed",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "seed"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "quoteColumns",
+    "value": true,
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "seed",
+    "vendor": "continuo"
+   },
+   {
+    "property": "service",
+    "value": "cases",
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.typed_seed",
+  "kind": "DataContract",
+  "name": "typed_seed",
+  "schema": [
+   {
+    "name": "typed_seed",
+    "physicalName": "typed_seed",
+    "physicalType": "table",
+    "properties": [
+     {
+      "logicalType": "integer",
+      "name": "id",
+      "physicalType": "integer"
+     },
+     {
+      "logicalType": "number",
+      "name": "amount",
+      "physicalType": "numeric(12,2)"
+     },
+     {
+      "logicalType": "string",
+      "name": "label",
+      "physicalType": "text"
+     }
+    ]
+   }
+  ],
+  "status": "active",
+  "team": {
+   "name": "cases"
+  },
+  "version": "0"
+ }
+}

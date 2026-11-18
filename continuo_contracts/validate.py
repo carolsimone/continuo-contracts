@@ -1,13 +1,16 @@
-"""Check the ODCS contract of a Python node and list every problem it has.
+"""Check the ODCS contract of a Python node or of a dbt node and list every problem it has.
 
-A Python node is declared by one ODCS contract file. Checking it takes two stages. The first
-stage, `schema_issues`, checks the document against the ODCS v3.2.0 JSON schema, after a scan
-that refuses a column that nests, on which the JSON schema check would take exponential time.
-The second stage, `rule_issues`, checks continuo's own rules on a document that the first stage
-accepted: the envelope, the identity of the table, the file name, the team, the fields a Python
-contract may not carry, the custom properties of the `continuo` vendor, the rules of each kind
-of node, the columns and the key of an upsert node. `validate_python_contract` runs the first
-stage and, when it finds nothing, the second.
+A Python node is declared by one ODCS contract file, and a dbt node by the contract that continuo
+generates from its manifest. Checking either takes two stages. The first stage, `schema_issues`,
+checks the document against the ODCS v3.2.0 JSON schema, after a scan that refuses a column that
+nests, on which the JSON schema check would take exponential time. The second stage checks
+continuo's own rules on a document that the first stage accepted. For a Python contract,
+`rule_issues` checks the envelope, the identity of the table, the file name, the team, the fields a
+Python contract may not carry, the custom properties of the `continuo` vendor, the rules of each
+kind of node, the columns and the key of an upsert node, and `validate_python_contract` runs both
+stages. For a dbt contract, `dbt_rule_issues` checks the envelope, the identity, the team, the
+custom properties of the `continuo` vendor and the values of the ones a dbt node needs, and
+`validate_dbt_contract` runs both stages.
 
 Every problem is an `Issue` with the path of the place it is found at, one of the closed reason
 codes of `REASONS` and a sentence for a person. The issues come in path order, so the same
@@ -39,6 +42,7 @@ from continuo_contracts.contract import (
     _STRING_TYPES,
     _length,
 )
+from continuo_contracts.dbt import RESOURCE_TYPES
 from continuo_contracts.errors import ProjectionError
 from continuo_contracts.python import (
     EXTRA_COLUMNS_POLICIES,
@@ -83,8 +87,7 @@ _REFUSED_FIELDS: Final = {
 # `contract` walks: the contract, its schema object, a quality rule, or any other object.
 _LEVELS: Final = {"root": "root", "schema_object": "schema", "quality": "quality"}
 
-# The fields a column may not carry: the column of a Python node has a name, a type and a
-# nullability, and nothing nested.
+# The fields a column may not carry: the column of a contract, Python or dbt, nests nothing.
 _NESTED_COLUMN_FIELDS: Final = ("items", "map", "properties")
 
 # Why continuo fills a property or a Python contract does not carry it, for the message that
@@ -295,8 +298,8 @@ def _nested_field_issues(
 ) -> Iterator[Issue]:
     """Yield a `refused_field` issue for each nested field of `column`.
 
-    `column` is at `where`. A nested field is `items`, `map` or `properties`,
-    since the column of a Python node nests nothing.
+    `column` is at `where`. A nested field is `items`, `map` or `properties`, since the column
+    of a contract, Python or dbt, nests nothing.
     """
     shown = _shown(column.get("name"))
     for field in _NESTED_COLUMN_FIELDS:
@@ -304,8 +307,8 @@ def _nested_field_issues(
             yield _issue(
                 f"{where}.{field}",
                 "refused_field",
-                f"column {shown} must not carry `{field}`, the column of a Python node has "
-                "a name, type and nullability and nothing nested",
+                f"column {shown} must not carry `{field}`, the column of a contract has a "
+                "name, type and nullability and nothing nested",
             )
 
 
@@ -347,8 +350,8 @@ def schema_issues(doc: object) -> list[Issue]:
 
     The check starts with a scan of the columns of every schema object. When a column carries
     `items`, a `map` or `properties`, the result is a `refused_field` issue for each such field,
-    the issue the rules give for it, and the JSON schema is not run: the column of a Python
-    contract nests nothing, and the JSON schema check of a nested column takes time that grows
+    the issue the rules give for it, and the JSON schema is not run: the column of a contract,
+    Python or dbt, nests nothing, and the JSON schema check of a nested column takes time that grows
     exponentially with the depth of the nesting. The other errors of such a document show once the
     nesting is gone.
 
@@ -447,12 +450,13 @@ def _path_fault(value: object) -> str | None:
 class _Contract:
     """A document that the JSON schema accepted.
 
-    It holds what the rules read of the document besides its fields.
+    It holds what the rules read of the document besides its fields. The file name and the
+    service of the release matter only to the rules of a Python contract.
     """
 
     doc: Mapping[str, Any]
-    file_name: str
-    service: str | None
+    file_name: str = ""
+    service: str | None = None
 
     @property
     def schema_objects(self) -> Sequence[Any]:
@@ -571,25 +575,35 @@ def _base_name(path: str) -> str:
     return re.split(r"[\\/]", path)[-1]
 
 
-def _envelope(contract: _Contract) -> Iterator[Issue]:
+def _api_version_issues(contract: _Contract, who: str) -> Iterator[Issue]:
+    """Yield the `api_version` issue of the contract, written for `who`."""
     version = contract.doc.get("apiVersion")
     if version != _API_VERSION:
         yield _issue(
             "apiVersion",
             "api_version",
-            f"a Python contract is written for {_API_VERSION}, not {version!r}",
+            f"{who} is written for {_API_VERSION}, not {version!r}",
         )
 
 
-def _identity(contract: _Contract) -> Iterator[Issue]:
-    doc = contract.doc
-    identifier = doc.get("id")
+def _envelope(contract: _Contract) -> Iterator[Issue]:
+    yield from _api_version_issues(contract, "a Python contract")
+
+
+def _id_case_issues(identifier: object) -> Iterator[Issue]:
+    """Yield the `identity` issue of an id that is not in ASCII lower case."""
     if isinstance(identifier, str) and identifier != _ascii_lower(identifier):
         yield _issue(
             "id",
             "identity",
             f"the id must be in lower case, as {_ascii_lower(identifier)!r}",
         )
+
+
+def _identity(contract: _Contract) -> Iterator[Issue]:
+    doc = contract.doc
+    identifier = doc.get("id")
+    yield from _id_case_issues(identifier)
     obj = contract.table_object
     if obj is None:
         yield _issue(
@@ -658,15 +672,20 @@ def _file_name(contract: _Contract) -> Iterator[Issue]:
         )
 
 
-def _team(contract: _Contract) -> Iterator[Issue]:
+def _team_issues(contract: _Contract, who: str) -> Iterator[Issue]:
+    """Yield the `missing_field` issue of a contract of `who` that names no team."""
     team = contract.doc.get("team")
     name = team.get("name") if isinstance(team, Mapping) else None
     if not isinstance(name, str) or not name.strip():
         yield _issue(
             "team.name",
             "missing_field",
-            "a Python contract names its team in team.name",
+            f"{who} names its team in team.name",
         )
+
+
+def _team(contract: _Contract) -> Iterator[Issue]:
+    yield from _team_issues(contract, "a Python contract")
 
 
 def _refused_fields(contract: _Contract) -> Iterator[Issue]:
@@ -740,6 +759,22 @@ def _placement_fault(name: str, level: str) -> tuple[str, str] | None:
 
 
 def _custom_properties(contract: _Contract) -> Iterator[Issue]:
+    yield from _property_issues(contract, _placement_fault, check_service=True)
+
+
+def _property_issues(
+    contract: _Contract,
+    fault_of: Callable[[str, str], tuple[str, str] | None],
+    *,
+    check_service: bool,
+) -> Iterator[Issue]:
+    """Yield the issues of the `continuo` properties in every `customProperties` list.
+
+    `fault_of(name, level)` gives the reason and the message of a property that may not sit on
+    `level`, or `None`. A property that sits where it may and is written twice in one list is a
+    `value` issue at each later copy. With `check_service`, the `service` property is a string
+    with text and names the service of the release.
+    """
     for path, level, items in _custom_property_lists(contract.doc, "", "root"):
         first: dict[str, int] = {}
         for index, item in enumerate(items):
@@ -749,7 +784,7 @@ def _custom_properties(contract: _Contract) -> Iterator[Issue]:
             if not isinstance(name, str):
                 continue
             where = f"{path}[{index}]"
-            fault = _placement_fault(name, level)
+            fault = fault_of(name, level)
             if fault is not None:
                 yield _issue(where, *fault)
                 continue
@@ -762,7 +797,7 @@ def _custom_properties(contract: _Contract) -> Iterator[Issue]:
                 )
             else:
                 first[name] = index
-            if name == "service":
+            if check_service and name == "service":
                 yield from _service_issues(
                     item.get("value"), where, contract.service
                 )
@@ -1277,3 +1312,243 @@ def validate_python_contract(
         return found
     # The schema accepts only an object, so `doc` is a mapping here.
     return rule_issues(cast(Mapping[str, Any], doc), path=path, service=service)
+
+
+# The kinds of a dbt node, one for each resource type that gets a contract.
+_DBT_KINDS: Final = tuple(f"dbt-{resource}" for resource in RESOURCE_TYPES)
+
+# The properties that every dbt contract writes, with what each says.
+_DBT_NEEDED: Final = {
+    "service": "the service that owns the node",
+    "kind": f"the kind of the node: {_one_of(_DBT_KINDS)}",
+    "filePath": "the path of the file that declares the node",
+    "materialization": "how dbt builds the node, as a mapping with its `materialized`",
+}
+
+
+def _check_dbt_service(value: object) -> Iterator[str]:
+    if not _is_text(value):
+        yield (
+            f"`service` is {_shown(value)}, it must be the name of a service, a string with text"
+        )
+
+
+def _check_file_path(value: object) -> Iterator[str]:
+    if not _is_text(value):
+        yield (
+            f"`filePath` is {_shown(value)}, it must be the path of the file that declares the "
+            "node, a string with text"
+        )
+
+
+# The properties whose value is checked on a dbt contract, each with its check, apart from `kind`
+# and `materialization`, which have rules of their own. A dormant node writes no schedule, and no
+# node needs a criticality or a timeout.
+_DBT_VALUE_CHECKS: Final[dict[str, Callable[[object], Iterator[str]]]] = {
+    "service": _check_dbt_service,
+    "filePath": _check_file_path,
+    **{
+        name: _VALUE_CHECKS[name]
+        for name in ("schedule", "criticality", "timeoutMinutes")
+    },
+}
+
+
+def _dbt_placement_fault(name: str, level: str) -> tuple[str, str] | None:
+    """Return why a `continuo` property may not sit on `level` of a dbt contract.
+
+    The result is the reason and the message, or `None` when it may sit there.
+    """
+    prop = PROPERTIES.get(name)
+    if prop is None:
+        return (
+            "unknown_property",
+            f"`{name}` is not a continuo property that a dbt contract knows, "
+            "check the spelling or leave it out",
+        )
+    if prop.dbt == "not_used":
+        return "refused_property", f"{name} is not a dbt contract property"
+    if prop.sits_on != level:
+        return (
+            "refused_property",
+            f"`{name}` sits on {_PLACES[prop.sits_on]}, not on {_PLACES[level]}",
+        )
+    return None
+
+
+def _dbt_envelope(contract: _Contract) -> Iterator[Issue]:
+    yield from _api_version_issues(contract, "a dbt contract")
+
+
+def _dbt_table_fault(value: object) -> str | None:
+    """Return what is wrong with `value` as the table of a dbt node, or `None` when it is fine.
+
+    A table is a name (`_name_fault`) with no slash or backslash and no empty, `.` or `..` part
+    between its dots, so the table of a versioned model, `customer.v2`, is one. Whitespace inside
+    it is accepted.
+    """
+    fault = _name_fault(value)
+    if fault is not None or not isinstance(value, str):
+        return fault
+    if "/" in value or "\\" in value:
+        return "must not contain a slash or a backslash"
+    if any(part in ("", ".", "..") for part in value.split(".")):
+        return "must not have an empty, . or .. part between its dots"
+    return None
+
+
+def _dbt_identity(contract: _Contract) -> Iterator[Issue]:
+    identifier = contract.doc.get("id")
+    yield from _id_case_issues(identifier)
+    obj = contract.table_object
+    if obj is None:
+        yield _issue(
+            "schema",
+            "identity",
+            f"a dbt contract has exactly one schema object, this one has "
+            f"{len(contract.schema_objects)}",
+        )
+        return
+    name = obj.get("name")
+    fault = _dbt_table_fault(name)
+    if fault is not None or not isinstance(name, str):
+        yield _issue(
+            "schema[0].name", "identity", f"the name of the table {fault}"
+        )
+        return
+    if not isinstance(identifier, str):
+        return
+    # A schema name has no dot, so the schema part ends at the first dot, and the table of a
+    # versioned model holds a dot. The table part is the table lowered in the id's own string,
+    # as `dbt.unique_id` lowers `<schema>.<table>` as one string, so a final capital sigma takes
+    # its final form. The case of the schema part is the case rule's.
+    schema, dot, _ = identifier.partition(".")
+    schema_fault = _identifier_fault(schema)
+    table = f"{schema}.{name}".lower().partition(".")[2]
+    if not dot or schema_fault is not None or f"{schema}.{table}" != identifier:
+        why = (
+            f": its schema part {_shown(schema)} {schema_fault}"
+            if dot and schema_fault is not None
+            else ""
+        )
+        yield _issue(
+            "id",
+            "identity",
+            f"the id must be a schema name, a dot and the table, in lower case, as in "
+            f"{f'analytics.{name}'.lower()!r}{why}",
+        )
+
+
+def _dbt_team(contract: _Contract) -> Iterator[Issue]:
+    yield from _team_issues(contract, "a dbt contract")
+
+
+def _dbt_custom_properties(contract: _Contract) -> Iterator[Issue]:
+    yield from _property_issues(
+        contract, _dbt_placement_fault, check_service=False
+    )
+
+
+def _dbt_needed(contract: _Contract) -> Iterator[Issue]:
+    for name, what in _DBT_NEEDED.items():
+        if name not in contract.properties:
+            yield _issue(
+                "customProperties",
+                "missing_field",
+                f"a dbt contract writes `{name}` in its customProperties: {what}",
+            )
+
+
+def _dbt_kind(contract: _Contract) -> Iterator[Issue]:
+    prop = contract.properties.get("kind")
+    if prop is not None and prop.value not in _DBT_KINDS:
+        yield _issue(
+            f"{prop.path}.value",
+            "value",
+            f"`kind` is {_shown(prop.value)}, it must be {_one_of(_DBT_KINDS)}",
+        )
+
+
+def _dbt_materialization(contract: _Contract) -> Iterator[Issue]:
+    prop = contract.properties.get("materialization")
+    if prop is None:
+        return
+    value = prop.value
+    if not isinstance(value, Mapping):
+        yield _issue(
+            f"{prop.path}.value",
+            "value",
+            f"`materialization` is {_shown(value)}, it must be a mapping with the `materialized` "
+            "that dbt builds the node with",
+        )
+    elif not _is_text(value.get("materialized")):
+        yield _issue(
+            f"{prop.path}.value.materialized",
+            "value",
+            f"`materialized` is {_shown(value.get('materialized'))}, it must be how dbt builds "
+            "the node, a string with text such as table or view",
+        )
+
+
+def _dbt_values(contract: _Contract) -> Iterator[Issue]:
+    for name, check in _DBT_VALUE_CHECKS.items():
+        prop = contract.properties.get(name)
+        if prop is None:
+            continue
+        for message in check(prop.value):
+            yield _issue(f"{prop.path}.value", "value", message)
+
+
+_DBT_RULES: Final[tuple[_Rule, ...]] = (
+    _dbt_envelope,
+    _dbt_identity,
+    _dbt_team,
+    _dbt_custom_properties,
+    _dbt_needed,
+    _dbt_kind,
+    _dbt_materialization,
+    _dbt_values,
+)
+
+
+def dbt_rule_issues(doc: Mapping[str, Any]) -> list[Issue]:
+    """Return the issues that continuo's rules find in the dbt contract `doc`.
+
+    `doc` is a document that `schema_issues` accepted, as `dbt.generate` writes it or in its
+    stored form. The issues come in path order, then in message order.
+
+    The rules are the envelope (`apiVersion` is `v3.2.0`), the identity (one schema object, a
+    table name that is a name with no slash or backslash and no empty, `.` or `..` part between
+    its dots, and an `id` in ASCII lower case that is a schema part with no whitespace, dot or
+    slash, a dot and the table of the schema object lowered in the id's own string, as
+    `dbt.unique_id` lowers `<schema>.<table>` as one string, so `analytics.customer.v2` ends with
+    the table `customer.v2` of a versioned model), `team.name`, and the custom properties of the `continuo`
+    vendor: each must be a property that the vocabulary knows (`unknown_property`) and that a dbt
+    contract uses, where it sits (`refused_property`, as `<name> is not a dbt contract property`
+    for a Python-only one), and it may be written once in a list (`value`). The contract writes
+    `service`, `kind`, `filePath` and `materialization` (`missing_field`). `service` and
+    `filePath` are strings with text, `kind` is `dbt-model`, `dbt-seed` or `dbt-snapshot`,
+    `materialization` is a mapping whose `materialized` is a string with text, `criticality` is
+    `REGULATORY`, `CORE` or `SECONDARY`, `schedule` is a name with no whitespace at most 50
+    characters long, and `timeoutMinutes` is an integer from 1 to 10080, each a `value` issue at
+    the `value` of the property (at `value.materialized` for the `materialized` of the mapping).
+    A dormant node writes no `schedule`.
+
+    A document with no issue is one that `dbt.run_facts` reads: the properties and the fields it
+    reads are all checked.
+    """
+    contract = _Contract(doc=doc)
+    return _ordered(issue for rule in _DBT_RULES for issue in rule(contract))
+
+
+def validate_dbt_contract(doc: object) -> list[Issue]:
+    """Return every issue of the dbt contract `doc`, or an empty list when it is valid.
+
+    The result is `schema_issues(doc)` when that has any issue, and `dbt_rule_issues(doc)`
+    otherwise, because the rules read a document of the shape the schema describes.
+    """
+    found = schema_issues(doc)
+    if found:
+        return found
+    # The schema accepts only an object, so `doc` is a mapping here.
+    return dbt_rule_issues(cast(Mapping[str, Any], doc))

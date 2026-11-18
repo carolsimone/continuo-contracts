@@ -1,0 +1,109 @@
+{
+ "contract_hash": "sha256:787dd1286f56342de85948995d8cda31b81d8850d0d7009a7096c37351d343bb",
+ "flags": [],
+ "generated": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "service",
+    "value": "service-1",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-seed",
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "seed",
+    "vendor": "continuo"
+   },
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "seeds/seed_table_2.csv",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "seed"
+    },
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.seed_table_2",
+  "kind": "DataContract",
+  "name": "seed_table_2",
+  "schema": [
+   {
+    "name": "seed_table_2",
+    "physicalName": "seed_table_2",
+    "physicalType": "table"
+   }
+  ],
+  "status": "active",
+  "team": {
+   "name": "test"
+  },
+  "version": "0"
+ },
+ "source_sha256": "56fac5bc36189fcde6a3ff4373c16f0d2de848c44cf50dacf62d3e1f1c1d9fe4",
+ "stored": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "seeds/seed_table_2.csv",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-seed",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "seed"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "seed",
+    "vendor": "continuo"
+   },
+   {
+    "property": "service",
+    "value": "service-1",
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.seed_table_2",
+  "kind": "DataContract",
+  "name": "seed_table_2",
+  "schema": [
+   {
+    "name": "seed_table_2",
+    "physicalName": "seed_table_2",
+    "physicalType": "table"
+   }
+  ],
+  "status": "active",
+  "team": {
+   "name": "test"
+  },
+  "version": "0"
+ }
+}

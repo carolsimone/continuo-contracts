@@ -1,0 +1,115 @@
+{
+ "contract_hash": "sha256:182ad0c3cbc80452c26177c3afc34dbbea0f3675222ff67d5b8a455dfa8bbbd2",
+ "flags": [],
+ "generated": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "service",
+    "value": "finance",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "daily",
+    "vendor": "continuo"
+   },
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/operation_cost_per_user_view.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "view"
+    },
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.operation_cost_per_user_view",
+  "kind": "DataContract",
+  "name": "operation_cost_per_user_view",
+  "schema": [
+   {
+    "name": "operation_cost_per_user_view",
+    "physicalName": "operation_cost_per_user_view",
+    "physicalType": "view"
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "daily"
+  ],
+  "team": {
+   "name": "finance"
+  },
+  "version": "0"
+ },
+ "source_sha256": "542072c5181d2253dd3836d445b9a55bedbde58d00acc42895e48137f2fc90dd",
+ "stored": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/operation_cost_per_user_view.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "view"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "daily",
+    "vendor": "continuo"
+   },
+   {
+    "property": "service",
+    "value": "finance",
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.operation_cost_per_user_view",
+  "kind": "DataContract",
+  "name": "operation_cost_per_user_view",
+  "schema": [
+   {
+    "name": "operation_cost_per_user_view",
+    "physicalName": "operation_cost_per_user_view",
+    "physicalType": "view"
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "daily"
+  ],
+  "team": {
+   "name": "finance"
+  },
+  "version": "0"
+ }
+}

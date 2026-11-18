@@ -1,0 +1,143 @@
+{
+ "contract_hash": "sha256:53ef47fbfd8ff0c837cd4820e2c2f9f213d5e3426403263d71b8973052285007",
+ "flags": [],
+ "generated": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "service",
+    "value": "cases",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "project_tag",
+    "vendor": "continuo"
+   },
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/tagged/customer_v2.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.customer.v2",
+  "kind": "DataContract",
+  "name": "customer.v2",
+  "schema": [
+   {
+    "name": "customer.v2",
+    "physicalName": "customer_v2",
+    "physicalType": "table",
+    "properties": [
+     {
+      "name": "id",
+      "primaryKey": true,
+      "quality": [
+       {
+        "id": "unique_customer_v2_id",
+        "metric": "duplicateValues",
+        "mustBe": 0
+       }
+      ],
+      "unique": true
+     }
+    ]
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "project_tag"
+  ],
+  "team": {
+   "name": "cases"
+  },
+  "version": "0"
+ },
+ "source_sha256": "28a03d37cd6af159611876063c51a1b89a7465f567ef7cd73f39a96ca1202eb9",
+ "stored": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/tagged/customer_v2.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "project_tag",
+    "vendor": "continuo"
+   },
+   {
+    "property": "service",
+    "value": "cases",
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.customer.v2",
+  "kind": "DataContract",
+  "name": "customer.v2",
+  "schema": [
+   {
+    "name": "customer.v2",
+    "physicalName": "customer_v2",
+    "physicalType": "table",
+    "properties": [
+     {
+      "name": "id",
+      "primaryKey": true,
+      "quality": [
+       {
+        "id": "unique_customer_v2_id",
+        "metric": "duplicateValues",
+        "mustBe": 0
+       }
+      ],
+      "unique": true
+     }
+    ]
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "project_tag"
+  ],
+  "team": {
+   "name": "cases"
+  },
+  "version": "0"
+ }
+}

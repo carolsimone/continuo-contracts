@@ -49,6 +49,10 @@ exclude = [
     ".grimp_cache",
     ".import_linter_cache",
     ".superpowers",
+    # What dbt writes into a fixture project when it runs there.
+    "tests/fixtures/dbt/projects/*/logs",
+    "tests/fixtures/dbt/projects/*/dbt_packages",
+    "tests/fixtures/dbt/projects/*/target",
 ]
 
 [tool.ruff]
@@ -92,9 +96,14 @@ warn_unused_ignores = true
 check_untyped_defs = true
 
 [tool.pytest.ini_options]
-addopts = "--import-mode=importlib --strict-markers"
+addopts = "--import-mode=importlib --strict-markers -m 'not dbt'"
 testpaths = ["tests"]
+# The test helpers that sit beside the tests, such as `dbt_fixtures`, import by name.
+pythonpath = ["tests"]
 filterwarnings = ["error"]
+markers = [
+    "dbt: rebuilds the dbt fixture manifests with `uvx` and the pinned dbt; addopts deselects it, so run it by hand with `pytest -m dbt`, which replaces the default `-m` expression",
+]
 
 [tool.importlinter]
 root_package = "continuo_contracts"
@@ -111,9 +120,10 @@ type = "layers"
 containers = ["continuo_contracts"]
 layers = [
     "cli",
+    "lite",
     "validate",
     "contract",
-    "python | yaml_strict",
+    "python | yaml_strict | dbt",
     "canonical | hashing | schema | fingerprints",
     "errors | vocabulary",
 ]
@@ -131,9 +141,11 @@ source_modules = [
     "continuo_contracts.canonical",
     "continuo_contracts.cli",
     "continuo_contracts.contract",
+    "continuo_contracts.dbt",
     "continuo_contracts.errors",
     "continuo_contracts.fingerprints",
     "continuo_contracts.hashing",
+    "continuo_contracts.lite",
     "continuo_contracts.python",
     "continuo_contracts.schema",
     "continuo_contracts.vocabulary",
@@ -149,8 +161,10 @@ source_modules = [
     "continuo_contracts.canonical",
     "continuo_contracts.cli",
     "continuo_contracts.contract",
+    "continuo_contracts.dbt",
     "continuo_contracts.errors",
     "continuo_contracts.hashing",
+    "continuo_contracts.lite",
     "continuo_contracts.python",
     "continuo_contracts.schema",
     "continuo_contracts.validate",
@@ -166,9 +180,11 @@ allow_indirect_imports = true
 source_modules = [
     "continuo_contracts.canonical",
     "continuo_contracts.contract",
+    "continuo_contracts.dbt",
     "continuo_contracts.errors",
     "continuo_contracts.fingerprints",
     "continuo_contracts.hashing",
+    "continuo_contracts.lite",
     "continuo_contracts.python",
     "continuo_contracts.schema",
     "continuo_contracts.validate",
@@ -176,6 +192,27 @@ source_modules = [
     "continuo_contracts.yaml_strict",
 ]
 forbidden_modules = ["logging"]
+
+# The library modules start no process; `cli` runs the `dbt` executable.
+[[tool.importlinter.contracts]]
+name = "subprocess-is-confined-to-cli"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = [
+    "continuo_contracts.canonical",
+    "continuo_contracts.contract",
+    "continuo_contracts.dbt",
+    "continuo_contracts.errors",
+    "continuo_contracts.fingerprints",
+    "continuo_contracts.hashing",
+    "continuo_contracts.lite",
+    "continuo_contracts.python",
+    "continuo_contracts.schema",
+    "continuo_contracts.validate",
+    "continuo_contracts.vocabulary",
+    "continuo_contracts.yaml_strict",
+]
+forbidden_modules = ["subprocess"]
 
 [tool.coverage.run]
 branch = true

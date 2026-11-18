@@ -1,0 +1,115 @@
+{
+ "contract_hash": "sha256:4dcc3aa46368c06a9a917f47839ed7f0142c97e0d1a3da62663808d0064d36fe",
+ "flags": [],
+ "generated": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "service",
+    "value": "service-1",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "daily",
+    "vendor": "continuo"
+   },
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/table_aa.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "view"
+    },
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.table_aa",
+  "kind": "DataContract",
+  "name": "table_aa",
+  "schema": [
+   {
+    "name": "table_aa",
+    "physicalName": "table_aa",
+    "physicalType": "view"
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "daily"
+  ],
+  "team": {
+   "name": "test"
+  },
+  "version": "0"
+ },
+ "source_sha256": "5e05c1e5f6ebc9c49aadf0c52128b1bddde3b251630022432cc411ce16ae8d39",
+ "stored": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/table_aa.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "view"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "daily",
+    "vendor": "continuo"
+   },
+   {
+    "property": "service",
+    "value": "service-1",
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.table_aa",
+  "kind": "DataContract",
+  "name": "table_aa",
+  "schema": [
+   {
+    "name": "table_aa",
+    "physicalName": "table_aa",
+    "physicalType": "view"
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "daily"
+  ],
+  "team": {
+   "name": "test"
+  },
+  "version": "0"
+ }
+}

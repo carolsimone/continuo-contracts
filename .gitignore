@@ -11,3 +11,6 @@ docs/ddd-violations/
 .coverage.*
 .grimp_cache/
 .import_linter_cache/
+tests/fixtures/dbt/projects/*/target/
+logs/
+dbt_packages/

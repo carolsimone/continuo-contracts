@@ -1,0 +1,107 @@
+{
+ "contract_hash": "sha256:53e0f9c565265c15ae4736da3a88eec004e52452c2de0e4b7d98cc37e66494a5",
+ "flags": [],
+ "generated": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "service",
+    "value": "cases",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/untagged/dormant.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   }
+  ],
+  "description": {
+   "purpose": "A model with an owner and no tag."
+  },
+  "id": "analytics.dormant",
+  "kind": "DataContract",
+  "name": "dormant",
+  "schema": [
+   {
+    "description": "A model with an owner and no tag.",
+    "name": "dormant",
+    "physicalName": "dormant",
+    "physicalType": "table"
+   }
+  ],
+  "status": "active",
+  "team": {
+   "name": "cases"
+  },
+  "version": "0"
+ },
+ "source_sha256": "dfcd4674d72af8acdc251df8697f1ec38679af7399ec8e6d544333c9ddff2399",
+ "stored": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/untagged/dormant.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "service",
+    "value": "cases",
+    "vendor": "continuo"
+   }
+  ],
+  "description": {
+   "purpose": "A model with an owner and no tag."
+  },
+  "id": "analytics.dormant",
+  "kind": "DataContract",
+  "name": "dormant",
+  "schema": [
+   {
+    "description": "A model with an owner and no tag.",
+    "name": "dormant",
+    "physicalName": "dormant",
+    "physicalType": "table"
+   }
+  ],
+  "status": "active",
+  "team": {
+   "name": "cases"
+  },
+  "version": "0"
+ }
+}

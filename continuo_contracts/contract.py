@@ -1,10 +1,12 @@
-"""The stored form of a Python node's ODCS contract and its `contract_hash`.
+"""The stored form of a node's ODCS contract and its `contract_hash`.
 
-continuo stores a Python contract in one canonical shape, its stored form, so two files that
-mean the same thing store the same document. `normalise_python` builds it from a contract that
+continuo stores a contract in one canonical shape, its stored form, so two files that mean the
+same thing store the same document. `normalise_python` builds it from a Python contract that
 `validate.validate_python_contract` accepted: it fills what continuo knows about the node (the
 stored labels, the table's names, the kind, the service, the tables the node reads and a
-`logicalType` per column) and then writes the result in the canonical form.
+`logicalType` per column) and then writes the result in the canonical form. `normalise_dbt`
+builds it from a contract that `dbt.generate` wrote: it joins the tables the node's compiled SQL
+names with the ones the node declares and then writes the result in the canonical form.
 
 The canonical form walks the ODCS structure: the contract, its schema object, the columns, the
 quality rules, the relationships, the custom properties and every other ODCS object. On each
@@ -309,10 +311,7 @@ def normalise_python(
         derived = logical_type(physical)
         if derived is not None:
             column.update(derived)
-    keys = [column for column in columns if column.get("primaryKey") is True]
-    if len(keys) == 1:
-        # A position orders the columns of a key, so one key column says nothing with it.
-        keys[0].pop("primaryKeyPosition", None)
+    _drop_single_key_position(columns)
     if tables:
         table_object.setdefault("customProperties", []).append(
             {"vendor": VENDOR, "property": "reads", "value": tables}
@@ -321,14 +320,61 @@ def normalise_python(
     return canonical
 
 
+def normalise_dbt(
+    doc: Mapping[str, Any], *, reads: Sequence[str]
+) -> dict[str, Any]:
+    """Return the stored form of the dbt contract `doc`, a new dict.
+
+    `doc` is a contract that `dbt.generate` wrote, or its stored form, and it is not changed.
+    `reads` lists the tables that the node's compiled SQL names, each `<schema>.<table>`.
+
+    The stored form is `doc` with the `continuo` property `reads` of the schema object holding the
+    tables of `reads` joined with the tables that property lists in `doc`, their ASCII letters in
+    lower case, sorted by code point and listed once, and left out when there are none; the
+    `primaryKeyPosition` of the only column with `primaryKey: true` is dropped. The result is then
+    written in the canonical form that the module describes. Storing a stored form again with no
+    `reads` gives it back unchanged.
+
+    Raises `HashInputError` when `reads` is a string, or when `reads` or the schema object's
+    `reads` lists a table that is not a string of exactly two parts joined by a dot, neither
+    empty, with no whitespace and no control character, and `CanonicalJsonError` when an item of a
+    set-like list holds a value that canonical JSON cannot write, such as a `mustBe` of 2**60. A
+    contract `dbt.generate` writes never holds one, but a stored contract passed back that
+    `validate.validate_dbt_contract` accepts can.
+    """
+    given = _reads(reads)
+    stored: dict[str, Any] = _as_written(doc)
+    table_object = stored["schema"][0]
+    custom = table_object.get("customProperties", [])
+    tables = sorted({*given, *_reads(continuo_values(custom).get("reads", []))})
+    table_object["customProperties"] = [
+        item for item in custom if not _is_continuo(item, "reads")
+    ]
+    if tables:
+        table_object["customProperties"].append(
+            {"vendor": VENDOR, "property": "reads", "value": tables}
+        )
+    _drop_single_key_position(table_object.get("properties", []))
+    canonical: dict[str, Any] = _clean(stored, "root")
+    return canonical
+
+
+def _drop_single_key_position(columns: list[Any]) -> None:
+    """Drop the `primaryKeyPosition` of the only column with `primaryKey: true`."""
+    keys = [column for column in columns if column.get("primaryKey") is True]
+    if len(keys) == 1:
+        # A position orders the columns of a key, so one key column says nothing with it.
+        keys[0].pop("primaryKeyPosition", None)
+
+
 def contract_hash(stored: Mapping[str, Any]) -> str:
     """Return the `contract_hash` of the stored form `stored`, `"sha256:"` and 64 hex digits.
 
     It is the SHA-256 of the RFC 8785 canonical JSON of `stored` without the root keys that
     `fingerprints.contract_hash_exclusions()` lists, `apiVersion`, `kind`, `status` and `version`.
-    `stored` is hashed as it is: it is the result of `normalise_python`, which has already written
-    it in the canonical form. Raises `CanonicalJsonError` for a value that canonical JSON cannot
-    write.
+    `stored` is hashed as it is: it is the result of `normalise_python` or `normalise_dbt`, which
+    have already written it in the canonical form. Raises `CanonicalJsonError` for a value that
+    canonical JSON cannot write.
     """
     left_out = fingerprints.contract_hash_exclusions()
     hashed = {key: value for key, value in stored.items() if key not in left_out}
@@ -367,14 +413,19 @@ def _set_property(items: list[Any], name: str, value: str) -> None:
     The property is added when the list has none.
     """
     for item in items:
-        if (
-            isinstance(item, dict)
-            and item.get("vendor") == VENDOR
-            and item.get("property") == name
-        ):
+        if _is_continuo(item, name):
             item["value"] = value
             return
     items.append({"vendor": VENDOR, "property": name, "value": value})
+
+
+def _is_continuo(item: object, name: str) -> bool:
+    """Say whether `item` is the `continuo` custom property `name`."""
+    return (
+        isinstance(item, dict)
+        and item.get("vendor") == VENDOR
+        and item.get("property") == name
+    )
 
 
 def _number(value: float) -> float | int:

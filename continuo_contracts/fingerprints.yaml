@@ -4,8 +4,8 @@ version: 1
 lists:
   hashed_config_denylist: [access, description, docs, freshness, grants, group, meta, tags]
   projection_keys: [schema, table, kind, script, reads, output_columns, extra_columns, config, secret_ref, mode_type, primary_key, assets]
-  # The root keys of a Python contract's stored form that contract_hash leaves out. Editing this
-  # list moves the contract_hash of every Python contract.
+  # The root keys of the stored form that contract_hash leaves out. Editing this list moves the
+  # contract_hash of every contract.
   contract_hash_exclusions: [apiVersion, kind, status, version]
 families:
   every:
@@ -34,21 +34,21 @@ families:
       fingerprint: "both"
       parts: ["config"]
       why: "content: the resolved relation in `hashed_config`; contract: `id`. A new schema makes a new node"
-      inputs: ["relation.schema"]
+      inputs: ["relation.schema", "odcs.id"]
     - id: "name"
       field: "Name; a version's `<name>.v<version>`"
       source: "node `name` and `version`"
       fingerprint: "both"
       parts: ["identity"]
       why: "content: it keys the node, so a new name makes a new node with fresh hashes; contract: `id`, `name`, `schema[0].name`"
-      inputs: []
+      inputs: ["odcs.name", "odcs.schema.name"]
     - id: "alias"
       field: "Resolved alias"
       source: "node `alias`, after `generate_alias_name`"
       fingerprint: "both"
       parts: ["config"]
       why: "content: the resolved relation in `hashed_config`; contract: `physicalName`"
-      inputs: ["relation.alias"]
+      inputs: ["relation.alias", "odcs.schema.physicalName"]
     - id: "raw_code"
       field: "SQL text"
       source: "`raw_code`"
@@ -109,14 +109,15 @@ families:
       fingerprint: "both"
       parts: ["config"]
       why: "content: `hashed_config`; contract: `materialization`, and `schema[0].physicalType` from `materialized`"
-      inputs: ["config.materialized", "config.unique_key", "config.incremental_strategy", "config.on_schema_change"]
+      inputs: ["config.materialized", "config.unique_key", "config.incremental_strategy",
+               "config.on_schema_change", "odcs.custom.materialization", "odcs.schema.physicalType"]
     - id: "contract_enforced"
       field: "`contract.enforced`"
       source: "`config`"
       fingerprint: "both"
       parts: ["config"]
       why: "content: `hashed_config`; contract: `contractEnforced`"
-      inputs: ["config.contract.enforced"]
+      inputs: ["config.contract.enforced", "odcs.custom.contractEnforced"]
     - id: "other_config"
       field: "Every other config key outside the denylist: `persist_docs`, `sql_header`, `full_refresh`, `pre_hook`, `post_hook`, the rest of `contract`, adapter and microbatch keys"
       source: "`config`"
@@ -136,21 +137,21 @@ families:
       source: "node `tags`"
       fingerprint: "contract"
       why: "`tags`, and the first as `schedule`; outside `hashed_config`. A tag set in the SQL file's `config()` line moves the source part anyway"
-      inputs: ["config.tags"]
+      inputs: ["config.tags", "odcs.tags", "odcs.custom.schedule"]
     - id: "meta_run_facts"
       field: "`meta.owner`, `meta.criticality`, `meta.timeout_minutes`"
       source: "`config.meta`"
       fingerprint: "contract"
       when: {condition: "sql_reads", fingerprint: "both", parts: ["compiled"]}
       why: "contract: `team.name`, `criticality`, `timeoutMinutes`; `meta` is outside `hashed_config`. Content: the compiled part, while SQL reads the value"
-      inputs: []
+      inputs: ["odcs.team.name", "odcs.custom.criticality", "odcs.custom.timeoutMinutes"]
     - id: "meta_continuo"
       field: "`meta.continuo.readers`, `.reads`, `.tests`, `.classification`"
       source: "`config.meta`, column `meta`"
       fingerprint: "contract"
       when: {condition: "sql_reads", fingerprint: "both", parts: ["compiled"]}
       why: "contract: `roles`, `reads`, table tests as quality rules, `classification`, carried whether or not the install uses an ontology. Content: the compiled part, while SQL reads the value"
-      inputs: []
+      inputs: ["odcs.schema.properties.classification"]
     - id: "meta_bindings"
       field: "`meta.continuo` bindings: `entity`, `grain`, `fixed`, `filter`, a column's `property`, `local` and aggregate keys"
       source: "`config.meta`, column `meta`"
@@ -158,6 +159,12 @@ families:
       when: {condition: "sql_reads", fingerprint: "both", parts: ["compiled"]}
       why: "contract: the ontology part, written only when the install uses an ontology. Content: the compiled part, while SQL reads the value"
       inputs: []
+    - id: "sql_reads"
+      field: "Tables the compiled SQL names"
+      source: "`compiled_code`, listed by topology-controller"
+      fingerprint: "contract"
+      why: "`reads` on the schema object, with the declared reads; the compiled part already covers the SQL itself, and the lite check lists none because `dbt parse` compiles nothing"
+      inputs: ["odcs.schema.custom.reads"]
     - id: "meta_other"
       field: "Every other `meta` key"
       source: "`config.meta`"
@@ -182,33 +189,70 @@ families:
       source: "`config`"
       fingerprint: "contract"
       why: "`access`, left out when it is dbt's default, `protected`, and `group`; outside `hashed_config`"
-      inputs: ["config.access", "config.group"]
+      inputs: ["config.access", "config.group", "odcs.custom.access", "odcs.custom.group"]
     - id: "freshness"
       field: "`freshness.build_after`"
       source: "`config`"
       fingerprint: "contract"
       why: "`freshnessBuildAfter`; outside `hashed_config`"
-      inputs: ["config.freshness"]
+      inputs: ["config.freshness", "odcs.custom.freshnessBuildAfter"]
+    - id: "deprecation_date"
+      field: "`deprecation_date`"
+      source: "the node"
+      fingerprint: "contract"
+      why: "`deprecationDate`, date part only; a node field, not config"
+      inputs: ["odcs.custom.deprecationDate"]
     - id: "grants"
       field: "`grants`"
       source: "`config`"
       fingerprint: "contract"
-      why: "`roles`; outside `hashed_config`"
-      inputs: ["config.grants"]
+      why: "`roles`, one per grantee of each privilege; outside `hashed_config`. The roles of `meta.continuo.readers` are the same field, and the content side of that input is classified on `meta_continuo`"
+      inputs: ["config.grants", "odcs.roles.role", "odcs.roles.access"]
+    - id: "description"
+      field: "Description"
+      source: "node `description`"
+      fingerprint: "contract"
+      why: "`description.purpose`, `schema[0].description`; outside `hashed_config`"
+      inputs: ["odcs.description.purpose", "odcs.schema.description"]
+    - id: "service"
+      field: "Service"
+      source: "`fqn[0]`"
+      fingerprint: "contract"
+      why: "`service`; renaming a service versions every contract in it"
+      inputs: ["odcs.custom.service"]
+    - id: "kind"
+      field: "Kind"
+      source: "`resource_type`"
+      fingerprint: "contract"
+      why: "`kind`; not a code input, but a kind change always changes the node's file and its `materialized`"
+      inputs: ["odcs.custom.kind"]
+    - id: "file_path"
+      field: "File path"
+      source: "`original_file_path`"
+      fingerprint: "contract"
+      why: "`filePath`; outside the code fingerprint"
+      inputs: ["odcs.custom.filePath"]
     - id: "declared_columns"
       field: "Declared columns: name and order"
       source: "`schema.yml`"
       fingerprint: "contract"
       when: {condition: "enforced", fingerprint: "both", parts: ["config"]}
       why: "contract: `properties` in declared order; content: `hashed_config`, only when enforced"
-      inputs: ["contract.columns"]
+      inputs: ["contract.columns", "odcs.schema.properties.name"]
     - id: "column_data_type"
       field: "Column `data_type`"
       source: "`schema.yml`"
       fingerprint: "contract"
       when: {condition: "enforced", fingerprint: "both", parts: ["config"]}
       why: "contract: `physicalType`, with the `logicalType` derived from it; content: `hashed_config`, only when enforced"
-      inputs: []
+      inputs: ["odcs.schema.properties.physicalType", "odcs.schema.properties.logicalType",
+               "odcs.schema.properties.logicalTypeOptions"]
+    - id: "column_description_tags"
+      field: "Column description and tags"
+      source: "`schema.yml`"
+      fingerprint: "contract"
+      why: "`properties[].description`, `tags`"
+      inputs: ["odcs.schema.properties.description", "odcs.schema.properties.tags"]
     - id: "constraints"
       field: "Column and model constraints"
       source: "`schema.yml`, model `constraints`"
@@ -223,6 +267,41 @@ families:
       when: {condition: "enforced", fingerprint: "content", parts: ["config"]}
       why: "`hashed_config`; it only decides how dbt quotes the name in DDL, so it has no contract field"
       inputs: []
+    - id: "primary_key"
+      field: "Primary key"
+      source: "the manifest's `primary_key`, from a constraint or inferred by dbt from tests"
+      fingerprint: "contract"
+      why: "`primaryKey`, and `primaryKeyPosition` in a key of two or more columns; a key of one column is stored without its position"
+      inputs: ["odcs.schema.properties.primaryKey", "odcs.schema.properties.primaryKeyPosition"]
+    - id: "tests"
+      field: "Tests on the model"
+      source: "test nodes"
+      fingerprint: "contract"
+      why: "`required`, `unique`, `relationships` and quality rules on this contract: a rule's `id`, metric, arguments or implementation, and the property it sits on. The test's code is in the test node's own `content_hash`, never in this node's. The table tests of `meta.continuo.tests` write the same rule fields, and the content side of that input is classified on `meta_continuo`"
+      inputs: ["odcs.schema.properties.required", "odcs.schema.properties.unique",
+               "odcs.schema.properties.relationships.to", "odcs.schema.properties.quality.id",
+               "odcs.schema.properties.quality.metric", "odcs.schema.properties.quality.mustBe",
+               "odcs.schema.properties.quality.arguments", "odcs.schema.properties.quality.name",
+               "odcs.schema.properties.quality.type", "odcs.schema.properties.quality.engine",
+               "odcs.schema.properties.quality.implementation", "odcs.schema.quality.id",
+               "odcs.schema.quality.metric", "odcs.schema.quality.mustBe",
+               "odcs.schema.quality.arguments", "odcs.schema.quality.name",
+               "odcs.schema.quality.type", "odcs.schema.quality.engine",
+               "odcs.schema.quality.implementation"]
+    - id: "test_settings"
+      field: "A test's `severity`, `description`, `tags`, `where`, `warn_if`, `error_if` and `fail_calc`"
+      source: "the test node's `config`, `description` and `tags`"
+      fingerprint: "contract"
+      why: "the rule's `severity` (`warning` for `warn`, none for `error`), `description` and `tags`, and `where`, `warnIf`, `errorIf` and `failCalc` when they are not dbt's defaults. The test node's `hashed_config` holds the severity, `where` and thresholds, so they move its own `content_hash` as well; the description and tags stay outside it"
+      inputs: ["odcs.schema.properties.quality.severity",
+               "odcs.schema.properties.quality.description", "odcs.schema.properties.quality.tags",
+               "odcs.schema.properties.quality.custom.where",
+               "odcs.schema.properties.quality.custom.warnIf",
+               "odcs.schema.properties.quality.custom.errorIf",
+               "odcs.schema.properties.quality.custom.failCalc", "odcs.schema.quality.severity",
+               "odcs.schema.quality.description", "odcs.schema.quality.tags",
+               "odcs.schema.quality.custom.where", "odcs.schema.quality.custom.warnIf",
+               "odcs.schema.quality.custom.errorIf", "odcs.schema.quality.custom.failCalc"]
   dbt-seed:
     - id: "identity"
       field: "Schema, name, resolved alias"
@@ -230,7 +309,8 @@ families:
       fingerprint: "both"
       parts: ["config", "identity"]
       why: "as for a model"
-      inputs: ["relation.schema", "relation.alias"]
+      inputs: ["relation.schema", "relation.alias", "odcs.id", "odcs.name", "odcs.schema.name",
+               "odcs.schema.physicalName"]
     - id: "csv_bytes"
       field: "CSV bytes, any size, outer whitespace included"
       source: "compile extras' `sha256`"
@@ -283,7 +363,14 @@ families:
       fingerprint: "both"
       parts: ["config"]
       why: "content: `hashed_config`; contract: `materialization`, and `schema[0].physicalType`, always `table` for a seed"
-      inputs: ["config.materialized"]
+      inputs: ["config.materialized", "odcs.custom.materialization", "odcs.schema.physicalType"]
+    - id: "contract_enforced"
+      field: "`contract.enforced`"
+      source: "`config`"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "content: `hashed_config`, since `contract` is outside the denylist; contract: `contractEnforced`, written whenever the setting is true, as for a model"
+      inputs: ["config.contract.enforced", "odcs.custom.contractEnforced"]
     - id: "column_types"
       field: "`column_types`"
       source: "`config`"
@@ -297,7 +384,7 @@ families:
       fingerprint: "both"
       parts: ["config"]
       why: "content: `hashed_config`; contract: `quoteColumns`"
-      inputs: ["config.quote_columns"]
+      inputs: ["config.quote_columns", "odcs.custom.quoteColumns"]
     - id: "other_config"
       field: "`delimiter`, `full_refresh` and every other config key outside the denylist"
       source: "`config`"
@@ -317,13 +404,20 @@ families:
       source: "node `tags`"
       fingerprint: "contract"
       why: "`tags`, and the first as `schedule`, which is `seed` when there is none"
-      inputs: ["config.tags"]
+      inputs: ["config.tags", "odcs.tags", "odcs.custom.schedule"]
     - id: "meta_contract"
       field: "`meta.owner`, `meta.criticality`, `meta.timeout_minutes`; `meta.continuo` keys and bindings"
       source: "`config.meta`, column `meta`"
       fingerprint: "contract"
       why: "as for a model, except that a seed has no SQL to read a `meta` value, so none of them reaches `content_hash`"
-      inputs: []
+      inputs: ["odcs.team.name", "odcs.custom.criticality", "odcs.custom.timeoutMinutes",
+               "odcs.schema.properties.classification"]
+    - id: "sql_reads"
+      field: "Tables the compiled SQL names"
+      source: "`compiled_code`, listed by topology-controller"
+      fingerprint: "contract"
+      why: "`reads` on the schema object, with the declared reads; the compiled part already covers the SQL itself, and the lite check lists none because `dbt parse` compiles nothing"
+      inputs: ["odcs.schema.custom.reads"]
     - id: "meta_other_docs"
       field: "Every other `meta` key, `docs`"
       source: "`config`"
@@ -334,14 +428,69 @@ families:
       field: "`grants`"
       source: "`config`"
       fingerprint: "contract"
-      why: "`roles`"
-      inputs: ["config.grants"]
+      why: "`roles`, one per grantee of each privilege. The roles of `meta.continuo.readers` are the same field, and the content side of that input is classified on `meta_contract`"
+      inputs: ["config.grants", "odcs.roles.role", "odcs.roles.access"]
     - id: "group"
       field: "`group`"
       source: "`config`"
       fingerprint: "contract"
       why: "`group`, as on a model; outside `hashed_config`. dbt declares `group` on every node's config"
-      inputs: ["config.group"]
+      inputs: ["config.group", "odcs.custom.group"]
+    - id: "description"
+      field: "Description"
+      source: "node `description`"
+      fingerprint: "contract"
+      why: "`description.purpose`, `schema[0].description`, as for a model"
+      inputs: ["odcs.description.purpose", "odcs.schema.description"]
+    - id: "service_kind_path"
+      field: "Service, kind (`dbt-seed`), file path"
+      source: "`fqn[0]`, `resource_type`, `original_file_path`"
+      fingerprint: "contract"
+      why: "`service`, `kind`, `filePath`; the path counts in `content_hash` only as the checksum of a seed over 1 MiB that a stored artifact with no compile extras keeps"
+      inputs: ["odcs.custom.service", "odcs.custom.kind", "odcs.custom.filePath"]
+    - id: "declared_columns"
+      field: "Declared columns: name, order, description, tags"
+      source: "`schema.yml`"
+      fingerprint: "contract"
+      why: "`properties` in declared order, each with its description and tags; declared seed columns are contract only"
+      inputs: ["odcs.schema.properties.name", "odcs.schema.properties.description",
+               "odcs.schema.properties.tags"]
+    - id: "column_data_type"
+      field: "Column `data_type`"
+      source: "`schema.yml`"
+      fingerprint: "contract"
+      why: "`physicalType` where `column_types` gives none, with the `logicalType` derived from it; dbt never reads it for a seed. A type from `config.column_types` wins; the content side of that input is classified on its own row"
+      inputs: ["odcs.schema.properties.physicalType", "odcs.schema.properties.logicalType",
+               "odcs.schema.properties.logicalTypeOptions"]
+    - id: "tests"
+      field: "Tests on the seed"
+      source: "test nodes"
+      fingerprint: "contract"
+      why: "`required`, `unique`, `relationships` and quality rules on this contract: a rule's `id`, metric, arguments or implementation, and the property it sits on. The test's code is in the test node's own `content_hash`, never in this node's. The table tests of `meta.continuo.tests` write the same rule fields, and the content side of that input is classified on `meta_contract`"
+      inputs: ["odcs.schema.properties.required", "odcs.schema.properties.unique",
+               "odcs.schema.properties.relationships.to", "odcs.schema.properties.quality.id",
+               "odcs.schema.properties.quality.metric", "odcs.schema.properties.quality.mustBe",
+               "odcs.schema.properties.quality.arguments", "odcs.schema.properties.quality.name",
+               "odcs.schema.properties.quality.type", "odcs.schema.properties.quality.engine",
+               "odcs.schema.properties.quality.implementation", "odcs.schema.quality.id",
+               "odcs.schema.quality.metric", "odcs.schema.quality.mustBe",
+               "odcs.schema.quality.arguments", "odcs.schema.quality.name",
+               "odcs.schema.quality.type", "odcs.schema.quality.engine",
+               "odcs.schema.quality.implementation"]
+    - id: "test_settings"
+      field: "A test's `severity`, `description`, `tags`, `where`, `warn_if`, `error_if` and `fail_calc`"
+      source: "the test node's `config`, `description` and `tags`"
+      fingerprint: "contract"
+      why: "the rule's `severity` (`warning` for `warn`, none for `error`), `description` and `tags`, and `where`, `warnIf`, `errorIf` and `failCalc` when they are not dbt's defaults. The test node's `hashed_config` holds the severity, `where` and thresholds, so they move its own `content_hash` as well; the description and tags stay outside it"
+      inputs: ["odcs.schema.properties.quality.severity",
+               "odcs.schema.properties.quality.description", "odcs.schema.properties.quality.tags",
+               "odcs.schema.properties.quality.custom.where",
+               "odcs.schema.properties.quality.custom.warnIf",
+               "odcs.schema.properties.quality.custom.errorIf",
+               "odcs.schema.properties.quality.custom.failCalc", "odcs.schema.quality.severity",
+               "odcs.schema.quality.description", "odcs.schema.quality.tags",
+               "odcs.schema.quality.custom.where", "odcs.schema.quality.custom.warnIf",
+               "odcs.schema.quality.custom.errorIf", "odcs.schema.quality.custom.failCalc"]
     - id: "not_seed_config"
       field: "`access`, `freshness`, or `description` as a `config` key, if a project sets one on a seed"
       source: "`config`"
@@ -355,7 +504,8 @@ families:
       fingerprint: "both"
       parts: ["config", "identity"]
       why: "as for a model"
-      inputs: ["relation.schema", "relation.alias"]
+      inputs: ["relation.schema", "relation.alias", "odcs.id", "odcs.name", "odcs.schema.name",
+               "odcs.schema.physicalName"]
     - id: "raw_code"
       field: "SQL text"
       source: "the snapshot's own `raw_code`"
@@ -409,7 +559,9 @@ families:
       fingerprint: "both"
       parts: ["config"]
       why: "content: `hashed_config`; contract: `snapshot`"
-      inputs: ["config.strategy", "config.unique_key", "config.updated_at", "config.check_cols", "config.hard_deletes", "config.snapshot_meta_column_names", "config.dbt_valid_to_current"]
+      inputs: ["config.strategy", "config.unique_key", "config.updated_at", "config.check_cols",
+               "config.hard_deletes", "config.snapshot_meta_column_names",
+               "config.dbt_valid_to_current", "odcs.custom.snapshot"]
     - id: "history_columns"
       field: "The columns dbt adds to the history table: `dbt_scd_id`, `dbt_updated_at`, `dbt_valid_from` and `dbt_valid_to`, and `dbt_is_deleted` when `hard_deletes` is `new_record`, under the names `snapshot_meta_column_names` sets"
       source: "derived from the snapshot `config`"
@@ -423,7 +575,14 @@ families:
       fingerprint: "both"
       parts: ["config"]
       why: "content: `hashed_config`; contract: `materialization`, and `schema[0].physicalType`, always `table` for a snapshot"
-      inputs: ["config.materialized"]
+      inputs: ["config.materialized", "odcs.custom.materialization", "odcs.schema.physicalType"]
+    - id: "contract_enforced"
+      field: "`contract.enforced`"
+      source: "`config`"
+      fingerprint: "both"
+      parts: ["config"]
+      why: "content: `hashed_config`, since `contract` is outside the denylist; contract: `contractEnforced`, written whenever the setting is true, as for a model"
+      inputs: ["config.contract.enforced", "odcs.custom.contractEnforced"]
     - id: "other_config"
       field: "Every other config key outside the denylist"
       source: "`config`"
@@ -444,7 +603,15 @@ families:
       fingerprint: "contract"
       when: {condition: "sql_reads", fingerprint: "both", parts: ["compiled"]}
       why: "as for a model"
-      inputs: ["config.tags"]
+      inputs: ["config.tags", "odcs.tags", "odcs.custom.schedule", "odcs.team.name",
+               "odcs.custom.criticality", "odcs.custom.timeoutMinutes",
+               "odcs.schema.properties.classification"]
+    - id: "sql_reads"
+      field: "Tables the compiled SQL names"
+      source: "`compiled_code`, listed by topology-controller"
+      fingerprint: "contract"
+      why: "`reads` on the schema object, with the declared reads; the compiled part already covers the SQL itself, and the lite check lists none because `dbt parse` compiles nothing"
+      inputs: ["odcs.schema.custom.reads"]
     - id: "meta_other_docs"
       field: "Every other `meta` key, `docs`"
       source: "`config`"
@@ -456,14 +623,58 @@ families:
       field: "`grants`"
       source: "`config`"
       fingerprint: "contract"
-      why: "`roles`"
-      inputs: ["config.grants"]
+      why: "`roles`, one per grantee of each privilege. The roles of `meta.continuo.readers` are the same field, and the content side of that input is classified on `tags_meta`"
+      inputs: ["config.grants", "odcs.roles.role", "odcs.roles.access"]
     - id: "group"
       field: "`group`"
       source: "`config`"
       fingerprint: "contract"
       why: "`group`, as on a model; outside `hashed_config`. dbt declares `group` on every node's config"
-      inputs: ["config.group"]
+      inputs: ["config.group", "odcs.custom.group"]
+    - id: "node_facts"
+      field: "Description, service, kind (`dbt-snapshot`), file path"
+      source: "the node"
+      fingerprint: "contract"
+      why: "`description.purpose`, `schema[0].description`, `service`, `kind`, `filePath`, as for a model"
+      inputs: ["odcs.description.purpose", "odcs.schema.description", "odcs.custom.service",
+               "odcs.custom.kind", "odcs.custom.filePath"]
+    - id: "declared_columns"
+      field: "Declared columns, and each column's `data_type`, description and tags"
+      source: "`schema.yml`"
+      fingerprint: "contract"
+      why: "`properties` in declared order, each with its `physicalType`, the `logicalType` derived from it, description and tags, as for a model's columns without an enforced dbt contract. The history columns follow them and have their own row; the content side of the snapshot config keys that name them is classified on `snapshot_config`"
+      inputs: ["odcs.schema.properties.name", "odcs.schema.properties.physicalType",
+               "odcs.schema.properties.logicalType", "odcs.schema.properties.logicalTypeOptions",
+               "odcs.schema.properties.description", "odcs.schema.properties.tags"]
+    - id: "tests"
+      field: "Tests on the snapshot"
+      source: "test nodes"
+      fingerprint: "contract"
+      why: "`required`, `unique`, `relationships` and quality rules on this contract: a rule's `id`, metric, arguments or implementation, and the property it sits on. The test's code is in the test node's own `content_hash`, never in this node's. The table tests of `meta.continuo.tests` write the same rule fields, and the content side of that input is classified on `tags_meta`"
+      inputs: ["odcs.schema.properties.required", "odcs.schema.properties.unique",
+               "odcs.schema.properties.relationships.to", "odcs.schema.properties.quality.id",
+               "odcs.schema.properties.quality.metric", "odcs.schema.properties.quality.mustBe",
+               "odcs.schema.properties.quality.arguments", "odcs.schema.properties.quality.name",
+               "odcs.schema.properties.quality.type", "odcs.schema.properties.quality.engine",
+               "odcs.schema.properties.quality.implementation", "odcs.schema.quality.id",
+               "odcs.schema.quality.metric", "odcs.schema.quality.mustBe",
+               "odcs.schema.quality.arguments", "odcs.schema.quality.name",
+               "odcs.schema.quality.type", "odcs.schema.quality.engine",
+               "odcs.schema.quality.implementation"]
+    - id: "test_settings"
+      field: "A test's `severity`, `description`, `tags`, `where`, `warn_if`, `error_if` and `fail_calc`"
+      source: "the test node's `config`, `description` and `tags`"
+      fingerprint: "contract"
+      why: "the rule's `severity` (`warning` for `warn`, none for `error`), `description` and `tags`, and `where`, `warnIf`, `errorIf` and `failCalc` when they are not dbt's defaults. The test node's `hashed_config` holds the severity, `where` and thresholds, so they move its own `content_hash` as well; the description and tags stay outside it"
+      inputs: ["odcs.schema.properties.quality.severity",
+               "odcs.schema.properties.quality.description", "odcs.schema.properties.quality.tags",
+               "odcs.schema.properties.quality.custom.where",
+               "odcs.schema.properties.quality.custom.warnIf",
+               "odcs.schema.properties.quality.custom.errorIf",
+               "odcs.schema.properties.quality.custom.failCalc", "odcs.schema.quality.severity",
+               "odcs.schema.quality.description", "odcs.schema.quality.tags",
+               "odcs.schema.quality.custom.where", "odcs.schema.quality.custom.warnIf",
+               "odcs.schema.quality.custom.errorIf", "odcs.schema.quality.custom.failCalc"]
     - id: "not_snapshot_config"
       field: "`access`, `freshness`, or `description` as a `config` key, if a project sets one on a snapshot"
       source: "`config`"

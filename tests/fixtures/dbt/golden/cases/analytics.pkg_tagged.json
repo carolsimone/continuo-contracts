@@ -1,0 +1,115 @@
+{
+ "contract_hash": "sha256:39ea25a263353260755a011d4567af247323dbd0a7d74590ed9def5c1cba0625",
+ "flags": [],
+ "generated": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "service",
+    "value": "cases-pkg",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "daily",
+    "vendor": "continuo"
+   },
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/pkg_tagged.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "view"
+    },
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.pkg_tagged",
+  "kind": "DataContract",
+  "name": "pkg_tagged",
+  "schema": [
+   {
+    "name": "pkg_tagged",
+    "physicalName": "pkg_tagged",
+    "physicalType": "view"
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "daily"
+  ],
+  "team": {
+   "name": "cases"
+  },
+  "version": "0"
+ },
+ "source_sha256": "83baa4a5fcd0650c9791de4a33e62e4d7c8b8b440a5b7865879f18d3f5beb8da",
+ "stored": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/pkg_tagged.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "view"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "daily",
+    "vendor": "continuo"
+   },
+   {
+    "property": "service",
+    "value": "cases-pkg",
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.pkg_tagged",
+  "kind": "DataContract",
+  "name": "pkg_tagged",
+  "schema": [
+   {
+    "name": "pkg_tagged",
+    "physicalName": "pkg_tagged",
+    "physicalType": "view"
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "daily"
+  ],
+  "team": {
+   "name": "cases"
+  },
+  "version": "0"
+ }
+}

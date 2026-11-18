@@ -1,0 +1,275 @@
+{
+ "contract_hash": "sha256:6a1e6606f0d6c8acb0cc6120b93029dba8d1d2782763de8ced721a36285cdd84",
+ "flags": [],
+ "generated": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "service",
+    "value": "finance",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "daily",
+    "vendor": "continuo"
+   },
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/fx_transactions_eur.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   }
+  ],
+  "description": {
+   "purpose": "FX transactions with amount restated in EUR via seed_fx_rates_eur."
+  },
+  "id": "analytics.fx_transactions_eur",
+  "kind": "DataContract",
+  "name": "fx_transactions_eur",
+  "schema": [
+   {
+    "description": "FX transactions with amount restated in EUR via seed_fx_rates_eur.",
+    "name": "fx_transactions_eur",
+    "physicalName": "fx_transactions_eur",
+    "physicalType": "table",
+    "properties": [
+     {
+      "name": "transaction_id",
+      "primaryKey": true,
+      "quality": [
+       {
+        "id": "not_null_fx_transactions_eur_transaction_id",
+        "metric": "nullValues",
+        "mustBe": 0
+       },
+       {
+        "id": "unique_fx_transactions_eur_transaction_id",
+        "metric": "duplicateValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true,
+      "unique": true
+     },
+     {
+      "description": "Multiplier applied to amount; NULL means an uncovered (currency, date) pair.",
+      "name": "rate_to_eur",
+      "quality": [
+       {
+        "id": "not_null_fx_transactions_eur_rate_to_eur",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "name": "amount_eur",
+      "quality": [
+       {
+        "id": "not_null_fx_transactions_eur_amount_eur",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "Fee the company earned, denominated in currency_from.",
+      "name": "fee_amount",
+      "quality": [
+       {
+        "id": "not_null_fx_transactions_eur_fee_amount",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "fee_amount converted to EUR on the same rate_to_eur join as amount_eur.",
+      "name": "fee_amount_eur",
+      "quality": [
+       {
+        "id": "not_null_fx_transactions_eur_fee_amount_eur",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     }
+    ],
+    "quality": [
+     {
+      "engine": "dbt",
+      "id": "assert_fx_transactions_eur_amount",
+      "implementation": "assert_fx_transactions_eur_amount",
+      "name": "assert_fx_transactions_eur_amount",
+      "type": "custom"
+     }
+    ]
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "daily"
+  ],
+  "team": {
+   "name": "finance"
+  },
+  "version": "0"
+ },
+ "source_sha256": "3b3833fc41367f3f82fe1d84539b0fc268227d9959653e423ad659eca4bba61f",
+ "stored": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/fx_transactions_eur.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "daily",
+    "vendor": "continuo"
+   },
+   {
+    "property": "service",
+    "value": "finance",
+    "vendor": "continuo"
+   }
+  ],
+  "description": {
+   "purpose": "FX transactions with amount restated in EUR via seed_fx_rates_eur."
+  },
+  "id": "analytics.fx_transactions_eur",
+  "kind": "DataContract",
+  "name": "fx_transactions_eur",
+  "schema": [
+   {
+    "description": "FX transactions with amount restated in EUR via seed_fx_rates_eur.",
+    "name": "fx_transactions_eur",
+    "physicalName": "fx_transactions_eur",
+    "physicalType": "table",
+    "properties": [
+     {
+      "name": "transaction_id",
+      "primaryKey": true,
+      "quality": [
+       {
+        "id": "not_null_fx_transactions_eur_transaction_id",
+        "metric": "nullValues",
+        "mustBe": 0
+       },
+       {
+        "id": "unique_fx_transactions_eur_transaction_id",
+        "metric": "duplicateValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true,
+      "unique": true
+     },
+     {
+      "description": "Multiplier applied to amount; NULL means an uncovered (currency, date) pair.",
+      "name": "rate_to_eur",
+      "quality": [
+       {
+        "id": "not_null_fx_transactions_eur_rate_to_eur",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "name": "amount_eur",
+      "quality": [
+       {
+        "id": "not_null_fx_transactions_eur_amount_eur",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "Fee the company earned, denominated in currency_from.",
+      "name": "fee_amount",
+      "quality": [
+       {
+        "id": "not_null_fx_transactions_eur_fee_amount",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "fee_amount converted to EUR on the same rate_to_eur join as amount_eur.",
+      "name": "fee_amount_eur",
+      "quality": [
+       {
+        "id": "not_null_fx_transactions_eur_fee_amount_eur",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     }
+    ],
+    "quality": [
+     {
+      "engine": "dbt",
+      "id": "assert_fx_transactions_eur_amount",
+      "implementation": "assert_fx_transactions_eur_amount",
+      "name": "assert_fx_transactions_eur_amount",
+      "type": "custom"
+     }
+    ]
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "daily"
+  ],
+  "team": {
+   "name": "finance"
+  },
+  "version": "0"
+ }
+}

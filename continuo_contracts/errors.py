@@ -42,6 +42,14 @@ class ProjectionError(ContractsError):
     """
 
 
+class DbtNodeError(ContractsError):
+    """A field of a dbt manifest node in a shape that this package refuses.
+
+    The message starts with the node's id, then ``: `` and the field with what it must be and
+    what it is, as in ``model.shop.orders: tags must be a list of strings, got str``.
+    """
+
+
 class FingerprintsFileError(ContractsError):
     """A fingerprints file in a form this package refuses.
 

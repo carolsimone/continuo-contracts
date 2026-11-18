@@ -1,0 +1,161 @@
+{
+ "contract_hash": "sha256:5dcbb805f8d316a8007302e628c22cd3a54f4b1d192b1c8669eff0bc43953c4e",
+ "flags": [],
+ "generated": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "service",
+    "value": "cases",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-snapshot",
+    "vendor": "continuo"
+   },
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "snapshots/orders_snapshot.yml",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "snapshot",
+     "uniqueKey": "id"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "snapshot",
+    "value": {
+     "hardDeletes": "new_record",
+     "metaColumnNames": {
+      "dbt_valid_from": "valid_from"
+     },
+     "strategy": "timestamp",
+     "uniqueKey": "id",
+     "updatedAt": "updated_at"
+    },
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.orders_snapshot",
+  "kind": "DataContract",
+  "name": "orders_snapshot",
+  "schema": [
+   {
+    "name": "orders_snapshot",
+    "physicalName": "orders_snapshot",
+    "physicalType": "table",
+    "properties": [
+     {
+      "name": "dbt_scd_id"
+     },
+     {
+      "name": "dbt_updated_at"
+     },
+     {
+      "name": "valid_from"
+     },
+     {
+      "name": "dbt_valid_to"
+     },
+     {
+      "name": "dbt_is_deleted"
+     }
+    ]
+   }
+  ],
+  "status": "active",
+  "team": {
+   "name": "cases"
+  },
+  "version": "0"
+ },
+ "source_sha256": "a4e7a56d56849c3e7905474adb3cc5949637416525d0bac31e110824d7848ae7",
+ "stored": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "snapshots/orders_snapshot.yml",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-snapshot",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "snapshot",
+     "uniqueKey": "id"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "service",
+    "value": "cases",
+    "vendor": "continuo"
+   },
+   {
+    "property": "snapshot",
+    "value": {
+     "hardDeletes": "new_record",
+     "metaColumnNames": {
+      "dbt_valid_from": "valid_from"
+     },
+     "strategy": "timestamp",
+     "uniqueKey": "id",
+     "updatedAt": "updated_at"
+    },
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.orders_snapshot",
+  "kind": "DataContract",
+  "name": "orders_snapshot",
+  "schema": [
+   {
+    "name": "orders_snapshot",
+    "physicalName": "orders_snapshot",
+    "physicalType": "table",
+    "properties": [
+     {
+      "name": "dbt_scd_id"
+     },
+     {
+      "name": "dbt_updated_at"
+     },
+     {
+      "name": "valid_from"
+     },
+     {
+      "name": "dbt_valid_to"
+     },
+     {
+      "name": "dbt_is_deleted"
+     }
+    ]
+   }
+  ],
+  "status": "active",
+  "team": {
+   "name": "cases"
+  },
+  "version": "0"
+ }
+}

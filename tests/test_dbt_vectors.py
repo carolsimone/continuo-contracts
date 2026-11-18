@@ -1,0 +1,500 @@
+"""The `dbt_contracts.json` vector: each case's node generated, stored and hashed."""
+
+import hashlib
+import importlib.util
+import json
+
+from importlib import resources
+from pathlib import Path
+
+import pytest
+
+from dbt_fixtures import load_manifest, source_sha256_of
+
+from continuo_contracts import dbt
+from continuo_contracts.contract import contract_hash, normalise_dbt
+from continuo_contracts.validate import validate_dbt_contract
+from continuo_contracts.vocabulary import continuo_values
+
+ROOT = Path(__file__).resolve().parents[1]
+SCRIPT = ROOT / "scripts" / "write_dbt_goldens.py"
+spec = importlib.util.spec_from_file_location("write_dbt_goldens", SCRIPT)
+writer = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(writer)
+
+VECTORS = resources.files("continuo_contracts") / "vectors"
+
+
+def _vectors(name):
+    return json.loads((VECTORS / name).read_text(encoding="utf-8"))
+
+
+CASES = _vectors("dbt_contracts.json")
+INPUT_FIELDS = {"name", "node", "tests", "manifest", "reads", "source_sha256"}
+CONTRACT_FIELDS = INPUT_FIELDS | {"generated", "flags", "stored", "contract_hash"}
+ISSUES_FIELDS = INPUT_FIELDS | {"issues"}
+# The case of each rule of the generator, with the manifest key of its node.
+RULES = {
+    "model_with_tests": "model.cases.generic_tests",
+    "seed_with_column_types": "seed.cases.typed_seed",
+    "dormant_model": "model.cases.dormant",
+    "versioned_model": "model.cases.customer.v2",
+    "ephemeral_model": "model.cases.eph",
+    "snapshot": "snapshot.cases.orders_snapshot",
+    "enforced_contract": "model.cases.enforced",
+    "governed": "model.cases.governed",
+    "sql_reads": "model.cases.governed",
+}
+# The case of each node whose generated contract is not valid, with the manifest key of its node.
+ISSUES = {"bad_criticality": "model.cases.bad_criticality"}
+# The cases whose node and tests are fixture nodes that the writer edits, with the manifest key of
+# the node and the edit.
+EDITED = {
+    "namespaced_test_thresholds_extra_kwarg_and_loose_relationship": (
+        "model.cases.generic_tests",
+        writer.edit_tests,
+    ),
+    "composite_key_lengths_and_undeclared_columns": (
+        "model.cases.generic_tests",
+        writer.edit_columns,
+    ),
+    "model_level_expression_and_quoted_columns": (
+        "model.cases.generic_tests",
+        writer.edit_column_names,
+    ),
+    "dbt_tests_by_resolved_macro_and_unresolved_target": (
+        "model.cases.generic_tests",
+        writer.edit_resolution,
+    ),
+}
+
+# The SHA-256 of the file, which no later change may move.
+DBT_CONTRACTS = "78b37ecb83cab4605ec8b71e52dafd290f68efb6fd8021fffb5649a6e288c110"
+
+# The SHA-256 of each vector file of 0.2.0, which no later change may move.
+OLDER_VECTORS = {
+    "canonical_json.json": "5a597cd1c06dc5fe7b666c79015433b2311fa3e896dc14d1ee6300def2a50c6d",
+    "contracts.json": "069f87e5c4e7ed7110a41b02b1cd9b23c56a6b2a0e6cf2cb845f162fdac445c2",
+    "hashing.json": "2f2270fd329f2380c4e8623225014222599b331766b3827d252fe1b2670cf329",
+    "projection.json": "4cc7f7907b5c93e4830bdf5c5225cf2da2f3d8b4fca1b115ab24148eec2d1ea6",
+    "sql_types.json": "7584965983a61ebc0ea5aa8efdf14ae12f7d76062891f727c7188f055577ed46",
+    "strict_yaml.json": "0039839e3541a4c368cca601a9d4063ef2866490e57ca2404507aacf305c380b",
+}
+
+
+def _case(name):
+    return next(case for case in CASES if case["name"] == name)
+
+
+def _issues(document):
+    """The `{path, reason}` of each issue that `validate_dbt_contract` finds in `document`."""
+    return [
+        {"path": issue.path, "reason": issue.reason}
+        for issue in validate_dbt_contract(document)
+    ]
+
+
+def _root(doc):
+    return continuo_values(doc["customProperties"])
+
+
+CONTRACT_CASES = [case for case in CASES if "issues" not in case]
+ISSUES_CASES = [case for case in CASES if "issues" in case]
+
+
+@pytest.mark.parametrize("case", CASES, ids=lambda c: c["name"])
+def test_dbt_contract_vector(case):
+    generated = dbt.generate(
+        case["node"], case["tests"], manifest=case["manifest"]
+    )
+    # A contract case is valid, and an issues case has the issues that it lists.
+    assert _issues(generated.document) == case.get("issues", [])
+    assert generated.source_sha256 == case["source_sha256"]
+    assert (
+        source_sha256_of(case["node"], case["tests"], case["manifest"])
+        == case["source_sha256"]
+    )
+    if "issues" in case:
+        return
+    assert generated.document == case["generated"]
+    assert list(generated.flags) == case["flags"]
+    assert generated.source_sha256 == case["source_sha256"]
+    stored = normalise_dbt(generated.document, reads=case["reads"])
+    assert stored == case["stored"]
+    assert contract_hash(stored) == case["contract_hash"]
+
+
+@pytest.mark.parametrize("case", CONTRACT_CASES, ids=lambda c: c["name"])
+def test_the_pinned_hash_is_the_hash_of_the_pinned_stored_form(case):
+    assert contract_hash(case["stored"]) == case["contract_hash"]
+    assert normalise_dbt(case["generated"], reads=case["reads"]) == case["stored"]
+    assert _issues(case["stored"]) == []
+
+
+def test_the_file_holds_one_case_for_each_rule_with_the_documented_fields():
+    assert [case["name"] for case in CONTRACT_CASES] == [*RULES, *EDITED]
+    for case in CONTRACT_CASES:
+        assert set(case) == CONTRACT_FIELDS, case["name"]
+
+
+def test_the_cases_with_issues_follow_the_rules_and_the_edited_cases_come_last():
+    assert [case["name"] for case in CASES] == [*RULES, *ISSUES, *EDITED]
+    assert [case["name"] for case in ISSUES_CASES] == list(ISSUES)
+    for case in ISSUES_CASES:
+        assert set(case) == ISSUES_FIELDS, case["name"]
+        assert case["reads"] == []
+        for issue in case["issues"]:
+            assert set(issue) == {"path", "reason"}
+
+
+def test_the_file_is_the_writers_output():
+    assert (VECTORS / "dbt_contracts.json").read_bytes() == (
+        writer.vector_text().encode("ascii")
+    )
+    assert [(name, key) for name, _, key, _ in writer.CONTRACT_CASES] == list(
+        RULES.items()
+    )
+    assert [(name, key) for name, _, key, _ in writer.ISSUES_CASES] == list(
+        ISSUES.items()
+    )
+    assert [
+        (name, (key, edit)) for name, _, key, _, edit in writer.EDITED_CASES
+    ] == list(EDITED.items())
+
+
+def test_the_file_has_its_pinned_bytes():
+    digest = hashlib.sha256((VECTORS / "dbt_contracts.json").read_bytes())
+    assert digest.hexdigest() == DBT_CONTRACTS
+
+
+def _key_and_manifest(name):
+    """The manifest key of the node of the case `name`, and the manifest it is read from."""
+    if name in EDITED:
+        key, edit = EDITED[name]
+        return key, writer.edited_manifest("cases", edit)
+    return {**RULES, **ISSUES}[name], load_manifest("cases")
+
+
+@pytest.mark.parametrize("case", CASES, ids=lambda c: c["name"])
+def test_the_pruned_inputs_generate_what_the_whole_manifest_generates(case):
+    key, manifest = _key_and_manifest(case["name"])
+    tests = dbt.tests_by_node(manifest).get(key, [])
+    whole = dbt.generate(manifest["nodes"][key], tests, manifest=manifest)
+    pruned = dbt.generate(case["node"], case["tests"], manifest=case["manifest"])
+    assert pruned == whole
+    assert (
+        source_sha256_of(manifest["nodes"][key], tests, manifest)
+        == (case["source_sha256"])
+    )
+    assert case["node"]["unique_id"] == key
+    assert [test["unique_id"] for test in case["tests"]] == [
+        test["unique_id"] for test in tests
+    ]
+
+
+def test_a_pruned_node_keeps_only_the_fields_generate_reads():
+    node = _case("model_with_tests")["node"]
+    assert "raw_code" not in node and "compiled_code" not in node
+    read = {name.split(".")[0] for name in dbt._CONFIG_FIELDS}
+    assert set(node["config"]) <= read | {"meta"}
+    assert {"docs", "enabled", "lookback", "on_configuration_change"}.isdisjoint(
+        node["config"]
+    )
+    for column in node["columns"].values():
+        assert set(column) <= {"name", "description", "data_type", "tags", "meta"}
+    for test in _case("model_with_tests")["tests"]:
+        kwargs = test.get("test_metadata", {}).get("kwargs", {})
+        assert "model" not in kwargs and "column_name" not in kwargs
+
+
+def test_a_pruned_node_keeps_the_declared_column_order():
+    node = _case("seed_with_column_types")["node"]
+    assert list(node["columns"]) == ["id", "amount", "label"]
+    properties = _case("seed_with_column_types")["stored"]["schema"][0][
+        "properties"
+    ]
+    assert [column["name"] for column in properties] == ["id", "amount", "label"]
+
+
+def test_the_pruned_manifest_holds_only_the_relationship_targets():
+    targets = {
+        "nodes": {
+            "model.cases.customer.v2": {
+                "name": "customer",
+                "schema": "analytics",
+                "version": 2,
+            }
+        },
+        "sources": {
+            "source.cases.raw.events": {
+                "identifier": "events",
+                "name": "events",
+                "schema": "raw",
+            }
+        },
+    }
+    for case in CASES:
+        if case["name"] == "dbt_tests_by_resolved_macro_and_unresolved_target":
+            # The `relationships` test of `customer_id` points to no node of the manifest.
+            assert case["manifest"] == {**targets, "nodes": {}}
+        elif case["name"] == "model_with_tests" or case["name"] in EDITED:
+            assert case["manifest"] == targets, case["name"]
+        else:
+            assert case["manifest"] == {"nodes": {}, "sources": {}}, case["name"]
+
+
+def test_the_model_with_tests_flags_its_jinja_and_has_relationships():
+    case = _case("model_with_tests")
+    assert case["flags"] == ["jinja_in_test_arguments"]
+    relationships = [
+        rel["to"]
+        for column in case["stored"]["schema"][0]["properties"]
+        for rel in column.get("relationships", [])
+    ]
+    assert sorted(relationships) == ["analytics.customer.v2.id", "raw.events.id"]
+
+
+def test_the_seed_writes_its_column_types():
+    properties = _case("seed_with_column_types")["stored"]["schema"][0][
+        "properties"
+    ]
+    amount = next(column for column in properties if column["name"] == "amount")
+    assert amount["physicalType"] == "numeric(12,2)"
+    assert amount["logicalType"] == "number"
+
+
+def test_the_dormant_model_has_no_schedule():
+    assert "schedule" not in _root(_case("dormant_model")["stored"])
+
+
+def test_the_versioned_model_is_its_own_contract():
+    stored = _case("versioned_model")["stored"]
+    assert (stored["id"], stored["name"]) == (
+        "analytics.customer.v2",
+        "customer.v2",
+    )
+    assert stored["schema"][0]["physicalName"] == "customer_v2"
+
+
+def test_the_ephemeral_model_is_an_ephemeral_schema_object():
+    assert (
+        _case("ephemeral_model")["stored"]["schema"][0]["physicalType"]
+        == "ephemeral"
+    )
+
+
+def test_the_snapshot_writes_its_unique_key_in_both_properties():
+    root = _root(_case("snapshot")["stored"])
+    assert root["materialization"]["uniqueKey"] == "id"
+    assert root["snapshot"]["uniqueKey"] == "id"
+    names = [
+        c["name"] for c in _case("snapshot")["stored"]["schema"][0]["properties"]
+    ]
+    assert names == [
+        "dbt_scd_id",
+        "dbt_updated_at",
+        "valid_from",
+        "dbt_valid_to",
+        "dbt_is_deleted",
+    ]
+
+
+def test_the_enforced_contract_says_so():
+    assert _root(_case("enforced_contract")["stored"])["contractEnforced"] is True
+
+
+def test_the_governed_model_carries_its_governance():
+    stored = _case("governed")["stored"]
+    root = _root(stored)
+    assert root["access"] == "private"
+    assert root["group"] == "finance_team"
+    assert root["freshnessBuildAfter"] == {"count": 4, "period": "hour"}
+    assert root["timeoutMinutes"] == 90
+    assert {role["role"] for role in stored["roles"]} == {
+        "core",
+        "reporter",
+        "analyst",
+    }
+    assert continuo_values(stored["schema"][0]["customProperties"]) == {
+        "reads": ["analytics.raw_events"]
+    }
+
+
+def test_the_sql_reads_join_the_declared_reads_once_in_lower_case():
+    case, governed = _case("sql_reads"), _case("governed")
+    assert case["reads"] == ["Analytics.Orders", "analytics.orders", "raw.events"]
+    assert case["generated"] == governed["generated"]
+    assert continuo_values(case["stored"]["schema"][0]["customProperties"]) == {
+        "reads": ["analytics.orders", "analytics.raw_events", "raw.events"]
+    }
+    assert case["contract_hash"] != governed["contract_hash"]
+
+
+def test_the_hashes_of_the_cases_differ():
+    hashes = [case["contract_hash"] for case in CONTRACT_CASES]
+    assert len(set(hashes)) == len(hashes)
+
+
+def test_the_bad_criticality_case_has_the_one_issue_of_its_criticality():
+    case = _case("bad_criticality")
+    assert case["node"]["config"]["meta"]["criticality"] == "high"
+    generated = dbt.generate(
+        case["node"], case["tests"], manifest=case["manifest"]
+    )
+    properties = generated.document["customProperties"]
+    index = next(
+        i
+        for i, item in enumerate(properties)
+        if item["property"] == "criticality"
+    )
+    assert properties[index]["value"] == "high"
+    assert case["issues"] == [
+        {"path": f"customProperties[{index}].value", "reason": "value"}
+    ]
+    assert case["issues"] == [
+        {"path": "customProperties[3].value", "reason": "value"}
+    ]
+
+
+def test_the_generated_contract_of_every_contract_case_is_valid():
+    for case in CONTRACT_CASES:
+        assert _issues(case["generated"]) == [], case["name"]
+
+
+def test_no_older_vector_moved():
+    for name, digest in OLDER_VECTORS.items():
+        assert (
+            hashlib.sha256((VECTORS / name).read_bytes()).hexdigest() == digest
+        ), name
+    names = {
+        entry.name for entry in VECTORS.iterdir() if entry.name.endswith(".json")
+    }
+    assert names == {*OLDER_VECTORS, "dbt_contracts.json"}
+
+
+def _properties(case):
+    return {
+        column["name"]: column
+        for column in case["stored"]["schema"][0]["properties"]
+    }
+
+
+def _rules(case, column=None):
+    table = case["stored"]["schema"][0]
+    rules = (
+        table["quality"]
+        if column is None
+        else _properties(case)[column]["quality"]
+    )
+    return {rule["id"]: rule for rule in rules}
+
+
+def test_the_edited_tests_case_pins_a_namespaced_test_thresholds_a_kwarg_and_a_loose_relationship():
+    case = _case("namespaced_test_thresholds_extra_kwarg_and_loose_relationship")
+    amount = _rules(case, "amount")["is_positive_generic_tests_amount__0"]
+    assert amount["implementation"] == {
+        "test": "dbt_utils.accepted_range",
+        "arguments": {"min_value": 0},
+    }
+    warned = _rules(case, "warned")["not_null_generic_tests_warned"]
+    assert continuo_values(warned["customProperties"]) == {
+        "warnIf": "> 5",
+        "failCalc": "sum(n)",
+    }
+    assert warned["severity"] == "warning"
+    kind = _rules(case, "kind")["accepted_values_generic_tests_kind__a__b"]
+    assert kind["arguments"] == {"validValues": ["a", "b"], "quote": False}
+    customer = _properties(case)["customer_id"]
+    assert "relationships" not in customer
+    (rule,) = customer["quality"]
+    assert rule["implementation"] == {
+        "test": "relationships",
+        "arguments": {"field": "id", "to": "ref('customer')"},
+    }
+    assert rule["severity"] == "warning"
+    assert _properties(case)["event_id"]["relationships"] == [
+        {"to": "raw.events.id"}
+    ]
+
+
+def test_the_edited_columns_case_pins_a_composite_key_lengths_and_undeclared_columns():
+    case = _case("composite_key_lengths_and_undeclared_columns")
+    assert case["flags"] == [
+        "jinja_in_test_arguments",
+        "test_column_not_declared",
+        "primary_key_column_not_declared",
+    ]
+    properties = _properties(case)
+    assert (
+        properties["id"]["primaryKeyPosition"],
+        properties["status"]["primaryKeyPosition"],
+    ) == (1, 2)
+    assert properties["id"]["logicalTypeOptions"] == {"maxLength": 36}
+    assert properties["status"]["logicalTypeOptions"] == {"maxLength": 20}
+    assert "ghost" not in properties
+    lenient = _rules(case)["unique_generic_tests_lenient"]
+    assert lenient["arguments"] == {"column_name": "ghost"}
+    assert continuo_values(lenient["customProperties"]) == {"errorIf": ">10"}
+
+
+def test_the_column_names_case_pins_an_expression_and_quoted_columns():
+    case = _case("model_level_expression_and_quoted_columns")
+    assert case["flags"] == [
+        "jinja_in_test_arguments",
+        "test_column_not_declared",
+    ]
+    lenient = _rules(case)["unique_generic_tests_lenient"]
+    assert lenient["arguments"] == {"column_name": "(id || '-' || status)"}
+    assert lenient["metric"] == "duplicateValues"
+    properties = _properties(case)
+    assert properties["lenient"] == {"name": "lenient"}
+    assert properties["id"]["primaryKey"] is True
+    assert properties["id"]["required"] is True
+    assert "not_null_generic_tests_id" in _rules(case, "id")
+    assert case["node"]["primary_key"] == ['"id"']
+    (test,) = (
+        test
+        for test in case["tests"]
+        if test["unique_id"].startswith("test.cases.not_null_generic_tests_id.")
+    )
+    assert test["column_name"] == '"id"'
+    (test,) = (
+        test
+        for test in case["tests"]
+        if test["unique_id"].startswith(
+            "test.cases.unique_generic_tests_lenient."
+        )
+    )
+    assert test["column_name"] is None
+    assert test["test_metadata"]["kwargs"] == {
+        "column_name": "(id || '-' || status)"
+    }
+
+
+def test_the_resolution_case_pins_dbts_tests_and_an_unresolved_target():
+    case = _case("dbt_tests_by_resolved_macro_and_unresolved_target")
+    properties = _properties(case)
+    # `dbt.not_null` is dbt's, though the project's own macro is the one dbt resolved first.
+    assert properties["id"]["required"] is True
+    assert (
+        _rules(case, "id")["not_null_generic_tests_id"]["metric"] == "nullValues"
+    )
+    # A bare `not_null` that the project's macro overrides is a custom rule.
+    assert "required" not in properties["warned"]
+    assert _rules(case, "warned")["not_null_generic_tests_warned"] == {
+        "id": "not_null_generic_tests_warned",
+        "name": "not_null_generic_tests_warned",
+        "type": "custom",
+        "engine": "dbt",
+        "implementation": {"test": "not_null"},
+    }
+    # A relationship to a relation the manifest does not hold is a custom rule keeping `to`.
+    customer = properties["customer_id"]
+    assert "relationships" not in customer
+    (rule,) = customer["quality"]
+    assert rule["implementation"] == {
+        "test": "relationships",
+        "arguments": {"field": "id", "to": "analytics.some_table"},
+    }
+    assert case["manifest"]["nodes"] == {}
+    assert properties["event_id"]["relationships"] == [{"to": "raw.events.id"}]

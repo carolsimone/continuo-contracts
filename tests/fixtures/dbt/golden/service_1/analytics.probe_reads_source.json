@@ -1,0 +1,115 @@
+{
+ "contract_hash": "sha256:94d756b14ae8951649a67639bcb1213798c67d459298d60a4da6235a776c330c",
+ "flags": [],
+ "generated": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "service",
+    "value": "service-1",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "probe_external_source",
+    "vendor": "continuo"
+   },
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/probe_reads_source.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.probe_reads_source",
+  "kind": "DataContract",
+  "name": "probe_reads_source",
+  "schema": [
+   {
+    "name": "probe_reads_source",
+    "physicalName": "probe_reads_source",
+    "physicalType": "table"
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "probe_external_source"
+  ],
+  "team": {
+   "name": "test"
+  },
+  "version": "0"
+ },
+ "source_sha256": "25558122c9c1da7c472ef42dc4828f46310cff3f6f5935363755cd9fc46d2960",
+ "stored": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/probe_reads_source.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "probe_external_source",
+    "vendor": "continuo"
+   },
+   {
+    "property": "service",
+    "value": "service-1",
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.probe_reads_source",
+  "kind": "DataContract",
+  "name": "probe_reads_source",
+  "schema": [
+   {
+    "name": "probe_reads_source",
+    "physicalName": "probe_reads_source",
+    "physicalType": "table"
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "probe_external_source"
+  ],
+  "team": {
+   "name": "test"
+  },
+  "version": "0"
+ }
+}
