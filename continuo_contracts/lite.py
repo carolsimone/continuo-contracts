@@ -80,6 +80,9 @@ _ALL_SKIPPED: Final = (
     "every node of the service is skipped: the release rejects it as invalid_artifact "
     "(manifest contains no model/seed nodes)"
 )
+# What the check says about each of two or more kept nodes whose contracts have one id, which the
+# release rejects whatever the nodes' services, and which the bundle of contracts cannot hold.
+_SHARED_ID: Final = "contract id {} is also the id of {}: the release rejects it as duplicate_table"
 _UNREADABLE: Final = "the CSV file cannot be read, so its header is not checked against the declared columns"
 # What the check says about a kept seed of an installed package, whose CSV file is not in the
 # project.
@@ -110,9 +113,10 @@ class LiteReport:
     `service` is the service the gates compare each node with, `dbt.project_service` of the
     manifest. `lines` are the lines of the check, by node id and, for one node, in the order
     `check_manifest` describes, with the line about the whole service last. `contracts` maps the
-    id of each contract that was generated, has no issue and can be stored to its
-    `contract_hash`. A node whose contract has an issue has no entry, and a seed whose header
-    differs from its declared columns has one.
+    id of each contract that was generated, has no issue, can be stored and is the contract of no
+    other node to its `contract_hash`. A node whose contract has an issue has no entry, an id
+    that two or more nodes' contracts have has none, and a seed whose header differs from its
+    declared columns has one. So a consumer counts the nodes by `lines`, not by `contracts`.
     """
 
     service: str
@@ -169,11 +173,11 @@ def _check_kept_node(
     tests: Sequence[Mapping[str, Any]],
     manifest: Mapping[str, Any],
     read_header: Callable[[Mapping[str, Any]], Sequence[str] | None],
-) -> tuple[list[Line], tuple[str, str] | None]:
-    """Return the lines of a node that continuo keeps, and its contract id and hash.
+) -> tuple[list[Line], str | None, str | None]:
+    """Return the lines of a node that continuo keeps, the id of its contract and its hash.
 
-    The hash is `None` unless the contract is generated, has no validation issue and can be
-    stored.
+    The id is `None` unless the contract is generated, and the hash is `None` unless the contract
+    is generated, has no validation issue and can be stored.
     """
     lines: list[Line] = []
     try:
@@ -181,24 +185,24 @@ def _check_kept_node(
             lines.append(Line(_INFO, node_id, _DORMANT))
         generated = dbt.generate(node, tests, manifest=manifest)
     except DbtNodeError as error:
-        return [*lines, _refusal(node_id, error)], None
+        return [*lines, _refusal(node_id, error)], None, None
     document = generated.document
     issues = validate.validate_dbt_contract(document)
     lines.extend(Line(_ERROR, node_id, str(issue)) for issue in issues)
-    hashed: tuple[str, str] | None = None
+    digest: str | None = None
     if not issues:
         try:
             stored = contract.normalise_dbt(document, reads=[])
         except HashInputError as error:
             lines.append(Line(_ERROR, node_id, str(error)))
         else:
-            hashed = (document["id"], contract.contract_hash(stored))
+            digest = contract.contract_hash(stored)
     if node.get("resource_type") == "seed":
         if _is_installed(node, manifest):
             lines.append(Line(_INFO, node_id, _INSTALLED_SEED))
         else:
             lines.extend(_header_lines(node_id, node, document, read_header))
-    return lines, hashed
+    return lines, document["id"], digest
 
 
 def check_manifest(
@@ -236,6 +240,12 @@ def check_manifest(
        project: it gets an `info` line that says its header is not checked, and `read_header` is
        not called for it. A seed with no `package_name`, or a manifest that names no project,
        counts as the project's.
+    7. A generated contract whose id is the id of another node's generated contract, such as two
+       names that differ only in case, or a project's model and a tagged package model of one
+       name and schema with other aliases, gives an `error` line on each of those nodes,
+       `contract id <id> is also the id of <the other node ids, in id order>: the release rejects
+       it as duplicate_table`, and the id has no entry in `contracts`. The release rejects such a
+       manifest whatever the services, and its bundle of contracts holds none of them.
 
     The message of an `error` line from a `DbtNodeError` does not repeat the node id. When every
     model, seed and snapshot is skipped, or there is none, the last line is an `error` that the
@@ -248,8 +258,8 @@ def check_manifest(
     service = dbt.project_service(manifest, declared_service)
     tests = dbt.tests_by_node(manifest)
     nodes = manifest.get("nodes") or {}
-    lines: list[Line] = []
-    contracts: dict[str, str] = {}
+    found: dict[str, list[Line]] = {}
+    claims: dict[str, list[tuple[str, str | None]]] = {}
     unskipped = 0
     for node_id in sorted(nodes):
         node = nodes[node_id]
@@ -259,18 +269,29 @@ def check_manifest(
             reason = dbt.skip_reason(node, project=service)
         except DbtNodeError as error:
             unskipped += 1
-            lines.append(_refusal(node_id, error))
+            found[node_id] = [_refusal(node_id, error)]
             continue
         if reason is not None:
-            lines.append(Line(_INFO, node_id, _SKIPS[reason]))
+            found[node_id] = [Line(_INFO, node_id, _SKIPS[reason])]
             continue
         unskipped += 1
-        found, hashed = _check_kept_node(
+        found[node_id], contract_id, digest = _check_kept_node(
             node_id, node, tests.get(node_id, []), manifest, read_header
         )
-        lines.extend(found)
-        if hashed is not None:
-            contracts[hashed[0]] = hashed[1]
+        if contract_id is not None:
+            claims.setdefault(contract_id, []).append((node_id, digest))
+    contracts: dict[str, str] = {}
+    for contract_id, claimed in claims.items():
+        if len(claimed) == 1:
+            if claimed[0][1] is not None:
+                contracts[contract_id] = claimed[0][1]
+            continue
+        for node_id, _ in claimed:
+            others = ", ".join(other for other, _ in claimed if other != node_id)
+            found[node_id].append(
+                Line(_ERROR, node_id, _SHARED_ID.format(contract_id, others))
+            )
+    lines = [line for node_lines in found.values() for line in node_lines]
     if not unskipped:
         lines.append(Line(_ERROR, "", _ALL_SKIPPED))
     return LiteReport(service, tuple(lines), contracts)

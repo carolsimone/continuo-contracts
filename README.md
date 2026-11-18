@@ -1344,6 +1344,14 @@ order:
    has its CSV file in that package and not in the project: it gets the `info` line `a seed of an
    installed package: its CSV header is not checked`, and `read_header` is not called for it. A
    seed with no `package_name`, or a manifest that names no project, counts as the project's.
+7. When the contracts of two or more kept nodes have one id, such as models whose names differ
+   only in case, or a project's model and a tagged model of an installed package with one name and
+   schema and other aliases, each of those nodes gets the `error` line `contract id <id> is also
+   the id of <the other node ids, in id order>: the release rejects it as duplicate_table`, and
+   `contracts` has no entry for the id: the release rejects such a manifest whatever the services
+   of the nodes, and its bundle of contracts cannot hold two contracts of one id. A node whose
+   contract `dbt.generate` cannot write shares no id. So `contracts` can have fewer entries than
+   the nodes with a valid contract: count the nodes by `lines`, not by `contracts`.
 
 When every model, seed and snapshot is skipped, or the manifest has none, the last line is an
 `error` with the empty `node_id`, `every node of the service is skipped: the release rejects it as
@@ -1372,8 +1380,9 @@ because its contract is valid.
 - `LiteReport`: what `check_manifest` returns, a frozen dataclass with the fields `service` (the
   service the gates compare each node with, as `dbt.project_service` gives it), `lines` (a tuple of
   `Line`, by node id, with the line about the whole service last), `contracts` (the `contract_hash`
-  of each contract that was generated, has no issue and can be stored, by contract id, in the order
-  of the node ids) and the property `ok`, `True` when no line is an `error`.
+  of each contract that was generated, has no issue, can be stored and has an id no other node's
+  contract has, by contract id, in the order of the node ids) and the property `ok`, `True` when
+  no line is an `error`.
 - `check_manifest`: `check_manifest(manifest, *, declared_service, read_header) -> LiteReport`
   checks the manifest `json.load` returns. `declared_service` is the service of the project when
   the manifest names none, as in `dbt.project_service`. `read_header` takes a seed's manifest node

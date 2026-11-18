@@ -845,3 +845,128 @@ def test_a_value_canonical_json_cannot_write_is_one_error_line(change, message):
     assert line.message.startswith(message)
     assert "analytics.generic_tests" not in report.contracts
     assert "analytics.governed" in report.contracts
+
+
+# Two kept nodes whose contracts have one id: the release rejects the manifest as duplicate_table.
+
+_SHARED = "contract id {} is also the id of {}: the release rejects it as duplicate_table"
+
+
+def _aliased(name, alias, *, project="shop"):
+    node = _model(name, project=project)
+    node["alias"] = alias
+    return node
+
+
+def test_two_nodes_that_write_one_contract_id_are_errors_and_get_no_hash():
+    manifest = _manifest(
+        _aliased("orders", "orders_a"),
+        _aliased("orders", "orders_b", project="pkg"),
+        _model("sales"),
+    )
+    report = _check(manifest)
+    assert report.lines == (
+        Line(
+            "error",
+            "model.pkg.orders",
+            _SHARED.format("analytics.orders", "model.shop.orders"),
+        ),
+        Line(
+            "error",
+            "model.shop.orders",
+            _SHARED.format("analytics.orders", "model.pkg.orders"),
+        ),
+    )
+    assert list(report.contracts) == ["analytics.sales"]
+    assert report.ok is False
+
+
+def test_names_that_differ_only_in_case_are_one_contract_id():
+    report = _check(_manifest(_model("Orders"), _model("orders")))
+    assert [(line.level, line.node_id) for line in report.lines] == [
+        ("error", "model.shop.Orders"),
+        ("error", "model.shop.orders"),
+    ]
+    assert report.contracts == {}
+
+
+def test_two_nodes_of_one_versioned_model_name_share_the_id_of_the_version():
+    one, two = _model("customer"), _model("customer")
+    other = _aliased("customer", "customer_pkg_v1", project="pkg")
+    for node, version in ((one, 1), (two, 2), (other, 1)):
+        node["version"] = version
+        node["unique_id"] += f".v{version}"
+    report = _check(_manifest(one, two, other))
+    assert [line.node_id for line in report.lines] == [
+        "model.pkg.customer.v1",
+        "model.shop.customer.v1",
+    ]
+    assert list(report.contracts) == ["analytics.customer.v2"]
+
+
+def test_a_shared_id_of_three_nodes_names_the_other_two_in_id_order():
+    report = _check(
+        _manifest(*(_aliased("t", f"t_{p}", project=p) for p in "cab"))
+    )
+    assert report.lines == (
+        Line(
+            "error",
+            "model.a.t",
+            _SHARED.format("analytics.t", "model.b.t, model.c.t"),
+        ),
+        Line(
+            "error",
+            "model.b.t",
+            _SHARED.format("analytics.t", "model.a.t, model.c.t"),
+        ),
+        Line(
+            "error",
+            "model.c.t",
+            _SHARED.format("analytics.t", "model.a.t, model.b.t"),
+        ),
+    )
+    assert report.contracts == {}
+
+
+def test_the_lines_of_a_shared_id_follow_the_node_ids_whatever_the_manifest_order():
+    nodes = [
+        _aliased("orders", "orders_a", project="a"),
+        _model("middle", project="m"),
+        _aliased("orders", "orders_b", project="z"),
+    ]
+    nodes[1]["config"]["meta"]["criticality"] = "high"
+    report = _check(_manifest(*nodes))
+    assert _check(_manifest(*reversed(nodes))) == report
+    ids = [line.node_id for line in report.lines]
+    assert ids == ["model.a.orders", "model.m.middle", "model.z.orders"]
+
+
+def test_a_node_whose_contract_has_an_issue_still_shares_its_id():
+    bad = _aliased("orders", "orders_b", project="pkg")
+    bad["config"]["meta"]["criticality"] = "high"
+    report = _check(_manifest(_aliased("orders", "orders_a"), bad))
+    assert [(line.node_id, line.level) for line in report.lines] == [
+        ("model.pkg.orders", "error"),
+        ("model.pkg.orders", "error"),
+        ("model.shop.orders", "error"),
+    ]
+    assert report.lines[1].message == _SHARED.format(
+        "analytics.orders", "model.shop.orders"
+    )
+    assert report.contracts == {}
+
+
+def test_a_node_the_library_cannot_read_shares_no_id():
+    broken = _aliased("orders", "orders_b", project="pkg")
+    broken["config"]["materialized"] = 5
+    report = _check(_manifest(_aliased("orders", "orders_a"), broken))
+    assert [line.node_id for line in report.lines] == ["model.pkg.orders"]
+    assert list(report.contracts) == ["analytics.orders"]
+
+
+@pytest.mark.parametrize("project", PROJECTS)
+def test_no_fixture_project_has_a_shared_id(project):
+    report = _check(load_manifest(project), read_header=_csv_header(project))
+    assert not [
+        line for line in report.lines if line.message.endswith("duplicate_table")
+    ]

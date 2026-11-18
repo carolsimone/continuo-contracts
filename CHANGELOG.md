@@ -141,7 +141,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   whose CSV cannot be read, each column a seed's header and declared columns disagree on, and a
   service whose every node is skipped give an `error` line. `contracts` maps the id of each
   contract that has no issue to its `contract_hash`, with no tables from compiled SQL; a contract
-  with an issue has none. `BANNER` is the text that says passing the check does not guarantee
+  with an issue has none, and neither has an id that two kept nodes' contracts share, which gives
+  each of them an `error` line. `BANNER` is the text that says passing the check does not guarantee
   that continuo will create the service's contracts at release time, and `RELEASE_ONLY` lists the
   six things only the release does. The module reads no file and prints and logs nothing.
 - `continuo-contracts dbt check PROJECT_DIR [--dbt PATH] [--profiles-dir DIR] [--target NAME]
@@ -234,6 +235,11 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   such a node as an error line (exit 1) instead of stopping with a traceback. `dbt.read_tree`
   raises `DbtNodeError` for a test whose `test_metadata` is not a mapping, where it raised
   `AttributeError`.
+- `lite.check_manifest` reports two or more kept nodes whose contracts have one id (names that
+  differ only in case, or a project's model and a tagged package model of one name and schema
+  with other aliases): each gets the `error` line `contract id <id> is also the id of <other node
+  ids>: the release rejects it as duplicate_table`, and `LiteReport.contracts` has no entry for
+  the id, where it held the hash of the last node and the report was `ok`.
 
 ## [0.2.0] - 2026-11-15
 

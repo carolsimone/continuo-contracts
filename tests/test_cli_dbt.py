@@ -1336,6 +1336,27 @@ def test_a_lone_surrogate_in_a_test_of_the_manifest_is_an_error_line(
     assert "analytics.fx_transactions_eur" not in document["contracts"]
 
 
+def test_two_nodes_with_one_contract_id_fail_the_check_and_get_no_hash(
+    tmp_path, capsys
+):
+    manifest = _without_costs_seed()
+    model = "model.finance.fx_transactions_eur"
+    twin = copy.deepcopy(manifest["nodes"][model])
+    twin.update(unique_id=f"{model}_twin", alias="fx_transactions_eur_twin")
+    manifest["nodes"][twin["unique_id"]] = twin
+    path = _write_json(tmp_path / "manifest.json", manifest)
+
+    assert _check(FINANCE, "--manifest", path, "--json") == 1
+
+    document = json.loads(capsys.readouterr().out)
+    assert document["ok"] is False
+    assert _lines(document, model) == [
+        f"contract id analytics.fx_transactions_eur is also the id of {model}_twin: "
+        "the release rejects it as duplicate_table"
+    ]
+    assert "analytics.fx_transactions_eur" not in document["contracts"]
+
+
 # A manifest whose fields are not the shape a dbt manifest has.
 
 
