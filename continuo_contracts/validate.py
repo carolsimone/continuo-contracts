@@ -1322,13 +1322,36 @@ _DBT_KINDS: Final = tuple(f"dbt-{resource}" for resource in RESOURCE_TYPES)
 _DBT_NEEDED: Final = {
     "service": "the service that owns the node",
     "kind": f"the kind of the node: {_one_of(_DBT_KINDS)}",
+    "filePath": "the path of the file that declares the node",
+    "materialization": "how dbt builds the node, as a mapping with its `materialized`",
 }
 
-# The properties whose value is checked on a dbt contract, each with its check. A dormant node
-# writes no schedule, and no node needs a criticality or a timeout.
-_DBT_VALUE_CHECKS: Final = {
-    name: _VALUE_CHECKS[name]
-    for name in ("schedule", "criticality", "timeoutMinutes")
+
+def _check_dbt_service(value: object) -> Iterator[str]:
+    if not _is_text(value):
+        yield (
+            f"`service` is {_shown(value)}, it must be the name of a service, a string with text"
+        )
+
+
+def _check_file_path(value: object) -> Iterator[str]:
+    if not _is_text(value):
+        yield (
+            f"`filePath` is {_shown(value)}, it must be the path of the file that declares the "
+            "node, a string with text"
+        )
+
+
+# The properties whose value is checked on a dbt contract, each with its check, apart from `kind`
+# and `materialization`, which have rules of their own. A dormant node writes no schedule, and no
+# node needs a criticality or a timeout.
+_DBT_VALUE_CHECKS: Final[dict[str, Callable[[object], Iterator[str]]]] = {
+    "service": _check_dbt_service,
+    "filePath": _check_file_path,
+    **{
+        name: _VALUE_CHECKS[name]
+        for name in ("schedule", "criticality", "timeoutMinutes")
+    },
 }
 
 
@@ -1420,6 +1443,27 @@ def _dbt_kind(contract: _Contract) -> Iterator[Issue]:
         )
 
 
+def _dbt_materialization(contract: _Contract) -> Iterator[Issue]:
+    prop = contract.properties.get("materialization")
+    if prop is None:
+        return
+    value = prop.value
+    if not isinstance(value, Mapping):
+        yield _issue(
+            f"{prop.path}.value",
+            "value",
+            f"`materialization` is {_shown(value)}, it must be a mapping with the `materialized` "
+            "that dbt builds the node with",
+        )
+    elif not _is_text(value.get("materialized")):
+        yield _issue(
+            f"{prop.path}.value.materialized",
+            "value",
+            f"`materialized` is {_shown(value.get('materialized'))}, it must be how dbt builds "
+            "the node, a string with text such as table or view",
+        )
+
+
 def _dbt_values(contract: _Contract) -> Iterator[Issue]:
     for name, check in _DBT_VALUE_CHECKS.items():
         prop = contract.properties.get(name)
@@ -1436,6 +1480,7 @@ _DBT_RULES: Final[tuple[_Rule, ...]] = (
     _dbt_custom_properties,
     _dbt_needed,
     _dbt_kind,
+    _dbt_materialization,
     _dbt_values,
 )
 
@@ -1453,10 +1498,16 @@ def dbt_rule_issues(doc: Mapping[str, Any]) -> list[Issue]:
     vendor: each must be a property that the vocabulary knows (`unknown_property`) and that a dbt
     contract uses, where it sits (`refused_property`, as `<name> is not a dbt contract property`
     for a Python-only one), and it may be written once in a list (`value`). The contract writes
-    `service` and `kind` (`missing_field`), `kind` is `dbt-model`, `dbt-seed` or `dbt-snapshot`,
-    `criticality` is `REGULATORY`, `CORE` or `SECONDARY`, `schedule` is a name with no whitespace
-    at most 50 characters long, and `timeoutMinutes` is an integer from 1 to 10080, each a `value`
-    issue at the `value` of the property. A dormant node writes no `schedule`.
+    `service`, `kind`, `filePath` and `materialization` (`missing_field`). `service` and
+    `filePath` are strings with text, `kind` is `dbt-model`, `dbt-seed` or `dbt-snapshot`,
+    `materialization` is a mapping whose `materialized` is a string with text, `criticality` is
+    `REGULATORY`, `CORE` or `SECONDARY`, `schedule` is a name with no whitespace at most 50
+    characters long, and `timeoutMinutes` is an integer from 1 to 10080, each a `value` issue at
+    the `value` of the property (at `value.materialized` for the `materialized` of the mapping).
+    A dormant node writes no `schedule`.
+
+    A document with no issue is one that `dbt.run_facts` reads: the properties and the fields it
+    reads are all checked.
     """
     contract = _Contract(doc=doc)
     return _ordered(issue for rule in _DBT_RULES for issue in rule(contract))

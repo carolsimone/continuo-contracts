@@ -80,11 +80,14 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   envelope, one schema object with an `id` that is a schema part, a dot and its table in lower
   case, `team.name`, the `continuo` properties (a name the vocabulary does not know is
   `unknown_property`, one that dbt does not use, such as `script`, is `refused_property`, one
-  written twice is a `value` issue), `service` and `kind` written, `kind` one of the three dbt
-  kinds, `criticality` one of `REGULATORY`, `CORE` and `SECONDARY`, `schedule` at most 50
-  characters and `timeoutMinutes` a whole number from 1 to 10080. A value issue is at the `value`
-  of the property, as in `customProperties[3].value`. The checks of a Python contract do not
-  change.
+  written twice is a `value` issue), `service`, `kind`, `filePath` and `materialization` written,
+  `service` and `filePath` text, `kind` one of the three dbt kinds, `materialization` a mapping
+  whose `materialized` is text, `criticality` one of `REGULATORY`, `CORE` and `SECONDARY`,
+  `schedule` at most 50 characters and `timeoutMinutes` a whole number from 1 to 10080. A value
+  issue is at the `value` of the property, as in `customProperties[3].value`. A contract that has
+  no issue is one `dbt.run_facts` reads whole, which a test shows by deleting each piece of every
+  golden contract and replacing it with a value of the wrong type. The checks of a Python contract
+  do not change.
 - The new vector file `vectors/dbt_contracts.json` pins the generated contract, the flags, the
   stored form and the first `contract_hash` of nine dbt nodes, one for each rule of the
   generator, each with its node, tests and manifest pruned to the fields `generate` reads, and a

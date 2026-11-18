@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from continuo_contracts import yaml_strict
+from continuo_contracts import dbt, yaml_strict
 from continuo_contracts.validate import (
     REASONS,
     dbt_rule_issues,
@@ -187,6 +187,77 @@ def test_any_other_timeout_is_a_value_issue(value):
     assert "from 1 to 10080" in issue.message
 
 
+@pytest.mark.parametrize("name", ["service", "filePath"])
+@pytest.mark.parametrize("value", ["", "   ", 7, None, ["a"], {"a": 1}])
+def test_a_service_or_a_file_path_that_is_not_text_is_a_value_issue(name, value):
+    doc = _doc()
+    _set(doc, name, value)
+    issue = _only(validate_dbt_contract(doc))
+    assert (issue.path, issue.reason) == (
+        f"customProperties[{_index(doc, name)}].value",
+        "value",
+    )
+    assert f"`{name}` is {value!r}" in issue.message
+
+
+def test_a_service_and_a_file_path_with_text_are_accepted_whatever_they_say():
+    doc = _doc()
+    _set(doc, "service", "some-service")
+    _set(doc, "filePath", "models\\sub dir\\a.sql")
+    assert validate_dbt_contract(doc) == []
+
+
+@pytest.mark.parametrize(
+    "value", [7, "table", [], None, [{"materialized": "table"}]]
+)
+def test_a_materialization_that_is_not_a_mapping_is_a_value_issue(value):
+    doc = _doc()
+    _set(doc, "materialization", value)
+    issue = _only(validate_dbt_contract(doc))
+    assert (issue.path, issue.reason) == (
+        f"customProperties[{_index(doc, 'materialization')}].value",
+        "value",
+    )
+    assert "`materialization` is" in issue.message
+
+
+@pytest.mark.parametrize(
+    "value", [{}, {"materialized": ""}, {"materialized": "  "}]
+)
+@pytest.mark.parametrize("extra", [{}, {"uniqueKey": "id"}])
+def test_a_materialization_with_no_materialized_text_is_a_value_issue_inside(
+    value, extra
+):
+    doc = _doc()
+    _set(doc, "materialization", {**value, **extra})
+    issue = _only(validate_dbt_contract(doc))
+    assert (issue.path, issue.reason) == (
+        f"customProperties[{_index(doc, 'materialization')}].value.materialized",
+        "value",
+    )
+    assert "`materialized` is" in issue.message
+
+
+@pytest.mark.parametrize("value", [7, None, ["table"], {"a": 1}])
+def test_a_materialized_that_is_not_text_is_a_value_issue_inside(value):
+    doc = _doc()
+    _set(doc, "materialization", {"materialized": value})
+    issue = _only(validate_dbt_contract(doc))
+    assert issue.path.endswith(".value.materialized")
+    assert issue.reason == "value"
+
+
+@pytest.mark.parametrize(
+    "materialized", ["table", "view", "incremental", "ephemeral", "other"]
+)
+def test_any_materialized_with_text_is_accepted(materialized):
+    doc = _doc()
+    _set(
+        doc, "materialization", {"materialized": materialized, "uniqueKey": "id"}
+    )
+    assert validate_dbt_contract(doc) == []
+
+
 @pytest.mark.parametrize(
     ("name", "form"),
     [
@@ -218,8 +289,10 @@ def test_a_kind_that_is_not_a_dbt_kind_is_a_value_issue(value):
 # The properties that a dbt contract writes.
 
 
-@pytest.mark.parametrize("name", ["service", "kind"])
-def test_a_missing_service_or_kind_is_a_missing_field_at_the_custom_properties(
+@pytest.mark.parametrize(
+    "name", ["service", "kind", "filePath", "materialization"]
+)
+def test_a_missing_needed_property_is_a_missing_field_at_the_custom_properties(
     name,
 ):
     doc = _doc()
@@ -229,16 +302,13 @@ def test_a_missing_service_or_kind_is_a_missing_field_at_the_custom_properties(
     assert f"`{name}`" in issue.message
 
 
-def test_a_contract_with_no_custom_properties_misses_both():
+def test_a_contract_with_no_custom_properties_misses_the_four_it_needs():
     doc = _doc()
     del doc["customProperties"]
     issues = validate_dbt_contract(doc)
-    assert _found(issues) == [
-        ("customProperties", "missing_field"),
-        ("customProperties", "missing_field"),
-    ]
-    assert sum("`service`" in i.message for i in issues) == 1
-    assert sum("`kind`" in i.message for i in issues) == 1
+    assert _found(issues) == [("customProperties", "missing_field")] * 4
+    for name in ("service", "kind", "filePath", "materialization"):
+        assert sum(f"`{name}`" in i.message for i in issues) == 1, name
 
 
 def test_a_service_of_another_vendor_is_not_the_continuo_service():
@@ -576,3 +646,87 @@ def test_a_python_contract_is_not_a_dbt_contract_and_the_reverse():
     assert validate_python_contract(
         dbt_doc, path="contracts/generic_tests.odcs.yaml", service=None
     )
+
+
+# What `run_facts` reads is guaranteed by the check.
+
+PROJECTS = sorted(path.name for path in GOLDEN.iterdir())
+# A value of the wrong type for a text, a mapping or a list: an int and a list.
+WRONG = (7, [])
+
+
+def _places(doc):
+    """The places of the document that `run_facts` may read, each a path of keys and indexes.
+
+    They are the root keys, each item of `customProperties` with its keys, the keys of the
+    `materialization` value, `team` and its name, and the schema object with its name and its
+    physical name.
+    """
+    places = [(key,) for key in doc]
+    for index, item in enumerate(doc.get("customProperties", [])):
+        places.append(("customProperties", index))
+        places += [("customProperties", index, key) for key in item]
+        if item["property"] == "materialization":
+            places += [
+                ("customProperties", index, "value", key) for key in item["value"]
+            ]
+    places += [("team", "name"), ("schema", 0)]
+    places += [("schema", 0, key) for key in ("name", "physicalName")]
+    return [place for place in places if _exists(doc, place)]
+
+
+def _exists(doc, place):
+    for step in place:
+        try:
+            doc = doc[step]
+        except KeyError, IndexError, TypeError:
+            return False
+    return True
+
+
+def _derived(doc):
+    """Yield the documents derived from `doc`: one place deleted, or one value of the wrong type."""
+    for place in _places(doc):
+        deleted = copy.deepcopy(doc)
+        parent = deleted
+        for step in place[:-1]:
+            parent = parent[step]
+        del parent[place[-1]]
+        yield f"delete {place}", deleted
+        for wrong in WRONG:
+            replaced = copy.deepcopy(doc)
+            parent = replaced
+            for step in place[:-1]:
+                parent = parent[step]
+            parent[place[-1]] = wrong
+            yield f"replace {place} with {wrong!r}", replaced
+
+
+@pytest.mark.parametrize("project", PROJECTS)
+def test_a_dbt_contract_that_validates_gives_its_run_facts(project):
+    accepted = rejected = 0
+    for path in sorted((GOLDEN / project).glob("*.json")):
+        if path.stem in BAD:
+            continue
+        doc = json.loads(path.read_text("ascii"))["generated"]
+        assert validate_dbt_contract(doc) == []
+        for what, derived in _derived(doc):
+            if validate_dbt_contract(derived):
+                rejected += 1
+                continue
+            accepted += 1
+            try:
+                dbt.run_facts(derived)
+            except Exception as error:
+                pytest.fail(
+                    f"{path.stem}: {what} validates but run_facts raises {error!r}"
+                )
+    assert accepted and rejected
+
+
+def test_the_goldens_give_their_run_facts_whole():
+    facts = dbt.run_facts(_doc("analytics.governed"))
+    assert facts.service == "cases"
+    assert facts.kind == "dbt-model"
+    assert facts.file_path.endswith("governed.sql")
+    assert facts.materialized == "table"

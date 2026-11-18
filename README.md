@@ -980,13 +980,20 @@ dbt node, with `dbt_rule_issues` as its second stage. The module logs nothing.
     property in the list of another object than the one it belongs to. A property that continuo
     fills, such as the `reads` of the schema object, is accepted where it sits. A property written
     twice in one list is a `value` issue at each later copy.
-  - The contract writes `service` and `kind` in its `customProperties` (`missing_field` at
-    `customProperties`). A contract needs no `schedule`, because a dormant node has none, and no
-    `criticality` or `timeoutMinutes`.
-  - `kind` is `dbt-model`, `dbt-seed` or `dbt-snapshot`, `criticality` is `REGULATORY`, `CORE` or
-    `SECONDARY`, `schedule` is a name with no whitespace at most 50 characters long, and
-    `timeoutMinutes` is an integer from 1 to 10080 (a bool or a float is not). A bad value is a
-    `value` issue at the `value` of the item, as in `customProperties[3].value`.
+  - The contract writes `service`, `kind`, `filePath` and `materialization` in its
+    `customProperties` (`missing_field` at `customProperties`). A contract needs no `schedule`,
+    because a dormant node has none, and no `criticality` or `timeoutMinutes`.
+  - `service` and `filePath` are strings with text, `kind` is `dbt-model`, `dbt-seed` or
+    `dbt-snapshot`, `materialization` is a mapping whose `materialized` is a string with text,
+    `criticality` is `REGULATORY`, `CORE` or `SECONDARY`, `schedule` is a name with no whitespace
+    at most 50 characters long, and `timeoutMinutes` is an integer from 1 to 10080 (a bool or a
+    float is not). A bad value is a `value` issue at the `value` of the item, as in
+    `customProperties[3].value`, and a `materialized` that is not text is at
+    `customProperties[4].value.materialized`. A Python contract puts its `value` issues at the item
+    itself, `customProperties[3]`, so the two paths differ by `.value`.
+  - A contract that has no issue is one that [`dbt.run_facts`](#dbt) reads whole: it needs
+    `team.name`, the `id`, the name of the schema object, `service`, `kind`, `filePath` and the
+    `materialized` of `materialization`, and each of them has passed one of the rules above.
 
   The issues come in the order that `rule_issues` gives them.
 - `validate_dbt_contract(doc: object) -> list[Issue]` returns `schema_issues(doc)` when that has
