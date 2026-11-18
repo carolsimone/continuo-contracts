@@ -15,6 +15,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+import yaml
 
 from dbt_fixtures import MANIFESTS, load_manifest
 
@@ -24,6 +25,7 @@ build_dbt_fixtures = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(build_dbt_fixtures)
 
 NAMES = ["core", "finance", "marketing", "service_1", "cases"]
+PROJECTS = build_dbt_fixtures.PROJECTS
 
 
 @pytest.mark.parametrize("name", NAMES)
@@ -89,6 +91,111 @@ def test_manifest_bytes_are_sorted_ascii_json_in_a_gzip_without_a_time():
     data = build_dbt_fixtures.manifest_bytes({"b": 1, "a": "\u00e9"})
     assert data[4:8] == bytes(4)
     assert gzip.decompress(data) == b'{\n "a": "\\u00e9",\n "b": 1\n}'
+
+
+def test_ordered_keeps_a_columns_mapping_in_declared_order():
+    value = {"columns": {"z": 1, "a": 2, "m": 3}}
+    assert list(build_dbt_fixtures.ordered(value)["columns"]) == ["z", "a", "m"]
+
+
+def test_ordered_sorts_every_other_mapping_even_one_with_the_same_keys():
+    value = {"nodes": {"z": 1, "a": 2, "m": 3}, "columns": {"z": 1, "a": 2}}
+    result = build_dbt_fixtures.ordered(value)
+    assert list(result) == ["columns", "nodes"]
+    assert list(result["nodes"]) == ["a", "m", "z"]
+    assert list(result["columns"]) == ["z", "a"]
+
+
+def test_ordered_sorts_the_dict_of_each_column_and_what_it_holds():
+    value = {
+        "columns": {
+            "z": {"name": "z", "config": {"tags": [], "meta": {"b": 1, "a": 2}}},
+            "a": {"name": "a", "data_type": None},
+        }
+    }
+    result = build_dbt_fixtures.ordered(value)
+    assert list(result["columns"]) == ["z", "a"]
+    assert list(result["columns"]["z"]) == ["config", "name"]
+    assert list(result["columns"]["z"]["config"]) == ["meta", "tags"]
+    assert list(result["columns"]["z"]["config"]["meta"]) == ["a", "b"]
+    assert list(result["columns"]["a"]) == ["data_type", "name"]
+
+
+def test_ordered_sorts_the_dict_of_a_column_that_is_named_columns():
+    value = {"columns": {"columns": {"b": 1, "a": 2}, "x": {"d": 1, "c": 2}}}
+    result = build_dbt_fixtures.ordered(value)
+    assert list(result["columns"]) == ["columns", "x"]
+    assert list(result["columns"]["columns"]) == ["a", "b"]
+
+
+def test_ordered_keeps_the_order_of_a_list_and_sorts_the_mappings_in_it():
+    value = {
+        "nodes": [{"b": 1, "a": 2}, "z", "a"],
+        "constraints": [{"type": "primary_key", "columns": ["b", "a"]}],
+    }
+    result = build_dbt_fixtures.ordered(value)
+    assert result["nodes"] == [{"a": 2, "b": 1}, "z", "a"]
+    assert list(result["nodes"][0]) == ["a", "b"]
+    assert result["constraints"][0]["columns"] == ["b", "a"]
+    assert list(result["constraints"][0]) == ["columns", "type"]
+
+
+def test_ordered_does_not_change_its_argument_and_returns_scalars_as_they_are():
+    value = {"b": {"columns": {"z": 1, "a": 2}}, "a": 1}
+    build_dbt_fixtures.ordered(value)
+    assert list(value) == ["b", "a"]
+    assert list(value["b"]["columns"]) == ["z", "a"]
+    assert build_dbt_fixtures.ordered(None) is None
+    assert build_dbt_fixtures.ordered("x") == "x"
+
+
+def test_manifest_bytes_keep_the_columns_in_declared_order_and_sort_the_rest():
+    data = build_dbt_fixtures.manifest_bytes(
+        {"b": 0, "a": {"columns": {"z": {"y": 1, "x": 2}, "k": {}}}}
+    )
+    assert gzip.decompress(data) == (
+        b'{\n "a": {\n  "columns": {\n   "z": {\n    "x": 2,\n    "y": 1\n   },'
+        b'\n   "k": {}\n  }\n },\n "b": 0\n}'
+    )
+
+
+def _declared_columns(project):
+    """Return `{node id: column names}` for the models and seeds that a project's yml files
+    declare columns for and that the manifest has a node of."""
+    nodes = load_manifest(project)["nodes"]
+    declared = {}
+    for path in sorted((PROJECTS / project).rglob("*.yml")):
+        if path.parent == PROJECTS / project:
+            continue
+        document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        for section, resource_type in (("models", "model"), ("seeds", "seed")):
+            for entry in document.get(section, []):
+                node_id = f"{resource_type}.{project}.{entry['name']}"
+                if entry.get("columns") and node_id in nodes:
+                    declared[node_id] = [
+                        column["name"] for column in entry["columns"]
+                    ]
+    return declared
+
+
+def test_the_finance_manifest_lists_fx_transactions_eur_in_schema_yml_order():
+    declared = _declared_columns("finance")["model.finance.fx_transactions_eur"]
+    columns = load_manifest("finance")["nodes"][
+        "model.finance.fx_transactions_eur"
+    ]["columns"]
+    assert declared[0] == "transaction_id"
+    assert list(columns) == declared
+    assert list(columns) != sorted(columns)
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_a_manifest_lists_each_nodes_columns_in_the_order_its_yml_declares(name):
+    declared = _declared_columns(name)
+    assert declared
+    nodes = load_manifest(name)["nodes"]
+    assert {
+        node_id: list(nodes[node_id]["columns"]) for node_id in declared
+    } == declared
 
 
 def test_the_fixed_values_replace_the_clock_and_the_build_paths():

@@ -10,7 +10,8 @@ The pinned dbt runs through `uvx` on Python 3.12, so the script needs no dbt of 
 copy lives under the temporary directory of the platform; set `TMPDIR` to build elsewhere. The
 manifest is written so that a rebuild gives the same bytes: the run's clock values are fixed,
 the keys that hold a time of the build or a path of the build directory are dropped, the keys
-are sorted and the gzip header carries no time. It uses the standard library only.
+are sorted except in the `columns` mappings, which keep the order in which a node declares its
+columns, and the gzip header carries no time. It uses the standard library only.
 """
 
 from __future__ import annotations
@@ -64,6 +65,9 @@ FIXED_METADATA = {
 # of the project (`root_path`), so a rebuild would write other bytes.
 VOLATILE_KEYS = ("created_at", "root_path")
 VOLATILE_SECTIONS = ("nodes", "sources", "macros")
+# The mapping under this key lists a node's columns in the order the node declares them, and
+# the contract of the node follows that order, so the manifest keeps it.
+DECLARED_ORDER_KEY = "columns"
 # What dbt leaves in a project directory that it has run in; none of it is part of a project.
 BUILD_LEFTOVERS = ("target", "logs", "dbt_packages", "package-lock.yml")
 LOCAL_PACKAGE = re.compile(r"^\s*-\s*local:\s*(\.\./[\w.-]+)\s*$", re.MULTILINE)
@@ -124,9 +128,28 @@ def _fix_manifest(manifest: dict[str, Any]) -> None:
                 entry.pop(key, None)
 
 
+def ordered(value: Any, declared: bool = False) -> Any:
+    """Return `value` with every mapping in sorted key order, except the declared ones.
+
+    A mapping under a `columns` key keeps its key order, which is the order in which the node
+    declares its columns, and the dict of each column in it is sorted as any other mapping.
+    `declared` says that `value` is such a mapping. Lists keep their order and their items are
+    ordered in turn; the argument is not changed.
+    """
+    if isinstance(value, dict):
+        keys = list(value) if declared else sorted(value)
+        return {
+            key: ordered(value[key], not declared and key == DECLARED_ORDER_KEY)
+            for key in keys
+        }
+    if isinstance(value, list):
+        return [ordered(item) for item in value]
+    return value
+
+
 def manifest_bytes(manifest: dict[str, Any]) -> bytes:
-    """Return the gzipped, sorted JSON of `manifest`, the same bytes for the same manifest."""
-    text = json.dumps(manifest, sort_keys=True, indent=1)
+    """Return the gzipped JSON of `manifest` in `ordered` form, the same bytes every time."""
+    text = json.dumps(ordered(manifest), indent=1)
     return gzip.compress(text.encode("ascii"), mtime=0)
 
 
