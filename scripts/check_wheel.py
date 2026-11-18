@@ -45,6 +45,7 @@ REQUIRED_MEMBERS: tuple[str, ...] = tuple(
         "fingerprints.py",
         "fingerprints.yaml",
         "hashing.py",
+        "lite.py",
         "odcs-json-schema-v3.2.0.json",
         "python.py",
         "py.typed",

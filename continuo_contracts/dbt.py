@@ -33,6 +33,8 @@ relationships point to that it reads, and of nothing else of them. `logical_type
 logical type of a declared column type. `run_facts` reads back from a contract what continuo
 runs the node with.
 
+`seed_header_issues` compares the columns a seed declares with the header of its CSV file.
+
 A field of a node in a shape these functions cannot read raises `DbtNodeError`.
 """
 
@@ -1286,3 +1288,29 @@ def run_facts(document: Mapping[str, Any]) -> RunFacts:
         owner=document["team"]["name"],
         materialized=values["materialization"]["materialized"],
     )
+
+
+def seed_header_issues(
+    declared: Sequence[str], header: Sequence[str]
+) -> list[str]:
+    """Return a message for each column that a seed's CSV header and its contract disagree on.
+
+    `declared` is the names of the columns the seed's contract declares and `header` the names
+    in the first row of its CSV file. A column of the header that is not declared gives
+    `<column> is in the CSV header but not declared`, in the order of the header, and then a
+    declared column that the header lacks gives `<column> is declared but not in the CSV
+    header`, in the order of `declared`. Names are compared exactly as written, so `ID` and `id`
+    are two columns. A name that a list repeats gets one message. Both lists agreeing, in any
+    order, gives an empty list.
+    """
+    declared_names = set(declared)
+    header_names = set(header)
+    return [
+        f"{column} is in the CSV header but not declared"
+        for column in dict.fromkeys(header)
+        if column not in declared_names
+    ] + [
+        f"{column} is declared but not in the CSV header"
+        for column in dict.fromkeys(declared)
+        if column not in header_names
+    ]

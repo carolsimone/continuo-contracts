@@ -506,6 +506,7 @@ from continuo_contracts.dbt import (
     project_service,
     run_facts,
     schedule,
+    seed_header_issues,
     skip_reason,
     table_name,
     tests_by_node,
@@ -748,6 +749,12 @@ facts == run_facts(normalise_dbt(generated.document, reads=[]))  # True
   `validate.validate_dbt_contract` accepted, generated or stored, as the contract holds them.
   `schedule` is `""` for a dormant node and `timeout_minutes` is `None` when the contract has no
   `timeoutMinutes`.
+- `seed_header_issues`: `seed_header_issues(declared, header) -> list[str]` compares the column
+  names a seed's contract declares with the names in the header of its CSV file, and gives one
+  message for each column the two disagree on: first, in the order of `header`, `<column> is in
+  the CSV header but not declared`, then, in the order of `declared`, `<column> is declared but
+  not in the CSV header`. Names are compared exactly as written, so `ID` and `id` are two columns,
+  and a name a list repeats gets one message. Agreeing lists, in any order, give `[]`.
 
 ## vocabulary
 
@@ -1152,6 +1159,108 @@ logical_type("varchar(64)")
   names joined with its declared reads, written in the canonical form.
 - `contract_hash`: returns the `contract_hash` of a stored form, `"sha256:"` and 64 hex digits.
 - `logical_type`: returns the ODCS logical type of an SQL type, or `None`.
+
+## lite
+
+```python
+from continuo_contracts.lite import (
+    BANNER,
+    RELEASE_ONLY,
+    Line,
+    LiteReport,
+    check_manifest,
+)
+```
+
+A producer's CI can check what continuo will make of a dbt service before the release does.
+`check_manifest` takes the `manifest.json` that `dbt parse` writes, which needs no warehouse, and
+does with each model, seed and snapshot what the release does: it leaves out the nodes
+`dbt.skip_reason` skips, writes the contract of each node it keeps with `dbt.generate`, checks it
+with `validate.validate_dbt_contract`, and hashes its stored form with `contract.normalise_dbt` and
+`contract.contract_hash`. It also compares the columns each seed declares with the header of its
+CSV file. It reads no file, runs no program, logs nothing and prints nothing: the caller reads the
+manifest and the CSV headers, and prints the report.
+
+The check is lite because the release does more than it, so a report with no error does not
+guarantee that the release creates the service's contracts. A caller prints `BANNER` first and
+last, and the rows of `RELEASE_ONLY` between them.
+
+```python
+import csv
+
+
+def read_header(node):
+    try:
+        path = project_dir / node["original_file_path"]
+        with path.open(newline="", encoding="utf-8-sig") as stream:
+            return next(csv.reader(stream))
+    except OSError, UnicodeError, StopIteration:
+        return None
+
+
+report = check_manifest(
+    manifest, declared_service="finance", read_header=read_header
+)
+report.ok  # False
+report.lines[0]
+# Line(level="error", node_id="seed.finance.seed_operational_costs",
+#      message="cost_date is in the CSV header but not declared")
+report.contracts["analytics.fx_transactions_eur"]
+# "sha256:6a1e6606f0d6c8acb0cc6120b93029dba8d1d2782763de8ced721a36285cdd84"
+```
+
+The nodes are taken by node id (the key of the node in the manifest, such as
+`model.shop.orders`), in code point order, so the report is the same for any order of the
+manifest. For each node, in this order:
+
+1. A node `dbt.skip_reason` leaves out gives one `info` line, and nothing else: `no owner,
+   continuo skips it`, `local stub, continuo skips it` or `from an installed package and has no
+   tag, continuo skips it`. A skipped node is never an error, and a skipped seed gets no header
+   check. A node whose gate cannot read a field (`DbtNodeError`) gives one `error` line instead.
+2. A kept node with no tag, a dormant node, gives the `info` line `no tag: a dormant node, it runs
+   only by hand`.
+3. `dbt.generate` writes the contract. A field it cannot read (`DbtNodeError`) gives one `error`
+   line, and the node has no more lines. The message of such a line does not repeat the node id.
+4. Each issue of `validate.validate_dbt_contract` gives an `error` line, `<path>: <message>`.
+5. The stored form of the contract is hashed, and `contracts` holds the hash even for a contract
+   with issues. A declared read that is not `<schema>.<table>` gives an `error` line and no hash,
+   because the stored form cannot be written.
+6. For a kept seed, `read_header(node)` gives the names in the first row of its CSV file, or
+   `None` when the file cannot be read, which gives one `error` line. Otherwise
+   `dbt.seed_header_issues` compares them with the seed's declared columns, the names of the
+   properties of its contract in order, and each difference gives an `error` line.
+
+When every model, seed and snapshot is skipped, or the manifest has none, the last line is an
+`error` with the empty `node_id`, `every node of the service is skipped: the release rejects it as
+invalid_artifact (manifest contains no model/seed nodes)`. A node whose gate cannot read it counts
+as one that is not skipped.
+
+The contract of the lite check is the one `dbt.generate` writes, stored with no tables from
+compiled SQL, since `dbt parse` compiles nothing. Its hash is the `contract_hash` of that stored
+form, so it differs from the hash the release stores for a node whose compiled SQL names a table
+the node does not declare.
+
+### Public names
+
+- `BANNER`: the text a caller prints first and last: `LITE CHECK. Passing it does not guarantee
+  that continuo will create this service's contracts at release time.`
+- `RELEASE_ONLY`: the six things only the release does, as `(what, why it can differ)` pairs of
+  text in this order: `dbt runs in the team's image`, `the whole estate is parsed`, `the tables a
+  node reads`, `the install's library version`, `install settings` and `the install's ontology`.
+- `Line`: one thing the check says about a node, a frozen dataclass with the fields `level`
+  (`info` for a node the check leaves out or a dormant node, `error` for a problem that fails the
+  check), `node_id` (the key of the node in the manifest, or `""` for the line about the whole
+  service) and `message`.
+- `LiteReport`: what `check_manifest` returns, a frozen dataclass with the fields `service` (the
+  service the gates compare each node with, as `dbt.project_service` gives it), `lines` (a tuple of
+  `Line`, by node id, with the line about the whole service last), `contracts` (the `contract_hash`
+  of each contract the check generated, by contract id, in the order of the node ids) and the
+  property `ok`, `True` when no line is an `error`.
+- `check_manifest`: `check_manifest(manifest, *, declared_service, read_header) -> LiteReport`
+  checks the manifest `json.load` returns. `declared_service` is the service of the project when
+  the manifest names none, as in `dbt.project_service`. `read_header` takes a seed's manifest node
+  and returns the column names of its CSV header, or `None` when the file cannot be read; it is
+  called once for each seed that gets a contract, and an exception it raises is not caught.
 
 ## cli
 

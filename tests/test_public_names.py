@@ -28,6 +28,7 @@ MODULES = (
     "vocabulary",
     "validate",
     "contract",
+    "lite",
     "cli",
     "errors",
 )

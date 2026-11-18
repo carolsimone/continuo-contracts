@@ -115,6 +115,22 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   new entries and inputs. No Python family changes and no hash moves; the one input already
   classified that moves is `config.contract.enforced` in a seed and a snapshot, from `content` to
   `both`, because the contract now carries it.
+- `continuo_contracts.dbt.seed_header_issues(declared, header)` compares the column names a seed's
+  contract declares with the names in its CSV header, and gives one message for each column the two
+  disagree on: `<column> is in the CSV header but not declared`, in header order, then
+  `<column> is declared but not in the CSV header`, in declared order. Names are compared exactly
+  as written.
+- `continuo_contracts.lite`, a new module in a new layer between `cli` and `validate`: the lite
+  check of a dbt service. `check_manifest(manifest, *, declared_service, read_header)` takes the
+  manifest `dbt parse` writes and returns a `LiteReport` of `Line`s, ordered by node id and the
+  same for any order of the manifest. A node continuo skips and a dormant node (a kept model or
+  snapshot with no tag) give an `info` line. A node whose fields the library cannot read, each
+  issue of `validate_dbt_contract`, a declared read that is not a table, a seed whose CSV cannot
+  be read, each column a seed's header and declared columns disagree on, and a service whose every
+  node is skipped give an `error` line. `contracts` maps the id of each contract the check
+  generated to its `contract_hash`, with no tables from compiled SQL. `BANNER` is the text that
+  says passing the check guarantees nothing about the release, and `RELEASE_ONLY` lists the six
+  things only the release does. The module reads no file and prints and logs nothing.
 
 ## [0.2.0] - 2026-11-15
 

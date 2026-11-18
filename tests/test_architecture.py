@@ -39,8 +39,12 @@ CONFINED = {
 }
 
 # What a file of the package may not import unless its module is named: `cli` is imported by
-# no module, and each confined library only by its users.
-GUARDED = {"continuo_contracts.cli": set(), **CONFINED}
+# no module, `lite` only by `cli`, and each confined library only by its users.
+GUARDED = {
+    "continuo_contracts.cli": set(),
+    "continuo_contracts.lite": {"cli"},
+    **CONFINED,
+}
 
 
 def _contracts() -> list[dict]:
@@ -138,6 +142,13 @@ def test_the_layers_name_every_module_of_the_package_once() -> None:
     )
 
 
+def test_lite_sits_between_cli_and_validate() -> None:
+    [graph] = [c for c in _contracts() if c["type"] == "layers"]
+    top_three = [_layer_modules(layer) for layer in graph["layers"][:3]]
+
+    assert top_three == [["cli"], ["lite"], ["validate"]]
+
+
 def test_cli_is_the_top_layer_and_the_bottom_layer_imports_nothing() -> None:
     [graph] = [c for c in _contracts() if c["type"] == "layers"]
     top, *_, bottom = graph["layers"]
@@ -219,6 +230,11 @@ PLANTED_IMPORTS = {
     "from continuo_contracts.cli import main": "continuo_contracts.cli",
     "from . import cli": "continuo_contracts.cli",
     "from .cli import main": "continuo_contracts.cli",
+    "from continuo_contracts import lite": "continuo_contracts.lite",
+    "import continuo_contracts.lite": "continuo_contracts.lite",
+    "from continuo_contracts.lite import check_manifest": "continuo_contracts.lite",
+    "from . import lite": "continuo_contracts.lite",
+    "from .lite import check_manifest": "continuo_contracts.lite",
 }
 
 
@@ -329,6 +345,42 @@ OFFENCES = {
         "from continuo_contracts import contract\n",
         "import-graph",
         "continuo_contracts.dbt is not allowed to import",
+    ),
+    "lite imports cli, the layer above it": (
+        "lite",
+        "from continuo_contracts import cli\n",
+        "import-graph",
+        "continuo_contracts.lite is not allowed to import",
+    ),
+    "validate imports lite, the layer above it": (
+        "validate",
+        "from continuo_contracts import lite\n",
+        "import-graph",
+        "continuo_contracts.validate is not allowed to import",
+    ),
+    "dbt imports lite, a higher layer": (
+        "dbt",
+        "from continuo_contracts import lite\n",
+        "import-graph",
+        "continuo_contracts.dbt is not allowed to import",
+    ),
+    "jsonschema in lite": (
+        "lite",
+        "import jsonschema\n",
+        "jsonschema-is-confined-to-validate",
+        "continuo_contracts.lite is not allowed to import jsonschema",
+    ),
+    "yaml in lite": (
+        "lite",
+        "import yaml\n",
+        "yaml-is-confined-to-fingerprints-and-yaml-strict",
+        "continuo_contracts.lite is not allowed to import yaml",
+    ),
+    "logging in lite": (
+        "lite",
+        "import logging\n",
+        "only-cli-logs",
+        "continuo_contracts.lite is not allowed to import logging",
     ),
     "jsonschema in a module that may not use it": (
         "canonical",

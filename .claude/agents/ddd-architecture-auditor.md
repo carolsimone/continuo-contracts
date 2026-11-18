@@ -108,13 +108,14 @@ Package root: `continuo_contracts/`.
    re-derive the graph by grep. Run `uv run --locked lint-imports`, report its
    summary line (`N kept, 0 broken`) and check:
    - `import-graph` is a `layers` contract with `exhaustive = true`. Top to
-     bottom its layers are `cli`, `validate`, `contract`,
-     `python | yaml_strict`, `canonical | hashing | schema | fingerprints`
-     and `errors | vocabulary`. A module imports only from the layers below
-     its own, so nothing imports `cli`, and `errors` and `vocabulary` import
-     nothing from the package. The modules of one layer, separated by `|`,
-     import none of each other. A module that no layer names fails the
-     contract.
+     bottom its layers are `cli`, `lite`, `validate`, `contract`,
+     `python | yaml_strict | dbt`,
+     `canonical | hashing | schema | fingerprints` and
+     `errors | vocabulary`. A module imports only from the layers below its
+     own, so nothing imports `cli`, nothing but `cli` imports `lite`, and
+     `errors` and `vocabulary` import nothing from the package. The modules of
+     one layer, separated by `|`, import none of each other. A module that no
+     layer names fails the contract.
    - `jsonschema-is-confined-to-validate`,
      `yaml-is-confined-to-fingerprints-and-yaml-strict` and `only-cli-logs` are
      `forbidden` contracts. Each names as `source_modules` every module but the

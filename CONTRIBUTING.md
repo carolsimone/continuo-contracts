@@ -98,18 +98,23 @@ not a service, and layers would add indirection without a second implementation.
   continuo's rules, with every problem as an `Issue` that has a path and a closed reason.
 - `contract`: the stored form of a Python node's ODCS contract, in the canonical form, and its
   `contract_hash`.
+- `lite`: the producer's lite check of a dbt manifest, the report of the nodes it skips, the
+  problems of each contract it generates and the seeds whose CSV header and declared columns
+  differ.
 - `cli`: the `continuo-contracts` command, `validate` and `hash`, over contract files.
 
 `errors` and `vocabulary` import nothing from the package. `canonical`, `hashing`, `fingerprints`
 and `schema` import only `errors` (`fingerprints` also PyYAML), `yaml_strict` imports `canonical`,
-`errors` and PyYAML, `dbt` imports only `errors`, `python` imports `canonical`, `errors`,
-`hashing`, `fingerprints` and `vocabulary`, `validate` imports `canonical`, `contract`, `dbt`,
-`errors`, `python`, `schema`, `vocabulary` and jsonschema, `contract` imports `canonical`, `errors`,
-`fingerprints`, `hashing`, `python` and `vocabulary`, `cli` imports `contract`, `errors`,
-`validate` and `yaml_strict`, and nothing imports `scripts` or `tests`. The only files the
-package reads are the packaged `fingerprints.yaml`, in `fingerprints.load()`, the packaged ODCS
-schema, in `schema.load()`, and the contract files that the arguments of `cli` name. A split into
-layers is proposed only when a module gets a second reason to change.
+`errors` and PyYAML, `dbt` imports `canonical`, `errors`, `hashing` and `vocabulary`, `python`
+imports `canonical`, `errors`, `hashing`, `fingerprints` and `vocabulary`, `validate` imports
+`canonical`, `contract`, `dbt`, `errors`, `python`, `schema`, `vocabulary` and jsonschema,
+`contract` imports `canonical`, `errors`, `fingerprints`, `hashing`, `python` and `vocabulary`,
+`lite` imports `contract`, `dbt`, `errors` and `validate`, `cli` imports `contract`, `errors`,
+`validate` and `yaml_strict`, nothing but `cli` imports `lite`, and nothing imports `scripts` or
+`tests`. The only files the package reads are the packaged `fingerprints.yaml`, in
+`fingerprints.load()`, the packaged ODCS schema, in `schema.load()`, and the contract files that
+the arguments of `cli` name. A split into layers is proposed only when a module gets a second
+reason to change.
 
 import-linter (`uv run lint-imports`) enforces the ordering of these modules and the confinement of
 the libraries, with the contracts under `[tool.importlinter]` in `pyproject.toml` and no
@@ -118,21 +123,22 @@ edge by edge: the layers allow, for example, `canonical` to import `vocabulary` 
 `hashing`.
 
 - `import-graph` puts the modules in layers (an ordering of the flat modules, not a split of the
-  package), top to bottom: `cli`, then `validate`, then `contract`, then `python`, `yaml_strict`
-  and `dbt`, then `canonical`, `hashing`, `schema` and `fingerprints`, then `errors` and
-  `vocabulary`. A module imports only from the layers below its own, and the modules of one layer
-  import none of each other, so nothing imports `cli` and `errors` and `vocabulary` import nothing
-  from the package. The contract is exhaustive: a module that no layer names fails it.
+  package), top to bottom: `cli`, then `lite`, then `validate`, then `contract`, then `python`,
+  `yaml_strict` and `dbt`, then `canonical`, `hashing`, `schema` and `fingerprints`, then `errors`
+  and `vocabulary`. A module imports only from the layers below its own, and the modules of one
+  layer import none of each other, so nothing imports `cli`, nothing but `cli` imports `lite`, and
+  `errors` and `vocabulary` import nothing from the package. The contract is exhaustive: a module
+  that no layer names fails it.
 - `jsonschema-is-confined-to-validate` and `yaml-is-confined-to-fingerprints-and-yaml-strict` keep
   each library to the modules that use it, and `only-cli-logs` keeps `logging` to `cli`, so the
   library modules log nothing.
 
 `tests/test_architecture.py` holds the contracts to the code. It fails on an `ignore_imports`, on a
 module that a layer or a confinement does not name, on an import of `scripts` or `tests`, which sit
-outside the package, and on an import of `cli`, `logging`, `jsonschema` or `yaml` from a file that
-may not make it. That last check covers `__init__.py`, which no contract can name without naming
-every module. The test also plants an import that breaks each contract in a copy of the package and
-checks that `lint-imports` fails.
+outside the package, and on an import of `cli`, `lite`, `logging`, `jsonschema` or `yaml` from a
+file that may not make it. That last check covers `__init__.py`, which no contract can name without
+naming every module. The test also plants an import that breaks each contract in a copy of the
+package and checks that `lint-imports` fails.
 
 ## Releasing
 

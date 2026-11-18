@@ -116,6 +116,7 @@ type = "layers"
 containers = ["continuo_contracts"]
 layers = [
     "cli",
+    "lite",
     "validate",
     "contract",
     "python | yaml_strict | dbt",
@@ -140,6 +141,7 @@ source_modules = [
     "continuo_contracts.errors",
     "continuo_contracts.fingerprints",
     "continuo_contracts.hashing",
+    "continuo_contracts.lite",
     "continuo_contracts.python",
     "continuo_contracts.schema",
     "continuo_contracts.vocabulary",
@@ -158,6 +160,7 @@ source_modules = [
     "continuo_contracts.dbt",
     "continuo_contracts.errors",
     "continuo_contracts.hashing",
+    "continuo_contracts.lite",
     "continuo_contracts.python",
     "continuo_contracts.schema",
     "continuo_contracts.validate",
@@ -177,6 +180,7 @@ source_modules = [
     "continuo_contracts.errors",
     "continuo_contracts.fingerprints",
     "continuo_contracts.hashing",
+    "continuo_contracts.lite",
     "continuo_contracts.python",
     "continuo_contracts.schema",
     "continuo_contracts.validate",
