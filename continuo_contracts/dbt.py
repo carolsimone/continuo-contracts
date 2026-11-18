@@ -139,9 +139,11 @@ _READ_PATHS: Final = (
 )
 
 # The fields of a test node that `generate` reads, as dotted paths from the test node. Of the
-# test's kwargs it reads every one but `_UNREAD_KWARGS`: dbt fills `model` with the Jinja that
-# selects the tested node, and `column_name` repeats the test's own `column_name`. The test's
-# `unique_id` is read only to name the test in an error.
+# test's kwargs it reads every one but `model`, which dbt fills with the Jinja that selects the
+# tested node, and but a `column_name` that repeats the test's own `column_name`. A `column_name`
+# kwarg that differs, as dbt writes for a test declared on the model (whose own `column_name` is
+# null) or one whose arguments name another column, is the column or expression the test checks.
+# The test's `unique_id` is read only to name the test in an error.
 _KWARGS_FIELD: Final = "test_metadata.kwargs.*"
 _TEST_FIELDS: Final = (
     "name",
@@ -159,7 +161,7 @@ _TEST_FIELDS: Final = (
     "config.error_if",
     "config.fail_calc",
 )
-_UNREAD_KWARGS: Final = ("model", "column_name")
+_MODEL_KWARG, _COLUMN_KWARG = "model", "column_name"
 
 # The fields of the manifest node or source that a `relationships` test points to, which give
 # its id, and the same as dotted paths from the manifest.
@@ -200,6 +202,10 @@ _TEST_SETTINGS: Final = (
 )
 _SEVERITIES: Final = MappingProxyType({"error": None, "warn": "warning"})
 _JINJA_MARKS: Final = ("{{", "{%")
+# The pairs of marks that quote an identifier in SQL, each with the doubled closing mark that
+# stands for one inside it: dbt writes a quoted column's name in a test and in an inferred
+# `primary_key` with the marks of its adapter.
+_QUOTES: Final = (('"', '"'), ("`", "`"), ("[", "]"))
 
 # The columns dbt adds to a snapshot's table, by their default names, and the one it adds when
 # `hard_deletes` is `new_record`.
@@ -833,17 +839,37 @@ def _column(
     }
 
 
+def _declared(
+    columns: Mapping[str, dict[str, Any]], name: str
+) -> dict[str, Any] | None:
+    """Return the declared column that `name` names, or `None`.
+
+    `name` names the column of that name. Failing that, a name in one pair of SQL quotes, `"..."`,
+    `` `...` `` or `[...]`, names the column whose name is inside them, with a doubled closing
+    mark read as one, as dbt writes the name of a column it quotes. No adapter is read, and a
+    declared name that holds quotes is found by the first lookup.
+    """
+    column = columns.get(name)
+    if column is not None or len(name) < 2:
+        return column
+    for opening, closing in _QUOTES:
+        if name.startswith(opening) and name.endswith(closing):
+            return columns.get(name[1:-1].replace(closing * 2, closing))
+    return None
+
+
 def _primary_key(run: _Run, columns: Mapping[str, dict[str, Any]]) -> None:
     """Mark the columns of a model's `primary_key`, with their positions in a key of two or more.
 
-    A key column the node does not declare is left out, and the contract is flagged.
+    A key column is found as `_declared` finds it. One the node does not declare is left out,
+    and the contract is flagged.
     """
     node = run.node
     if node.get("resource_type") != "model":
         return
     key = _strings(node, "primary_key", node.get("primary_key"))
     for position, name in enumerate(key, start=1):
-        column = columns.get(name)
+        column = _declared(columns, name)
         if column is None:
             run.flags.add("primary_key_column_not_declared")
             continue
@@ -1023,8 +1049,11 @@ def _add_test(
 ) -> None:
     """Write what the dbt test `test` says on the column it tests, else on the schema object.
 
+    The column a test checks is its `column_name` kwarg when it has one that differs from its own
+    `column_name`, and its own `column_name` otherwise; a name is found as `_declared` finds it.
     A singular test, and a test on no declared column, gives a rule on the schema object; the
-    latter keeps its `column_name` in its arguments and flags the contract. dbt's `not_null`,
+    latter, whose column may be an expression, keeps that column in its `column_name` argument
+    and flags the contract. dbt's `not_null`,
     `unique` and `accepted_values` give library rules, the last with its `values` as
     `validValues` beside its other kwargs, a strict `relationships` test on a declared column
     gives a relationship, and any other generic test, a `relationships` test that is not strict
@@ -1040,11 +1069,18 @@ def _add_test(
     arguments = {
         key: _writable(kwargs[key], label, f"test_metadata.kwargs.{key}")
         for key in kwargs
-        if key not in _UNREAD_KWARGS
+        if not _repeats(test, kwargs, key)
     }
     where = continuo_values(common["customProperties"]).get("where", "")
     if _has_jinja([arguments, where]):
         run.flags.add("jinja_in_test_arguments")
+    column_name = _optional_string(label, "column_name", test.get("column_name"))
+    if _COLUMN_KWARG in arguments:
+        field = f"test_metadata.kwargs.{_COLUMN_KWARG}"
+        column_name = (
+            _optional_string(label, field, arguments.pop(_COLUMN_KWARG))
+            or column_name
+        )
     rule: dict[str, Any]
     if not generic:
         rule = {"id": name, "name": name, "type": "custom", "engine": "dbt"}
@@ -1055,11 +1091,10 @@ def _add_test(
     namespace = _optional_string(
         label, "test_metadata.namespace", metadata.get("namespace")
     )
-    column_name = _optional_string(label, "column_name", test.get("column_name"))
-    column = columns.get(column_name)
+    column = _declared(columns, column_name)
     if column_name and column is None:
         run.flags.add("test_column_not_declared")
-        arguments["column_name"] = column_name
+        arguments[_COLUMN_KWARG] = column_name
     built_in = "" if namespace else generic
     if built_in == _RELATIONSHIPS and column is not None and strict:
         field = _required_string(
@@ -1077,7 +1112,7 @@ def _add_test(
             }
         else:
             written = _without_empty(
-                {"column_name": arguments.get("column_name")}
+                {_COLUMN_KWARG: arguments.get(_COLUMN_KWARG)}
             )
         rule = {
             "id": name,
@@ -1156,11 +1191,23 @@ _TARGET_TREES: Final = MappingProxyType(
 )
 
 
+def _repeats(
+    test: Mapping[str, Any], kwargs: Mapping[str, Any], key: str
+) -> bool:
+    """Say whether the kwarg `key` of `test` is one `generate` does not read.
+
+    It is `model`, and a `column_name` equal to the test's own `column_name`.
+    """
+    if key == _MODEL_KWARG:
+        return True
+    return key == _COLUMN_KWARG and kwargs[key] == test.get(_COLUMN_KWARG)
+
+
 def _test_tree(test: Mapping[str, Any]) -> dict[str, Any]:
     """Return the tree of the fields of `test` that `generate` reads.
 
-    It is `_TEST_FIELDS`, with the kwargs wildcard written as the test's own kwargs but
-    `_UNREAD_KWARGS`.
+    It is `_TEST_FIELDS`, with the kwargs wildcard written as the test's own kwargs but those
+    `_repeats` names.
     """
     metadata = test.get("test_metadata") or {}
     kwargs = metadata.get("kwargs") or {}
@@ -1168,7 +1215,7 @@ def _test_tree(test: Mapping[str, Any]) -> dict[str, Any]:
     paths += [
         ["test_metadata", "kwargs", key]
         for key in kwargs
-        if key not in _UNREAD_KWARGS
+        if not _repeats(test, kwargs, key)
     ]
     return _tree(paths)
 
@@ -1183,7 +1230,8 @@ def read_tree(
     The tree is a dict whose keys are the field names, each holding the tree of the fields read
     inside it, and `{}` for a field read whole; the key `*` stands for every key of a mapping or
     every item of a list, in order. The tree of a test names each of its own kwargs but `model`
-    and `column_name`. `source_sha256` covers exactly these fields. The result is a new dict.
+    and a `column_name` equal to the test's own `column_name`. `source_sha256` covers exactly
+    these fields. The result is a new dict.
 
     Raises `ValueError` for another `part`, for `test` with no test node, and for a test node
     given with another part.

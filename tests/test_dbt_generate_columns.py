@@ -8,6 +8,7 @@ from dbt_fixtures import load_manifest
 
 from continuo_contracts import dbt
 from continuo_contracts.canonical import canonical_json
+from continuo_contracts.contract import contract_hash, normalise_dbt
 from continuo_contracts.errors import DbtNodeError
 from continuo_contracts.validate import schema_issues
 from continuo_contracts.vocabulary import PROPERTIES, VENDOR, continuo_values
@@ -899,6 +900,252 @@ def test_a_test_on_an_undeclared_column_is_flagged():
     assert "test_column_not_declared" not in _generated("cases", GENERIC).flags
 
 
+# A test dbt writes at the model level has a null `column_name`, and the column or expression it
+# checks is only in its `column_name` kwarg.
+_EXPRESSION = "(id || '-' || status)"
+
+
+def _checks(column_name, kwarg):
+    """Return a change that gives a test the node `column_name` and the kwarg `kwarg`."""
+
+    def change(test):
+        test["column_name"] = column_name
+        test["test_metadata"]["kwargs"]["column_name"] = kwarg
+
+    return change
+
+
+@pytest.mark.parametrize(
+    ("name", "written"),
+    [
+        (
+            "unique_generic_tests_id",
+            {
+                "id": "unique_generic_tests_id",
+                "metric": "duplicateValues",
+                "mustBe": 0,
+                "arguments": {"column_name": _EXPRESSION},
+            },
+        ),
+        (
+            "accepted_values_generic_tests_status__active__closed",
+            {
+                "id": "accepted_values_generic_tests_status__active__closed",
+                "metric": "invalidValues",
+                "mustBe": 0,
+                "arguments": {
+                    "validValues": ["active", "closed"],
+                    "column_name": _EXPRESSION,
+                },
+            },
+        ),
+        (
+            "is_positive_generic_tests_amount__0",
+            {
+                "id": "is_positive_generic_tests_amount__0",
+                "name": "is_positive_generic_tests_amount__0",
+                "type": "custom",
+                "engine": "dbt",
+                "implementation": {
+                    "test": "is_positive",
+                    "arguments": {"min_value": 0, "column_name": _EXPRESSION},
+                },
+            },
+        ),
+    ],
+)
+def test_a_model_level_test_keeps_its_column_expression_in_its_arguments(
+    name, written
+):
+    manifest = _edited("cases", name, _checks(None, _EXPRESSION))
+    generated = _run(manifest, GENERIC)
+    schema = generated.document["schema"][0]
+    assert written in schema["quality"]
+    assert "test_column_not_declared" in generated.flags
+    on_columns = [
+        rule["id"]
+        for column in schema["properties"]
+        for rule in column.get("quality", [])
+    ]
+    assert name not in on_columns
+    assert schema_issues(generated.document) == []
+
+
+def test_a_model_level_unique_on_an_expression_makes_no_column_unique():
+    manifest = _edited(
+        "cases", "unique_generic_tests_id", _checks(None, _EXPRESSION)
+    )
+    assert "unique" not in _props(_run(manifest, GENERIC).document)["id"]
+
+
+def test_a_model_level_test_on_a_declared_column_lands_on_that_column():
+    def model_level_on_id(test):
+        _checks(None, "id")(test)
+        test["config"]["severity"] = "error"
+
+    manifest = _edited(
+        "cases", "not_null_generic_tests_warned", model_level_on_id
+    )
+    generated = _run(manifest, GENERIC)
+    props = _props(generated.document)
+    assert props["id"]["required"] is True
+    assert {
+        "id": "not_null_generic_tests_warned",
+        "metric": "nullValues",
+        "mustBe": 0,
+    } in props["id"]["quality"]
+    assert props["warned"] == {"name": "warned"}
+    assert "test_column_not_declared" not in generated.flags
+
+
+def test_a_column_name_argument_that_overrides_the_column_is_the_column_tested():
+    # dbt keeps the YAML column in the node's `column_name` and runs the test on the argument.
+    manifest = _edited(
+        "cases", "not_null_generic_tests_id", _checks("id", "status")
+    )
+    generated = _run(manifest, GENERIC)
+    props = _props(generated.document)
+    assert "required" not in props["id"]
+    assert props["status"]["required"] is True
+    assert _not_null("generic_tests", "id") in props["status"]["quality"]
+    assert "test_column_not_declared" not in generated.flags
+
+
+def test_a_column_name_argument_that_overrides_the_column_with_an_expression():
+    manifest = _edited(
+        "cases", "unique_generic_tests_id", _checks("id", "upper(id)")
+    )
+    generated = _run(manifest, GENERIC)
+    assert "unique" not in _props(generated.document)["id"]
+    assert {
+        "id": "unique_generic_tests_id",
+        "metric": "duplicateValues",
+        "mustBe": 0,
+        "arguments": {"column_name": "upper(id)"},
+    } in generated.document["schema"][0]["quality"]
+
+
+def test_changing_only_a_model_level_test_expression_moves_both_hashes():
+    def hashes(expression):
+        manifest = _edited(
+            "cases", "not_null_generic_tests_id", _checks(None, expression)
+        )
+        generated = _run(manifest, GENERIC)
+        stored = normalise_dbt(generated.document, reads=[])
+        return generated.source_sha256, contract_hash(stored)
+
+    one, other = hashes("(id - amount)"), hashes("(id * amount)")
+    assert one[0] != other[0]
+    assert one[1] != other[1]
+
+
+def test_read_tree_names_the_column_name_kwarg_only_when_it_differs():
+    test = _test(_manifest("cases"), "is_positive_generic_tests_amount__0")
+    kwargs = dbt.read_tree("test", test=test)["test_metadata"]["kwargs"]
+    assert "column_name" not in kwargs
+    for column_name, kwarg in ((None, "amount"), ("amount", "upper(amount)")):
+        _checks(column_name, kwarg)(test)
+        kwargs = dbt.read_tree("test", test=test)["test_metadata"]["kwargs"]
+        assert kwargs["column_name"] == {}
+
+
+def test_a_column_name_kwarg_that_is_not_a_string_raises_dbt_node_error():
+    manifest = _edited(
+        "cases", "not_null_generic_tests_id", _checks("id", ["id"])
+    )
+    with pytest.raises(DbtNodeError) as raised:
+        _run(manifest, GENERIC)
+    assert str(raised.value) == (
+        f"{_test_label('not_null_generic_tests_id')}: "
+        "test_metadata.kwargs.column_name must be a string, got list"
+    )
+
+
+# With `quote: true`, dbt writes a test's `column_name` and an inferred `primary_key` as the quoted
+# identifier, while the declared column keeps its name.
+
+
+def _declaring(manifest, name):
+    """Declare one more column, `name`, on the node of `manifest` the tests run on."""
+    manifest["nodes"][GENERIC]["columns"][name] = {"name": name}
+
+
+@pytest.mark.parametrize(
+    ("declared", "written"),
+    [
+        ("id", '"id"'),
+        ("id", "`id`"),
+        ("id", "[id]"),
+        ('say "hi"', '"say ""hi"""'),
+        ("say `hi`", "`say ``hi```"),
+        ("a]b", "[a]]b]"),
+    ],
+)
+def test_a_quoted_test_column_lands_on_the_declared_column(declared, written):
+    manifest = _edited(
+        "cases", "not_null_generic_tests_id", _checks(written, written)
+    )
+    _declaring(manifest, declared)
+    generated = _run(manifest, GENERIC)
+    column = _props(generated.document)[declared]
+    assert column["required"] is True
+    assert _not_null("generic_tests", "id") in column["quality"]
+    assert "test_column_not_declared" not in generated.flags
+
+
+def test_a_declared_column_named_with_quotes_takes_its_tests_as_written():
+    manifest = _edited(
+        "cases", "not_null_generic_tests_id", _checks('"id"', '"id"')
+    )
+    _declaring(manifest, '"id"')
+    props = _props(_run(manifest, GENERIC).document)
+    assert props['"id"']["required"] is True
+    assert "required" not in props["id"]
+
+
+@pytest.mark.parametrize("written", ['"nope"', '""', '"', "`id", "[id", "'id'"])
+def test_a_quoted_name_of_no_declared_column_stays_undeclared(written):
+    manifest = _edited(
+        "cases", "not_null_generic_tests_filtered", _checks(written, written)
+    )
+    generated = _run(manifest, GENERIC)
+    assert "test_column_not_declared" in generated.flags
+    (rule,) = (
+        rule
+        for rule in generated.document["schema"][0]["quality"]
+        if rule["id"] == "not_null_generic_tests_filtered"
+    )
+    assert rule["arguments"] == {"column_name": written}
+
+
+def test_a_quoted_primary_key_column_is_the_declared_column():
+    manifest = _manifest("cases")
+    manifest["nodes"][GENERIC]["primary_key"] = ['"id"', "[status]"]
+    generated = _run(manifest, GENERIC)
+    props = _props(generated.document)
+    assert (props["id"]["primaryKey"], props["id"]["primaryKeyPosition"]) == (
+        True,
+        1,
+    )
+    assert (
+        props["status"]["primaryKey"],
+        props["status"]["primaryKeyPosition"],
+    ) == (
+        True,
+        2,
+    )
+    assert "primary_key_column_not_declared" not in generated.flags
+
+
+def test_a_quoted_name_resolves_without_moving_source_sha256():
+    manifest = _manifest("cases")
+    before = _run(manifest, GENERIC)
+    manifest["nodes"][GENERIC]["primary_key"] = ['"id"']
+    after = _run(manifest, GENERIC)
+    assert after.document == before.document
+    assert after.source_sha256 != before.source_sha256
+
+
 def test_a_generic_test_with_no_column_sits_on_the_schema_object_unflagged():
     def model_level(test):
         test["column_name"] = None
@@ -1204,7 +1451,6 @@ def test_source_sha256_moves_with_a_column_data_type_and_a_test_argument():
     ("place", "path", "value"),
     [
         ("test", "test_metadata.kwargs.model", "{{ ref('elsewhere') }}"),
-        ("test", "test_metadata.kwargs.column_name", "other"),
         ("test", "config.limit", 10),
         ("test", "config.store_failures", True),
         ("test", "config.meta", {"ticket": 2**70}),

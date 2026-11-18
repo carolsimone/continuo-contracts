@@ -198,6 +198,19 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   manifest that names a file outside those folders (such as `../x`, an absolute path, a link to
   another file, or `.env`) no longer shows that file's first row in the report, and a pipe or a
   device file no longer stalls the check: each gives the line for a file that cannot be read.
+- `dbt.generate` puts a test on the column it checks: its `column_name` kwarg when that differs from
+  the test node's own `column_name` (a test declared on the model, whose `column_name` is null, or
+  a column test whose arguments name another column), and its own `column_name` otherwise. A test
+  on an expression, such as a model-level `unique` on `(a || '-' || b)`, is a rule on the schema
+  object with the expression as its `column_name` argument and flags `test_column_not_declared`,
+  where it was a rule with no column at all; a test whose arguments name another declared column
+  sets `required` or `unique` on that column, not on the one it is declared under; and the kwarg
+  is in `source_sha256`, so a changed expression moves both hashes.
+- `dbt.generate` finds a declared column from the quoted name dbt writes with `quote: true`
+  (`"Name"`, `` `Name` `` or `[Name]`, a doubled closing mark read as one) in a test's
+  `column_name` and in a model's `primary_key`, so such a column keeps its `required`, `unique`,
+  `primaryKey` and rules instead of being flagged as not declared. A declared name that holds the
+  quotes itself is still found as written.
 
 ## [0.2.0] - 2026-11-15
 

@@ -721,16 +721,46 @@ GUARDED_NODES = sorted(
 )
 
 
+def _tree_fields(tree, prefix=()):
+    """Return the fields of a tree of `dbt.read_tree` as dotted paths, a leaf for each."""
+    fields = []
+    for key, branch in tree.items():
+        path = (*prefix, key)
+        fields += _tree_fields(branch, path) if branch else [".".join(path)]
+    return fields
+
+
+def _reads_of_each_test(project, node_id):
+    """Run `generate` on a node whose tests are recording views, and return each test with what
+    was read of it."""
+    manifest = load_manifest(project)
+    tests = dbt.tests_by_node(manifest).get(node_id, [])
+    seen = [set() for _ in tests]
+    dbt.generate(
+        manifest["nodes"][node_id],
+        [
+            _Recording(test, paths)
+            for test, paths in zip(tests, seen, strict=True)
+        ],
+        manifest=manifest,
+    )
+    return list(zip(tests, seen, strict=True))
+
+
+# A test's `column_name` kwarg is read to compare it with the test's own `column_name`, which the
+# tree of the test holds when the two are equal.
+_COMPARED_KWARG = "test_metadata.kwargs.column_name"
+
+
 @pytest.mark.parametrize(("project", "node_id"), GUARDED_NODES)
 def test_the_generator_reads_only_the_fields_it_declares(project, node_id):
     node_seen, test_seen, manifest_seen = _reads_of(project, node_id)
     assert _undeclared(node_seen, dbt._READ_PATHS) == []
-    assert _undeclared(test_seen, dbt._TEST_FIELDS) == []
     assert _undeclared(manifest_seen, dbt._MANIFEST_PATHS) == []
-    unread_kwargs = {
-        ("test_metadata", "kwargs", key) for key in dbt._UNREAD_KWARGS
-    }
-    assert test_seen & unread_kwargs == set()
+    for test, seen in _reads_of_each_test(project, node_id):
+        declared = _tree_fields(dbt.read_tree("test", test=test))
+        assert _undeclared(seen, [*declared, _COMPARED_KWARG]) == []
+        assert ("test_metadata", "kwargs", "model") not in seen
 
 
 def _unread(seen, declared):

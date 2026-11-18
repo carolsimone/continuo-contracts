@@ -601,7 +601,8 @@ Each dbt test the node has becomes a quality rule, or a relationship:
 - `not_null` is `{id: <test name>, metric: nullValues, mustBe: 0}`, `unique` the same with
   `duplicateValues`, and `accepted_values` `{id, metric: invalidValues, mustBe: 0, arguments:
   {validValues: <values>, ...}}`, whose arguments also keep its other kwargs as written (but
-  `model` and `column_name`), such as `quote: false`, which changes what the test compares. A
+  `model` and `column_name`, which says where the rule goes, below), such as `quote: false`, which
+  changes what the test compares. A
   `not_null` test makes its column `required: true`, and a `unique`
   test makes it `unique: true`, only when the test has severity `error`, no `where`, and dbt's
   default `warn_if`, `error_if` and `fail_calc`.
@@ -622,8 +623,17 @@ Each dbt test the node has becomes a quality rule, or a relationship:
   the test's `description` and `tags`, and `where`, `warnIf`, `errorIf` and `failCalc` as
   `continuo` properties when they are set and are not dbt's defaults. A relationship has no field
   for them, so only a strict test gives one.
-- A test on a column the node does not declare goes on the schema object, as the same rule with
-  `column_name` in its arguments (inside `implementation` for a `custom` rule); a `relationships`
+- The column a test checks is its `column_name` kwarg when that differs from the test's own
+  `column_name`, and the test's own `column_name` otherwise: dbt writes a test declared on the
+  model with a null `column_name` and the column or the SQL expression it checks in the kwarg, and
+  a column test whose arguments name another column keeps the column it is declared under in its
+  own `column_name`. A name in one pair of SQL quotes, `"..."`, `` `...` `` or `[...]` with a
+  doubled closing mark read as one, as dbt writes a column with `quote: true` in a test and in a
+  model's inferred `primary_key`, names the declared column inside the quotes when no declared
+  column has the quoted name itself; no adapter is read. The contract carries the declared name.
+- A test on a column the node does not declare, or on an expression, goes on the schema object, as
+  the same rule with that column or expression as `column_name` in its arguments (inside
+  `implementation` for a `custom` rule), and sets no `required` or `unique`; a `relationships`
   test there is a `custom` rule.
 
 The rules on a column, and the test rules on the schema object, come in the order of their
@@ -633,8 +643,9 @@ each item `{name, enabled, granularity, params}` of `config.meta.continuo.tests`
 `enabled` `true` when it is not set.
 
 `flags` names the marks of `FLAGS` the contract carries: `jinja_in_test_arguments` when a test's
-kwargs (but `model` and `column_name`) or its `where` hold `{{` or `{%`, which the rule keeps as
-written; `test_column_not_declared`; and `primary_key_column_not_declared` when a model's
+kwargs (but `model`, and a `column_name` equal to the test's own) or its `where` hold `{{` or `{%`,
+which the rule keeps as written; `test_column_not_declared` when a test checks a column the node
+does not declare or an expression; and `primary_key_column_not_declared` when a model's
 `primary_key` names a column the node does not declare, which is left out.
 
 A field with no value is left out of the document. The result does not depend on the order of the
@@ -649,7 +660,8 @@ and `timeout_minutes`; from `config.meta.continuo`, `readers`, `reads` and each 
 `name`, `enabled`, `granularity` and `params`; and from each column, in their order, its `name`,
 `description`, `data_type`, `tags` and `meta.continuo.classification`. Of each test it covers the
 `name`, `column_name`, `attached_node`, `depends_on.nodes`, `test_metadata`'s `name`,
-`namespace` and kwargs (but `model` and `column_name`), `description`, `tags`, and `config`'s
+`namespace` and kwargs (but `model`, and a `column_name` equal to the test's own `column_name`,
+which that field covers), `description`, `tags`, and `config`'s
 `severity`, `where`, `warn_if`, `error_if` and `fail_calc`; and of a relationship's target, a
 node's `schema`, `name` and `version` or a source's `schema`, `identifier` and `name`. Any other
 `config` or `meta` key, a column's `quote` or `constraints`, a test's `limit` or `store_failures`,
@@ -796,7 +808,8 @@ facts == run_facts(normalise_dbt(generated.document, reads=[]))  # True
   the manifest node or source that a `relationships` test points to. The tree is a dict whose keys
   are field names, each holding the tree of the fields read inside it and `{}` for a field read
   whole; the key `*` stands for every key of a mapping or every item of a list, in order. A
-  test's tree names each of its own kwargs but `model` and `column_name`. The result is a new dict
+  test's tree names each of its own kwargs but `model` and a `column_name` equal to the test's own
+  `column_name`. The result is a new dict
   on every call. It raises `ValueError` for another `part`, for `test` with no test node, and for a
   test node given with another part.
 - `RunFacts`: what `run_facts` returns, a frozen dataclass with the fields `unique_id`, `schema`,
@@ -1639,8 +1652,8 @@ every case of every file.
   flags it), gives `id` the type `varchar(36)` and `status` the type `character varying(00020)`,
   and moves the lenient `unique` test to the column `ghost`, which flags it too. Each input is
   pruned to the fields `generate` reads, which `dbt.read_tree` gives: `node` keeps its `unique_id`
-  and those fields, `tests` keep their `unique_id` and those fields (each kwarg but `model` and
-  `column_name`), and `manifest` holds under `nodes` and `sources` each entry of a test's
+  and those fields, `tests` keep their `unique_id` and those fields (each kwarg but `model` and a
+  `column_name` equal to the test's own), and `manifest` holds under `nodes` and `sources` each entry of a test's
   `depends_on.nodes` other than its `attached_node` and the tested node, with a node's `schema`,
   `name` and `version` or a source's `schema`, `identifier` and `name`. A field the node does not
   hold is left out, and a value is kept whole. The file is ASCII and the keys of every object are
