@@ -91,6 +91,7 @@ _TEST_KEYS: Final = {
         "04ebaabb0a"
     ),
     "lenient": "test.cases.unique_generic_tests_lenient.408a2824ab",
+    "id": "test.cases.not_null_generic_tests_id.3e9e0d509b",
 }
 
 
@@ -128,6 +129,48 @@ def edit_columns(manifest: dict[str, Any]) -> None:
     lenient["test_metadata"]["kwargs"]["column_name"] = "ghost"
 
 
+def edit_column_names(manifest: dict[str, Any]) -> None:
+    """Name two columns of the node of `EDITED_NODE` in `manifest` as dbt does in two cases.
+
+    The lenient `unique` test becomes a test declared on the model, which checks the expression
+    `(id || '-' || status)`: its own `column_name` is null and its `column_name` kwarg is the
+    expression. The `not_null` test of `id` and the node's `primary_key` name the column quoted,
+    `"id"`, as dbt writes a column with `quote: true`.
+    """
+    nodes = manifest["nodes"]
+    lenient = nodes[_TEST_KEYS["lenient"]]
+    lenient["column_name"] = None
+    lenient["test_metadata"]["kwargs"]["column_name"] = "(id || '-' || status)"
+    quoted = nodes[_TEST_KEYS["id"]]
+    quoted["column_name"] = '"id"'
+    quoted["test_metadata"]["kwargs"]["column_name"] = '"id"'
+    nodes[EDITED_NODE]["primary_key"] = ['"id"']
+
+
+def edit_resolution(manifest: dict[str, Any]) -> None:
+    """Change three tests of the node of `EDITED_NODE` in `manifest` that dbt resolved otherwise.
+
+    The `not_null` test of `id` is written `dbt.not_null`, and the project's own `test_not_null`
+    macro is the one dbt resolved first for it; the warned `not_null` test is strict and that
+    macro overrides it; and the `relationships` test of `customer_id` points to the literal
+    relation `analytics.some_table`, so the tested node is its only dependency and its one ref.
+    """
+    nodes = manifest["nodes"]
+    project_macro = "macro.cases.test_not_null"
+    qualified = nodes[_TEST_KEYS["id"]]
+    qualified["test_metadata"]["namespace"] = "dbt"
+    qualified["depends_on"]["macros"] = [project_macro]
+    overridden = nodes[_TEST_KEYS["warned"]]
+    overridden["config"]["severity"] = "error"
+    overridden["depends_on"]["macros"] = [project_macro]
+    literal = nodes[_TEST_KEYS["customer"]]
+    literal["test_metadata"]["kwargs"]["to"] = "analytics.some_table"
+    literal["depends_on"]["nodes"] = [EDITED_NODE]
+    literal["refs"] = [
+        {"name": "generic_tests", "package": None, "version": None}
+    ]
+
+
 # The cases of the vector whose node and tests are fixture nodes changed by an edit, which the name
 # of the case states: the name, the fixture project, the manifest key of the node, the tables its
 # compiled SQL names and the edit.
@@ -150,6 +193,20 @@ EDITED_CASES: Final[
         EDITED_NODE,
         (),
         edit_columns,
+    ),
+    (
+        "model_level_expression_and_quoted_columns",
+        "cases",
+        EDITED_NODE,
+        (),
+        edit_column_names,
+    ),
+    (
+        "dbt_tests_by_resolved_macro_and_unresolved_target",
+        "cases",
+        EDITED_NODE,
+        (),
+        edit_resolution,
     ),
 )
 

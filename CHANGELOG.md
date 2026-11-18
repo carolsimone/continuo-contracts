@@ -106,10 +106,11 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   rule of the generator, each with its node, tests and manifest pruned to the fields `generate`
   reads; a tenth case, `bad_criticality`, that pins the `source_sha256` and lists the issues
   `validate_dbt_contract` finds in the generated contract of a model whose criticality is `high`;
-  and two cases built from fixture nodes the writer edits, which pin a namespaced generic test,
+  and four cases built from fixture nodes the writer edits, which pin a namespaced generic test,
   `warnIf` and `failCalc`, an extra `accepted_values` kwarg, a `relationships` test that is not
-  strict, a key of several columns, `maxLength` and tests and key columns the node does not
-  declare. `tests/fixtures/dbt/golden/<project>/<id>.json` holds the generated contract, the
+  strict, a key of several columns, `maxLength`, tests and key columns the node does not
+  declare, a model-level test on an expression, quoted column names, `dbt.not_null`, a `not_null`
+  that the project's macro overrides and a `relationships` test to a literal relation. `tests/fixtures/dbt/golden/<project>/<id>.json` holds the generated contract, the
   flags, the `source_sha256`, the stored form and the hash of every kept node of the five fixture
   manifests, and `scripts/write_dbt_goldens.py` writes both, the same bytes on every run, with the
   public `dbt.read_tree` for the fields it keeps. No 0.2.0 vector file changes.

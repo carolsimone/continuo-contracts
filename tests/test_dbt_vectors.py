@@ -58,10 +58,18 @@ EDITED = {
         "model.cases.generic_tests",
         writer.edit_columns,
     ),
+    "model_level_expression_and_quoted_columns": (
+        "model.cases.generic_tests",
+        writer.edit_column_names,
+    ),
+    "dbt_tests_by_resolved_macro_and_unresolved_target": (
+        "model.cases.generic_tests",
+        writer.edit_resolution,
+    ),
 }
 
 # The SHA-256 of the file, which no later change may move.
-DBT_CONTRACTS = "71e54faf42af5192b505a31f1089fcb169cdc0a82cce5746004896063c1a865b"
+DBT_CONTRACTS = "78b37ecb83cab4605ec8b71e52dafd290f68efb6fd8021fffb5649a6e288c110"
 
 # The SHA-256 of each vector file of 0.2.0, which no later change may move.
 OLDER_VECTORS = {
@@ -226,7 +234,10 @@ def test_the_pruned_manifest_holds_only_the_relationship_targets():
         },
     }
     for case in CASES:
-        if case["name"] == "model_with_tests" or case["name"] in EDITED:
+        if case["name"] == "dbt_tests_by_resolved_macro_and_unresolved_target":
+            # The `relationships` test of `customer_id` points to no node of the manifest.
+            assert case["manifest"] == {**targets, "nodes": {}}
+        elif case["name"] == "model_with_tests" or case["name"] in EDITED:
             assert case["manifest"] == targets, case["name"]
         else:
             assert case["manifest"] == {"nodes": {}, "sources": {}}, case["name"]
@@ -424,3 +435,66 @@ def test_the_edited_columns_case_pins_a_composite_key_lengths_and_undeclared_col
     lenient = _rules(case)["unique_generic_tests_lenient"]
     assert lenient["arguments"] == {"column_name": "ghost"}
     assert continuo_values(lenient["customProperties"]) == {"errorIf": ">10"}
+
+
+def test_the_column_names_case_pins_an_expression_and_quoted_columns():
+    case = _case("model_level_expression_and_quoted_columns")
+    assert case["flags"] == [
+        "jinja_in_test_arguments",
+        "test_column_not_declared",
+    ]
+    lenient = _rules(case)["unique_generic_tests_lenient"]
+    assert lenient["arguments"] == {"column_name": "(id || '-' || status)"}
+    assert lenient["metric"] == "duplicateValues"
+    properties = _properties(case)
+    assert properties["lenient"] == {"name": "lenient"}
+    assert properties["id"]["primaryKey"] is True
+    assert properties["id"]["required"] is True
+    assert "not_null_generic_tests_id" in _rules(case, "id")
+    assert case["node"]["primary_key"] == ['"id"']
+    (test,) = (
+        test
+        for test in case["tests"]
+        if test["unique_id"].startswith("test.cases.not_null_generic_tests_id.")
+    )
+    assert test["column_name"] == '"id"'
+    (test,) = (
+        test
+        for test in case["tests"]
+        if test["unique_id"].startswith(
+            "test.cases.unique_generic_tests_lenient."
+        )
+    )
+    assert test["column_name"] is None
+    assert test["test_metadata"]["kwargs"] == {
+        "column_name": "(id || '-' || status)"
+    }
+
+
+def test_the_resolution_case_pins_dbts_tests_and_an_unresolved_target():
+    case = _case("dbt_tests_by_resolved_macro_and_unresolved_target")
+    properties = _properties(case)
+    # `dbt.not_null` is dbt's, though the project's own macro is the one dbt resolved first.
+    assert properties["id"]["required"] is True
+    assert (
+        _rules(case, "id")["not_null_generic_tests_id"]["metric"] == "nullValues"
+    )
+    # A bare `not_null` that the project's macro overrides is a custom rule.
+    assert "required" not in properties["warned"]
+    assert _rules(case, "warned")["not_null_generic_tests_warned"] == {
+        "id": "not_null_generic_tests_warned",
+        "name": "not_null_generic_tests_warned",
+        "type": "custom",
+        "engine": "dbt",
+        "implementation": {"test": "not_null"},
+    }
+    # A relationship to a relation the manifest does not hold is a custom rule keeping `to`.
+    customer = properties["customer_id"]
+    assert "relationships" not in customer
+    (rule,) = customer["quality"]
+    assert rule["implementation"] == {
+        "test": "relationships",
+        "arguments": {"field": "id", "to": "analytics.some_table"},
+    }
+    assert case["manifest"]["nodes"] == {}
+    assert properties["event_id"]["relationships"] == [{"to": "raw.events.id"}]

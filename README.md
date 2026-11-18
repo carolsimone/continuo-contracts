@@ -1660,7 +1660,7 @@ every case of every file.
   generated contract is not valid: `validate.validate_dbt_contract` gives, for the `document` of
   `dbt.generate(node, tests, manifest=manifest)`, the `{"path", "reason"}` of each issue in
   `issues`, in order, and `source_sha256` is the hash of that call. The nine cases with a contract
-  come first, then the one case with `issues`, `bad_criticality`, then two cases with a contract
+  come first, then the one case with `issues`, `bad_criticality`, then four cases with a contract
   whose inputs are fixture nodes the writer edits. The first ten come from the `cases` fixture
   project as it is, one for each rule: a model with tests (every kind of test, relationships to a
   versioned model and to a source, and Jinja in a kwarg, which flags it), a seed with
@@ -1669,7 +1669,7 @@ every case of every file.
   governed model (readers, grants, access, group, freshness, a timeout, declared reads and a table
   test), the governed model again with the reads `["Analytics.Orders", "analytics.orders",
   "raw.events"]`, which store joined with its declared read, once and in lower case, and a model
-  with the criticality `high`, which is the case with `issues`. The two edited cases start from the
+  with the criticality `high`, which is the case with `issues`. The four edited cases start from the
   model with tests, and their names state the edit:
   `namespaced_test_thresholds_extra_kwarg_and_loose_relationship` makes the test of `amount` the
   generic test `accepted_range` of the package `dbt_utils`, gives the warned `not_null` test the
@@ -1678,10 +1678,21 @@ every case of every file.
   it is a `custom` rule and not a relationship; `composite_key_lengths_and_undeclared_columns`
   makes the node's `primary_key` `id`, `status` and `ghost` (a column it does not declare, which
   flags it), gives `id` the type `varchar(36)` and `status` the type `character varying(00020)`,
-  and moves the lenient `unique` test to the column `ghost`, which flags it too. Each input is
-  pruned to the fields `generate` reads, which `dbt.read_tree` gives: `node` keeps its `unique_id`
-  and those fields, `tests` keep their `unique_id` and those fields (each kwarg but `model` and a
-  `column_name` equal to the test's own), and `manifest` holds under `nodes` and `sources` each entry of a test's
+  and moves the lenient `unique` test to the column `ghost`, which flags it too;
+  `model_level_expression_and_quoted_columns` makes the lenient `unique` test one declared on the
+  model that checks the expression `(id || '-' || status)` (a rule on the schema object with the
+  expression as its `column_name`, which flags it), and names `id` quoted, `"id"`, in its
+  `not_null` test and in the node's `primary_key`, which still give `id` its `required` and
+  `primaryKey`; `dbt_tests_by_resolved_macro_and_unresolved_target` writes the `not_null` test of
+  `id` as `dbt.not_null` with the project's macro resolved first (still dbt's, so `id` is
+  `required`), makes the warned `not_null` test strict and overridden by the project's
+  `test_not_null` macro (a `custom` rule, no `required`), and points the `relationships` test of
+  `customer_id` at the literal relation `analytics.some_table` (a `custom` rule that keeps its
+  `to`). Each input is pruned to the fields `generate` reads, which `dbt.read_tree` gives: `node`
+  keeps its `unique_id` and those fields, `tests` keep their `unique_id` and those fields (each
+  kwarg but `model` and a `column_name` equal to the test's own, the first of the
+  `depends_on.macros` of a test of one of dbt's four names with no namespace, and the `refs` of a
+  `relationships` test), and `manifest` holds under `nodes` and `sources` each entry of a test's
   `depends_on.nodes` other than its `attached_node` and the tested node, with a node's `schema`,
   `name` and `version` or a source's `schema`, `identifier` and `name`. A field the node does not
   hold is left out, and a value is kept whole. The file is ASCII and the keys of every object are
