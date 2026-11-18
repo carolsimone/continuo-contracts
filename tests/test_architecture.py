@@ -312,6 +312,24 @@ OFFENCES = {
         "import-graph",
         "continuo_contracts.canonical is not allowed to import",
     ),
+    "dbt imports python, which sits in its layer": (
+        "dbt",
+        "from continuo_contracts import python\n",
+        "import-graph",
+        "continuo_contracts.dbt is not allowed to import",
+    ),
+    "yaml_strict imports dbt, which sits in its layer": (
+        "yaml_strict",
+        "from continuo_contracts import dbt\n",
+        "import-graph",
+        "continuo_contracts.yaml_strict is not allowed to import",
+    ),
+    "dbt imports a higher layer": (
+        "dbt",
+        "from continuo_contracts import contract\n",
+        "import-graph",
+        "continuo_contracts.dbt is not allowed to import",
+    ),
     "jsonschema in a module that may not use it": (
         "canonical",
         "import jsonschema\n",

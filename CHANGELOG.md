@@ -7,6 +7,14 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- `continuo_contracts.dbt`: the gates and the names of a dbt manifest node. `skip_reason` gives the
+  reason continuo leaves a model, seed or snapshot out (`no_owner`, `local_stub` or
+  `installed_package`, checked in that order) or `None` for a node it keeps, `node_service`,
+  `project_service`, `schedule`, `table_name` and `unique_id` give its service, schedule and id, and
+  `tests_by_node` joins the tests of a manifest to the nodes they test. Each answers as continuo's
+  parser does today for every node of the five fixture manifests, which
+  `tests/fixtures/dbt/todays_gates.json` records. A field of a node in a shape these functions cannot
+  read raises the new `DbtNodeError`.
 - Test fixtures for dbt nodes: `tests/fixtures/dbt/projects` holds the dbt projects `core`,
   `finance`, `marketing` and `service_1`, copied from continuo-demo at commit
   `d92d371223107e77f5ca9291bfff5f6bb25e1703`, and a `cases` project with a local package `cases_pkg`

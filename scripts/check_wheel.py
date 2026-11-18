@@ -40,6 +40,7 @@ REQUIRED_MEMBERS: tuple[str, ...] = tuple(
         "canonical.py",
         "cli.py",
         "contract.py",
+        "dbt.py",
         "errors.py",
         "fingerprints.py",
         "fingerprints.yaml",

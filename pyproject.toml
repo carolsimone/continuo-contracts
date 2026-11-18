@@ -118,7 +118,7 @@ layers = [
     "cli",
     "validate",
     "contract",
-    "python | yaml_strict",
+    "python | yaml_strict | dbt",
     "canonical | hashing | schema | fingerprints",
     "errors | vocabulary",
 ]
@@ -136,6 +136,7 @@ source_modules = [
     "continuo_contracts.canonical",
     "continuo_contracts.cli",
     "continuo_contracts.contract",
+    "continuo_contracts.dbt",
     "continuo_contracts.errors",
     "continuo_contracts.fingerprints",
     "continuo_contracts.hashing",
@@ -154,6 +155,7 @@ source_modules = [
     "continuo_contracts.canonical",
     "continuo_contracts.cli",
     "continuo_contracts.contract",
+    "continuo_contracts.dbt",
     "continuo_contracts.errors",
     "continuo_contracts.hashing",
     "continuo_contracts.python",
@@ -171,6 +173,7 @@ allow_indirect_imports = true
 source_modules = [
     "continuo_contracts.canonical",
     "continuo_contracts.contract",
+    "continuo_contracts.dbt",
     "continuo_contracts.errors",
     "continuo_contracts.fingerprints",
     "continuo_contracts.hashing",

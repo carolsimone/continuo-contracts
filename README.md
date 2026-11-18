@@ -487,6 +487,89 @@ load("a: &x 1\nb: *x\n")
   aliases, merge keys, repeated keys, keys that are not strings, other tags, more than one
   document, nesting that is too deep and values that canonical JSON cannot write.
 
+## dbt
+
+```python
+from continuo_contracts.dbt import (
+    DEFAULT_CRITICALITY,
+    RESOURCE_TYPES,
+    SEED_SCHEDULE,
+    SKIP_REASONS,
+    node_service,
+    project_service,
+    schedule,
+    skip_reason,
+    table_name,
+    tests_by_node,
+    unique_id,
+)
+```
+
+continuo keeps the models, seeds and snapshots of a dbt `manifest.json` that no gate leaves out.
+These functions are those gates and the names a kept node gets. They read a node as `json.load`
+returns it from the manifest (a `Mapping[str, Any]`), so a producer's CI and continuo's parser give
+the same answer for the same node. A field in a shape they cannot read raises `DbtNodeError` (a
+`ContractsError`), and the message starts with the node's id and names the field, as in
+`model.shop.orders: tags must be a list of strings, got str`.
+
+The gates run in this order and the first one that applies names the reason:
+
+1. `no_owner`: the node has no `config.meta.owner`, or an empty one. A `config` or a `meta` that
+   is missing or is not a mapping is no owner either.
+2. `local_stub`: the node has the tag `local_stub`.
+3. `installed_package`: the node has no tag and its service is not the project's. dbt applies the
+   project's top-level `+meta` to the nodes of its installed packages too, so such a node can
+   carry the project's owner and still not be the project's to schedule. With no project (the
+   manifest names none and no service is declared) no node is left out for this reason.
+
+A node's service is the first entry of its `fqn` with `_` written `-`, and a node with no `fqn`
+has no service (`""`). The project is `metadata.project_name` written the same way, else the
+declared service, else `""`.
+
+```python
+manifest = json.loads(text)
+project = project_service(manifest, declared_service="")
+kept = {
+    unique_id(node): schedule(node)
+    for node in manifest["nodes"].values()
+    if node["resource_type"] in RESOURCE_TYPES
+    and skip_reason(node, project=project) is None
+}
+# {"analytics.orders": "daily", "analytics.customer.v2": "daily", ...}
+```
+
+### Public names
+
+- `RESOURCE_TYPES`: `("model", "seed", "snapshot")`, the resource types of the nodes that can get a
+  contract.
+- `SKIP_REASONS`: `("no_owner", "local_stub", "installed_package")`, the values of `skip_reason`
+  in the order of the gates.
+- `DEFAULT_CRITICALITY`: `"SECONDARY"`, the criticality of a node whose `meta` names none.
+- `SEED_SCHEDULE`: `"seed"`, the schedule of a seed that carries no tag.
+- `node_service`: `node_service(node) -> str` returns the first entry of the node's `fqn` with `_`
+  written `-`, and `""` for a node with no `fqn` or an empty one. An `fqn` that is not a list of
+  strings raises `DbtNodeError`.
+- `project_service`: `project_service(manifest, declared_service) -> str` returns the manifest's
+  `metadata.project_name` with `_` written `-`, else `declared_service` as given.
+- `skip_reason`: `skip_reason(node, *, project) -> str | None` returns the first of
+  `SKIP_REASONS` that applies to the node, or `None` for a node continuo keeps. `project` is what
+  `project_service` returns, and with `""` no node is left out as `installed_package`. It raises
+  `DbtNodeError` for `tags` that are not a list of strings and for an `fqn` that is not a list of
+  strings, only for a node that an earlier gate lets through.
+- `schedule`: `schedule(node) -> str` returns the node's first tag, else `seed` for a seed, else
+  `""`, the schedule of a dormant node (a model or snapshot with no tag), which runs only by hand.
+  It raises `DbtNodeError` for `tags` that are not a list of strings.
+- `table_name`: `table_name(node) -> str` returns the node's `name`, or `<name>.v<version>` for a
+  versioned model, keeping the case. A `name` that is not a non-empty string, or a `version` that
+  is neither a string nor a number, raises `DbtNodeError`.
+- `unique_id`: `unique_id(node) -> str` returns `<schema>.<table>` in lower case, with the table of
+  `table_name`; the alias is not part of it. A `schema` that is not a non-empty string raises
+  `DbtNodeError`.
+- `tests_by_node`: `tests_by_node(manifest) -> dict[str, list[Mapping[str, Any]]]` joins the nodes
+  of resource type `test` to the nodes they test, the way dbt counts them: a test counts for its
+  `attached_node` when it has one, else for every entry of its `depends_on.nodes`, once for each.
+  The key is a node id and the tests of one node come in the order of the manifest's keys.
+
 ## vocabulary
 
 ```python
@@ -896,6 +979,7 @@ continuo-contracts hash contracts/py_daily_kpis.odcs.yaml --service service-py \
 from continuo_contracts.errors import (
     CanonicalJsonError,
     ContractsError,
+    DbtNodeError,
     FingerprintsFileError,
     HashInputError,
     ProjectionError,
@@ -923,6 +1007,9 @@ surrogate, and an argument of the wrong type can raise `TypeError` or `Attribute
   names the service or the entry.
 - `ProjectionError`: `canonical_sql_type`, `PythonNode.from_mapping`, `code_projection` and
   `projection_hash` refuse an SQL type or a Python node.
+- `DbtNodeError`: `dbt.skip_reason`, `dbt.node_service`, `dbt.schedule`, `dbt.table_name` and
+  `dbt.unique_id` refuse a field of a manifest node in a shape they cannot read, and the message
+  starts with the node's id, then `: ` and the field with what it must be and what it is.
 - `FingerprintsFileError`: `parse_fingerprints` and `load` refuse a fingerprints file that is not
   in the form described under [fingerprints](#fingerprints), and the message names the location in
   the file.

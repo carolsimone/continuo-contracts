@@ -92,6 +92,7 @@ not a service, and layers would add indirection without a second implementation.
 - `schema`: the packaged ODCS v3.2.0 JSON schema and the check of its bytes.
 - `yaml_strict`: the reader of a contract file, YAML 1.2 core with no aliases, merge keys or
   repeated keys.
+- `dbt`: the gates of a dbt manifest node, the names a kept node gets and the join of its tests.
 - `vocabulary`: the custom properties of the `continuo` vendor and where each may sit.
 - `validate`: the check of a Python node's ODCS contract, the JSON schema and continuo's rules, with
   every problem as an `Issue` that has a path and a closed reason.
@@ -101,9 +102,9 @@ not a service, and layers would add indirection without a second implementation.
 
 `errors` and `vocabulary` import nothing from the package. `canonical`, `hashing`, `fingerprints`
 and `schema` import only `errors` (`fingerprints` also PyYAML), `yaml_strict` imports `canonical`,
-`errors` and PyYAML, `python` imports `canonical`, `errors`, `hashing`, `fingerprints` and
-`vocabulary`, `validate` imports `canonical`, `contract`, `errors`, `python`, `schema`,
-`vocabulary` and jsonschema, `contract` imports `canonical`, `errors`, `fingerprints`, `hashing`,
+`errors` and PyYAML, `dbt` imports only `errors`, `python` imports `canonical`, `errors`,
+`hashing`, `fingerprints` and `vocabulary`, `validate` imports `canonical`, `contract`, `errors`,
+`python`, `schema`, `vocabulary` and jsonschema, `contract` imports `canonical`, `errors`, `fingerprints`, `hashing`,
 `python` and `vocabulary`, `cli` imports `contract`, `errors`, `validate` and `yaml_strict`, and
 nothing imports `scripts` or `tests`. The only files the package reads are the packaged
 `fingerprints.yaml`, in `fingerprints.load()`, the packaged ODCS schema, in `schema.load()`, and the
@@ -117,8 +118,8 @@ edge by edge: the layers allow, for example, `canonical` to import `vocabulary` 
 `hashing`.
 
 - `import-graph` puts the modules in layers (an ordering of the flat modules, not a split of the
-  package), top to bottom: `cli`, then `validate`, then `contract`, then `python` and
-  `yaml_strict`, then `canonical`, `hashing`, `schema` and `fingerprints`, then `errors` and
+  package), top to bottom: `cli`, then `validate`, then `contract`, then `python`, `yaml_strict`
+  and `dbt`, then `canonical`, `hashing`, `schema` and `fingerprints`, then `errors` and
   `vocabulary`. A module imports only from the layers below its own, and the modules of one layer
   import none of each other, so nothing imports `cli` and `errors` and `vocabulary` import nothing
   from the package. The contract is exhaustive: a module that no layer names fails it.
