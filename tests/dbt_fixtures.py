@@ -33,20 +33,35 @@ def load_manifest(name: str) -> dict[str, Any]:
 
 
 def _picked(value: Any, tree: dict[str, Any]) -> Any:
-    """Return the fields of `value` that `tree` names; `*` gives a list in the order of `value`."""
+    """Return the fields of `value` that `tree` names; `*` gives a list in the order of `value`,
+    and `0` over a list a list of its first item alone."""
     if "*" in tree:
         if isinstance(value, dict):
             return [[key, _read(item, tree["*"])] for key, item in value.items()]
         return [_read(item, tree["*"]) for item in value]
+    if isinstance(value, list):
+        return [_read(item, tree["0"]) for item in value[:1]]
     return {key: _read(value[key], tree[key]) for key in tree if key in value}
 
 
 def _read(value: Any, tree: dict[str, Any]) -> Any:
     if isinstance(value, dict) and tree:
         return _picked(value, tree)
-    if isinstance(value, list) and "*" in tree:
+    if isinstance(value, list) and ("*" in tree or "0" in tree):
         return _picked(value, tree)
     return value
+
+
+def _is_dbts_relationships(test: dict[str, Any]) -> bool:
+    """Say whether `test` runs dbt's `relationships`: by the namespace `dbt`, or by no namespace
+    and dbt's own macro as the first that dbt resolved for it."""
+    metadata = test.get("test_metadata") or {}
+    if metadata.get("name") != "relationships":
+        return False
+    if metadata.get("namespace"):
+        return metadata["namespace"] == "dbt"
+    macros = (test.get("depends_on") or {}).get("macros") or []
+    return macros[:1] == ["macro.dbt.test_relationships"]
 
 
 def _is_strict(test: dict[str, Any]) -> bool:
@@ -63,16 +78,14 @@ def _is_strict(test: dict[str, Any]) -> bool:
 def _targets(
     node: dict[str, Any], tests: list[dict[str, Any]], manifest: dict[str, Any]
 ) -> dict[str, Any]:
-    """Return the read fields of each target of a strict `relationships` test on a declared
+    """Return the read fields of each target of a strict dbt `relationships` test on a declared
     column, by its manifest key: the entry of the test's `depends_on.nodes` other than its
     `attached_node`, found under `nodes` or else under `sources`."""
     columns = {column["name"] for column in (node.get("columns") or {}).values()}
     targets: dict[str, Any] = {}
     for test in tests:
-        metadata = test.get("test_metadata") or {}
         if (
-            metadata.get("name") != "relationships"
-            or metadata.get("namespace")
+            not _is_dbts_relationships(test)
             or test.get("column_name") not in columns
             or not _is_strict(test)
         ):

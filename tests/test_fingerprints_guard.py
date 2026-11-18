@@ -560,13 +560,19 @@ _SETTINGS = {
 def _dbt_test(
     node_id, name, column, generic, kwargs=None, extra_nodes=(), strict=False
 ):
-    """Return a test node; a `strict` one has dbt's default severity, `where` and thresholds."""
+    """Return a test node; a `strict` one has dbt's default severity, `where` and thresholds.
+
+    dbt resolved its generic test to dbt's own macro of that name, so one of dbt's tests is dbt's.
+    """
     return {
         "name": name,
         "unique_id": f"test.cases.{name}.0",
         "attached_node": node_id,
         "column_name": column,
-        "depends_on": {"nodes": [*extra_nodes, node_id]},
+        "depends_on": {
+            "macros": [f"macro.dbt.test_{generic}"],
+            "nodes": [*extra_nodes, node_id],
+        },
         "description": "checks the table",
         "tags": ["quality"],
         "test_metadata": {

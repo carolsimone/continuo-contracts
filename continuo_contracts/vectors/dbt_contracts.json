@@ -338,7 +338,7 @@
    "version": null
   },
   "reads": [],
-  "source_sha256": "3d5f4c74214807fd5c77316d01cc109b09421f04d50b470b3e94f4cffafe0525",
+  "source_sha256": "14dc16d004cad736e6436d276e7780a6bb88b0564a3caf354338da6958dc61b7",
   "stored": {
    "apiVersion": "v3.2.0",
    "customProperties": [
@@ -555,6 +555,9 @@
      "where": null
     },
     "depends_on": {
+     "macros": [
+      "macro.dbt.test_accepted_values"
+     ],
      "nodes": [
       "model.cases.generic_tests"
      ]
@@ -582,6 +585,9 @@
      "where": null
     },
     "depends_on": {
+     "macros": [
+      "macro.dbt.test_accepted_values"
+     ],
      "nodes": [
       "model.cases.generic_tests"
      ]
@@ -612,6 +618,9 @@
      "where": null
     },
     "depends_on": {
+     "macros": [
+      "macro.dbt.test_accepted_values"
+     ],
      "nodes": [
       "model.cases.generic_tests"
      ]
@@ -669,6 +678,9 @@
      "where": "id > 0"
     },
     "depends_on": {
+     "macros": [
+      "macro.dbt.test_not_null"
+     ],
      "nodes": [
       "model.cases.generic_tests"
      ]
@@ -693,6 +705,9 @@
      "where": null
     },
     "depends_on": {
+     "macros": [
+      "macro.dbt.test_not_null"
+     ],
      "nodes": [
       "model.cases.generic_tests"
      ]
@@ -717,6 +732,9 @@
      "where": null
     },
     "depends_on": {
+     "macros": [
+      "macro.dbt.test_not_null"
+     ],
      "nodes": [
       "model.cases.generic_tests"
      ]
@@ -741,6 +759,9 @@
      "where": null
     },
     "depends_on": {
+     "macros": [
+      "macro.dbt.test_relationships"
+     ],
      "nodes": [
       "model.cases.customer.v2",
       "model.cases.generic_tests"
@@ -748,6 +769,18 @@
     },
     "description": "",
     "name": "relationships_generic_tests_customer_id__id__ref_customer_",
+    "refs": [
+     {
+      "name": "customer",
+      "package": null,
+      "version": null
+     },
+     {
+      "name": "generic_tests",
+      "package": null,
+      "version": null
+     }
+    ],
     "tags": [],
     "test_metadata": {
      "kwargs": {
@@ -770,6 +803,9 @@
      "where": null
     },
     "depends_on": {
+     "macros": [
+      "macro.dbt.test_relationships"
+     ],
      "nodes": [
       "source.cases.raw.events",
       "model.cases.generic_tests"
@@ -777,6 +813,13 @@
     },
     "description": "",
     "name": "relationships_generic_tests_event_id__id__source_raw_events_",
+    "refs": [
+     {
+      "name": "generic_tests",
+      "package": null,
+      "version": null
+     }
+    ],
     "tags": [],
     "test_metadata": {
      "kwargs": {
@@ -799,6 +842,9 @@
      "where": null
     },
     "depends_on": {
+     "macros": [
+      "macro.dbt.test_unique"
+     ],
      "nodes": [
       "model.cases.generic_tests"
      ]
@@ -823,6 +869,9 @@
      "where": null
     },
     "depends_on": {
+     "macros": [
+      "macro.dbt.test_unique"
+     ],
      "nodes": [
       "model.cases.generic_tests"
      ]
@@ -1333,7 +1382,7 @@
    "version": 2
   },
   "reads": [],
-  "source_sha256": "40cfd25832017bca48e86421ed49aca940dfe115ec689d38a2aa5b0e55dd0cf1",
+  "source_sha256": "28a03d37cd6af159611876063c51a1b89a7465f567ef7cd73f39a96ca1202eb9",
   "stored": {
    "apiVersion": "v3.2.0",
    "customProperties": [
@@ -1415,6 +1464,9 @@
      "where": null
     },
     "depends_on": {
+     "macros": [
+      "macro.dbt.test_unique"
+     ],
      "nodes": [
       "model.cases.customer.v2"
      ]
@@ -3187,7 +3239,7 @@
    "version": null
   },
   "reads": [],
-  "source_sha256": "7057a21d2fa5b1e802a1b44550682b25d82c10a3573ac78a323bcef0455bf01d",
+  "source_sha256": "d726d142f148312e07493f27e4dc692b07f1dfe233be39b58d00af50643a53af",
   "stored": {
    "apiVersion": "v3.2.0",
    "customProperties": [
@@ -3428,6 +3480,9 @@
      "where": null
     },
     "depends_on": {
+     "macros": [
+      "macro.dbt.test_accepted_values"
+     ],
      "nodes": [
       "model.cases.generic_tests"
      ]
@@ -3455,6 +3510,9 @@
      "where": null
     },
     "depends_on": {
+     "macros": [
+      "macro.dbt.test_accepted_values"
+     ],
      "nodes": [
       "model.cases.generic_tests"
      ]
@@ -3486,6 +3544,9 @@
      "where": null
     },
     "depends_on": {
+     "macros": [
+      "macro.dbt.test_accepted_values"
+     ],
      "nodes": [
       "model.cases.generic_tests"
      ]
@@ -3543,6 +3604,9 @@
      "where": "id > 0"
     },
     "depends_on": {
+     "macros": [
+      "macro.dbt.test_not_null"
+     ],
      "nodes": [
       "model.cases.generic_tests"
      ]
@@ -3567,6 +3631,9 @@
      "where": null
     },
     "depends_on": {
+     "macros": [
+      "macro.dbt.test_not_null"
+     ],
      "nodes": [
       "model.cases.generic_tests"
      ]
@@ -3591,6 +3658,9 @@
      "where": null
     },
     "depends_on": {
+     "macros": [
+      "macro.dbt.test_not_null"
+     ],
      "nodes": [
       "model.cases.generic_tests"
      ]
@@ -3615,6 +3685,9 @@
      "where": null
     },
     "depends_on": {
+     "macros": [
+      "macro.dbt.test_relationships"
+     ],
      "nodes": [
       "model.cases.customer.v2",
       "model.cases.generic_tests"
@@ -3622,6 +3695,18 @@
     },
     "description": "",
     "name": "relationships_generic_tests_customer_id__id__ref_customer_",
+    "refs": [
+     {
+      "name": "customer",
+      "package": null,
+      "version": null
+     },
+     {
+      "name": "generic_tests",
+      "package": null,
+      "version": null
+     }
+    ],
     "tags": [],
     "test_metadata": {
      "kwargs": {
@@ -3644,6 +3729,9 @@
      "where": null
     },
     "depends_on": {
+     "macros": [
+      "macro.dbt.test_relationships"
+     ],
      "nodes": [
       "source.cases.raw.events",
       "model.cases.generic_tests"
@@ -3651,6 +3739,13 @@
     },
     "description": "",
     "name": "relationships_generic_tests_event_id__id__source_raw_events_",
+    "refs": [
+     {
+      "name": "generic_tests",
+      "package": null,
+      "version": null
+     }
+    ],
     "tags": [],
     "test_metadata": {
      "kwargs": {
@@ -3673,6 +3768,9 @@
      "where": null
     },
     "depends_on": {
+     "macros": [
+      "macro.dbt.test_unique"
+     ],
      "nodes": [
       "model.cases.generic_tests"
      ]
@@ -3697,6 +3795,9 @@
      "where": null
     },
     "depends_on": {
+     "macros": [
+      "macro.dbt.test_unique"
+     ],
      "nodes": [
       "model.cases.generic_tests"
      ]
@@ -4071,7 +4172,7 @@
    "version": null
   },
   "reads": [],
-  "source_sha256": "b3e0f88e5db9f42d298b29c28452e8455d68db0d2d4e77d4e8244b6b462bdb49",
+  "source_sha256": "873fa39cb3a6aed08a64133fe70ee1341d481cc2f1ad6af2ddb32448fa65a5b3",
   "stored": {
    "apiVersion": "v3.2.0",
    "customProperties": [
@@ -4304,6 +4405,9 @@
      "where": null
     },
     "depends_on": {
+     "macros": [
+      "macro.dbt.test_accepted_values"
+     ],
      "nodes": [
       "model.cases.generic_tests"
      ]
@@ -4331,6 +4435,9 @@
      "where": null
     },
     "depends_on": {
+     "macros": [
+      "macro.dbt.test_accepted_values"
+     ],
      "nodes": [
       "model.cases.generic_tests"
      ]
@@ -4361,6 +4468,9 @@
      "where": null
     },
     "depends_on": {
+     "macros": [
+      "macro.dbt.test_accepted_values"
+     ],
      "nodes": [
       "model.cases.generic_tests"
      ]
@@ -4418,6 +4528,9 @@
      "where": "id > 0"
     },
     "depends_on": {
+     "macros": [
+      "macro.dbt.test_not_null"
+     ],
      "nodes": [
       "model.cases.generic_tests"
      ]
@@ -4442,6 +4555,9 @@
      "where": null
     },
     "depends_on": {
+     "macros": [
+      "macro.dbt.test_not_null"
+     ],
      "nodes": [
       "model.cases.generic_tests"
      ]
@@ -4466,6 +4582,9 @@
      "where": null
     },
     "depends_on": {
+     "macros": [
+      "macro.dbt.test_not_null"
+     ],
      "nodes": [
       "model.cases.generic_tests"
      ]
@@ -4490,6 +4609,9 @@
      "where": null
     },
     "depends_on": {
+     "macros": [
+      "macro.dbt.test_relationships"
+     ],
      "nodes": [
       "model.cases.customer.v2",
       "model.cases.generic_tests"
@@ -4497,6 +4619,18 @@
     },
     "description": "",
     "name": "relationships_generic_tests_customer_id__id__ref_customer_",
+    "refs": [
+     {
+      "name": "customer",
+      "package": null,
+      "version": null
+     },
+     {
+      "name": "generic_tests",
+      "package": null,
+      "version": null
+     }
+    ],
     "tags": [],
     "test_metadata": {
      "kwargs": {
@@ -4519,6 +4653,9 @@
      "where": null
     },
     "depends_on": {
+     "macros": [
+      "macro.dbt.test_relationships"
+     ],
      "nodes": [
       "source.cases.raw.events",
       "model.cases.generic_tests"
@@ -4526,6 +4663,13 @@
     },
     "description": "",
     "name": "relationships_generic_tests_event_id__id__source_raw_events_",
+    "refs": [
+     {
+      "name": "generic_tests",
+      "package": null,
+      "version": null
+     }
+    ],
     "tags": [],
     "test_metadata": {
      "kwargs": {
@@ -4548,6 +4692,9 @@
      "where": null
     },
     "depends_on": {
+     "macros": [
+      "macro.dbt.test_unique"
+     ],
      "nodes": [
       "model.cases.generic_tests"
      ]
@@ -4572,6 +4719,9 @@
      "where": null
     },
     "depends_on": {
+     "macros": [
+      "macro.dbt.test_unique"
+     ],
      "nodes": [
       "model.cases.generic_tests"
      ]

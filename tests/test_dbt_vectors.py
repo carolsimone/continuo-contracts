@@ -61,7 +61,7 @@ EDITED = {
 }
 
 # The SHA-256 of the file, which no later change may move.
-DBT_CONTRACTS = "9d0a77a186c9858c3262845af7fea410bf6a1d35dbf92fd3405f44b3c612620b"
+DBT_CONTRACTS = "71e54faf42af5192b505a31f1089fcb169cdc0a82cce5746004896063c1a865b"
 
 # The SHA-256 of each vector file of 0.2.0, which no later change may move.
 OLDER_VECTORS = {

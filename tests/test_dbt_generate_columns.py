@@ -204,7 +204,10 @@ def test_seed_users_with_its_declarations_reads_as_the_designs_contract():
             name=f"{kind}_seed_users_user_id",
             unique_id=f"test.core.{kind}_seed_users_user_id.0",
             attached_node="seed.core.seed_users",
-            depends_on={"macros": [], "nodes": ["seed.core.seed_users"]},
+            depends_on={
+                "macros": [f"macro.dbt.test_{kind}"],
+                "nodes": ["seed.core.seed_users"],
+            },
         )
         manifest["nodes"][test["unique_id"]] = test
     assert _run(manifest, "seed.core.seed_users").document["schema"][0][
@@ -318,20 +321,6 @@ def test_relationships_to_a_model_and_to_a_source():
     }
 
 
-def test_a_relationship_to_its_own_node_names_the_node():
-    def to_itself(test):
-        test["depends_on"]["nodes"] = [GENERIC]
-
-    manifest = _edited(
-        "cases",
-        "relationships_generic_tests_customer_id__id__ref_customer_",
-        to_itself,
-    )
-    assert _props(_run(manifest, GENERIC).document)["customer_id"][
-        "relationships"
-    ] == [{"to": "analytics.generic_tests.id"}]
-
-
 def test_a_source_with_no_identifier_is_named_by_its_name():
     manifest = _manifest("cases")
     manifest["sources"]["source.cases.raw.events"]["identifier"] = None
@@ -416,6 +405,346 @@ def test_a_relationships_test_that_is_not_strict_keeps_its_jinja_flag():
     assert "jinja_in_test_arguments" in generated.flags
     (rule,) = _props(generated.document)["customer_id"]["quality"]
     assert rule["implementation"]["arguments"]["to"] == "{{ ref('customer') }}"
+
+
+def _ref(name, package=None, version=None):
+    return {"name": name, "package": package, "version": version}
+
+
+def _pointing(to, *refs):
+    """Return a change that points a `relationships` test at `to` and at no other node.
+
+    `refs` are the refs dbt records for `to`; the ref of the `model` kwarg, to the tested node,
+    follows them.
+    """
+
+    def change(test):
+        test["depends_on"]["nodes"] = [GENERIC]
+        test["test_metadata"]["kwargs"]["to"] = to
+        test["refs"] = [*refs, _ref("generic_tests")]
+
+    return change
+
+
+@pytest.mark.parametrize(
+    ("to", "refs"),
+    [
+        ("ref('generic_tests')", [_ref("generic_tests")]),
+        ("{{ ref('generic_tests') }}", [_ref("generic_tests")]),
+        ("ref('cases', 'generic_tests')", [_ref("generic_tests", "cases")]),
+    ],
+    ids=["ref", "braced ref", "ref with its package"],
+)
+def test_a_relationship_to_its_own_node_names_the_node(to, refs):
+    manifest = _edited("cases", _TO_CUSTOMER, _pointing(to, *refs))
+    assert _props(_run(manifest, GENERIC).document)["customer_id"] == {
+        "name": "customer_id",
+        "relationships": [{"to": "analytics.generic_tests.id"}],
+    }
+
+
+def test_a_relationship_to_its_own_version_names_the_version():
+    manifest = _edited(
+        "cases",
+        _TO_CUSTOMER,
+        _pointing("ref('generic_tests', v=2)", _ref("generic_tests", None, 2)),
+    )
+    manifest["nodes"][GENERIC]["version"] = 2
+    _test(manifest, _TO_CUSTOMER)["refs"][1]["version"] = "2"
+    assert _props(_run(manifest, GENERIC).document)["customer_id"][
+        "relationships"
+    ] == [{"to": "analytics.generic_tests.v2.id"}]
+
+
+def _unresolved_rule(to):
+    return {
+        "id": _TO_CUSTOMER,
+        "name": _TO_CUSTOMER,
+        "type": "custom",
+        "engine": "dbt",
+        "implementation": {
+            "test": "relationships",
+            "arguments": {"field": "id", "to": to},
+        },
+    }
+
+
+@pytest.mark.parametrize(
+    ("to", "refs"),
+    [
+        ("analytics.some_table", []),
+        ('"raw.events"', []),
+        ("ref('disabled_one')", [_ref("disabled_one")]),
+        ("ref('generic_tests', v=3)", [_ref("generic_tests", None, 3)]),
+        (
+            "ref('other_package', 'generic_tests')",
+            [_ref("generic_tests", "other")],
+        ),
+    ],
+    ids=[
+        "a literal",
+        "a quoted literal",
+        "a ref to a disabled model",
+        "a ref to another version",
+        "a ref into another package",
+    ],
+)
+def test_a_relationships_test_with_no_target_in_the_manifest_is_a_custom_rule(
+    to, refs
+):
+    manifest = _edited("cases", _TO_CUSTOMER, _pointing(to, *refs))
+    generated = _run(manifest, GENERIC)
+    assert _props(generated.document)["customer_id"] == {
+        "name": "customer_id",
+        "quality": [_unresolved_rule(to)],
+    }
+    assert generated.flags == ("jinja_in_test_arguments",)
+    assert schema_issues(generated.document) == []
+
+
+def test_a_relationships_test_with_no_refs_and_no_other_node_is_a_custom_rule():
+    def without_refs(test):
+        _pointing("ref('generic_tests')")(test)
+        del test["refs"]
+
+    manifest = _edited("cases", _TO_CUSTOMER, without_refs)
+    assert _props(_run(manifest, GENERIC).document)["customer_id"]["quality"] == [
+        _unresolved_rule("ref('generic_tests')")
+    ]
+
+
+def test_a_relationships_test_to_jinja_with_no_target_is_a_flagged_custom_rule():
+    def to_a_var(test):
+        _pointing("{{ var('target') }}")(test)
+        test["config"]["severity"] = "warn"
+
+    manifest = _edited("cases", _TO_CUSTOMER, _pointing("{{ var('target') }}"))
+    generated = _run(manifest, GENERIC)
+    assert _props(generated.document)["customer_id"]["quality"] == [
+        _unresolved_rule("{{ var('target') }}")
+    ]
+    assert "jinja_in_test_arguments" in generated.flags
+    manifest = _edited("cases", _TO_CUSTOMER, to_a_var)
+    (rule,) = _props(_run(manifest, GENERIC).document)["customer_id"]["quality"]
+    assert rule["severity"] == "warning"
+
+
+def test_source_sha256_moves_with_the_refs_of_a_relationships_test():
+    before = _generated("cases", GENERIC).source_sha256
+    manifest = _edited(
+        "cases",
+        _TO_CUSTOMER,
+        lambda test: test["refs"].append(_ref("generic_tests")),
+    )
+    assert _run(manifest, GENERIC).source_sha256 != before
+    manifest = _edited(
+        "cases",
+        "not_null_generic_tests_id",
+        lambda test: test["refs"].append(_ref("generic_tests")),
+    )
+    assert _run(manifest, GENERIC).source_sha256 == before
+
+
+def test_read_tree_names_the_refs_of_a_relationships_test_only():
+    manifest = _manifest("cases")
+    tree = dbt.read_tree("test", test=_test(manifest, _TO_CUSTOMER))
+    assert tree["refs"] == {"*": {"name": {}, "package": {}, "version": {}}}
+    assert "refs" not in dbt.read_tree(
+        "test", test=_test(manifest, "not_null_generic_tests_id")
+    )
+
+
+@pytest.mark.parametrize(
+    ("refs", "field", "must_be", "got"),
+    [
+        ("x", "refs", "a list", "str"),
+        (["x"], "refs[0]", "a mapping", "str"),
+        ([{"package": None}], "refs[0].name", "a non-empty string", "NoneType"),
+        ([_ref("a", 1)], "refs[0].package", "a string", "int"),
+    ],
+)
+def test_refs_of_the_wrong_shape_raise_dbt_node_error(refs, field, must_be, got):
+    def change(test):
+        _pointing("analytics.x")(test)
+        test["refs"] = refs
+
+    manifest = _edited("cases", _TO_CUSTOMER, change)
+    with pytest.raises(DbtNodeError) as raised:
+        _run(manifest, GENERIC)
+    assert str(raised.value) == (
+        f"{_test_label(_TO_CUSTOMER)}: {field} must be {must_be}, got {got}"
+    )
+
+
+def test_a_test_dbt_disabled_is_not_joined():
+    # dbt keeps a test whose `ref` names a disabled model in `nodes`, disabled.
+    manifest = _manifest("cases")
+    _test(manifest, _TO_CUSTOMER)["config"]["enabled"] = False
+    names = [test["name"] for test in dbt.tests_by_node(manifest)[GENERIC]]
+    assert _TO_CUSTOMER not in names
+    assert _props(_run(manifest, GENERIC).document)["customer_id"] == {
+        "name": "customer_id"
+    }
+    _test(manifest, _TO_CUSTOMER)["config"] = "not a mapping"
+    names = [test["name"] for test in dbt.tests_by_node(manifest)[GENERIC]]
+    assert _TO_CUSTOMER in names
+
+
+# Which tests are dbt's own: `dbt.<name>` always, and a bare name only when dbt resolved it to
+# its own macro, the first entry of the test's `depends_on.macros`.
+
+
+def _macros(*macros):
+    def change(test):
+        test["depends_on"]["macros"] = list(macros)
+
+    return change
+
+
+def _namespaced(namespace, *macros):
+    def change(test):
+        test["test_metadata"]["namespace"] = namespace
+        if macros:
+            _macros(*macros)(test)
+
+    return change
+
+
+@pytest.mark.parametrize(
+    "macros",
+    [(), ("macro.dbt.test_not_null",), ("macro.cases.test_not_null",)],
+    ids=["no macro", "dbt's macro", "the project's macro"],
+)
+def test_a_dbt_qualified_not_null_makes_its_column_required(macros):
+    manifest = _edited(
+        "cases", "not_null_generic_tests_id", _namespaced("dbt", *macros)
+    )
+    column = _props(_run(manifest, GENERIC).document)["id"]
+    assert column["required"] is True
+    assert _not_null("generic_tests", "id") in column["quality"]
+
+
+def test_a_dbt_qualified_relationships_test_gives_a_relationship():
+    manifest = _edited("cases", _TO_CUSTOMER, _namespaced("dbt"))
+    assert _props(_run(manifest, GENERIC).document)["customer_id"] == {
+        "name": "customer_id",
+        "relationships": [{"to": "analytics.customer.v2.id"}],
+    }
+
+
+@pytest.mark.parametrize(
+    ("name", "column", "macros"),
+    [
+        ("not_null_generic_tests_id", "id", ["macro.cases.test_not_null"]),
+        ("unique_generic_tests_id", "id", ["macro.other.test_unique"]),
+        ("unique_generic_tests_id", "id", ["macro.dbt.test_not_null"]),
+        (
+            "accepted_values_generic_tests_kind__a__b",
+            "kind",
+            [
+                "macro.cases.test_accepted_values",
+                "macro.dbt.test_accepted_values",
+            ],
+        ),
+        (_TO_CUSTOMER, "customer_id", ["macro.cases.test_relationships"]),
+        ("not_null_generic_tests_id", "id", []),
+        ("not_null_generic_tests_id", "id", None),
+    ],
+    ids=[
+        "not_null by the project",
+        "unique by a package",
+        "unique by another dbt macro",
+        "accepted_values by a wrapper",
+        "relationships by the project",
+        "no macro",
+        "no macros key",
+    ],
+)
+def test_a_built_in_name_dbt_did_not_resolve_to_its_own_macro_is_a_custom_rule(
+    name, column, macros
+):
+    def change(test):
+        if macros is None:
+            del test["depends_on"]["macros"]
+        else:
+            _macros(*macros)(test)
+
+    manifest = _edited("cases", name, change)
+    generated = _run(manifest, GENERIC)
+    written = _props(generated.document)[column]
+    kind = name.split("_generic_tests")[0]
+    fact = {"not_null": "required", "unique": "unique"}.get(kind, "relationships")
+    assert fact not in written
+    (rule,) = (rule for rule in written["quality"] if rule["id"] == name)
+    assert rule["type"] == "custom"
+    assert rule["implementation"]["test"] == kind
+    assert schema_issues(generated.document) == []
+
+
+def test_a_test_of_a_package_namespace_is_a_custom_rule_whatever_dbt_resolved():
+    manifest = _edited(
+        "cases",
+        "not_null_generic_tests_id",
+        _namespaced("my_package", "macro.dbt.test_not_null"),
+    )
+    column = _props(_run(manifest, GENERIC).document)["id"]
+    assert "required" not in column
+
+
+@pytest.mark.parametrize(
+    ("macros", "field", "must_be", "got"),
+    [
+        ("macro.dbt.test_not_null", "depends_on.macros", "a list", "str"),
+        ([None], "depends_on.macros[0]", "a string", "NoneType"),
+    ],
+)
+def test_resolved_macros_of_the_wrong_shape_raise_dbt_node_error(
+    macros, field, must_be, got
+):
+    def change(test):
+        test["depends_on"]["macros"] = macros
+
+    manifest = _edited("cases", "not_null_generic_tests_id", change)
+    with pytest.raises(DbtNodeError) as raised:
+        _run(manifest, GENERIC)
+    assert str(raised.value) == (
+        f"{_test_label('not_null_generic_tests_id')}: {field} must be {must_be}, got {got}"
+    )
+
+
+def test_source_sha256_moves_with_the_first_resolved_macro_of_a_built_in_name():
+    before = _generated("cases", GENERIC)
+    manifest = _edited(
+        "cases",
+        "not_null_generic_tests_id",
+        _macros("macro.dbt.test_not_null", "macro.dbt.get_where_subquery"),
+    )
+    # A helper macro after the first, which a dbt upgrade may add, moves nothing.
+    assert _run(manifest, GENERIC) == before
+    manifest = _edited(
+        "cases", "not_null_generic_tests_id", _macros("macro.cases.test_not_null")
+    )
+    assert _run(manifest, GENERIC).source_sha256 != before.source_sha256
+    manifest = _edited(
+        "cases", "is_positive_generic_tests_amount__0", _macros("macro.x.y")
+    )
+    assert _run(manifest, GENERIC) == before
+
+
+def test_read_tree_names_the_first_resolved_macro_of_a_bare_built_in_name_only():
+    manifest = _manifest("cases")
+    built_in = _test(manifest, "not_null_generic_tests_id")
+    assert dbt.read_tree("test", test=built_in)["depends_on"] == {
+        "nodes": {},
+        "macros": {"0": {}},
+    }
+    qualified = copy.deepcopy(built_in)
+    qualified["test_metadata"]["namespace"] = "dbt"
+    for test in (
+        _test(manifest, "is_positive_generic_tests_amount__0"),
+        qualified,
+    ):
+        assert dbt.read_tree("test", test=test)["depends_on"] == {"nodes": {}}
 
 
 def test_a_warn_test_is_severity_warning_and_sets_no_required():

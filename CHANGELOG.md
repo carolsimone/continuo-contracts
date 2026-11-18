@@ -211,6 +211,20 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `column_name` and in a model's `primary_key`, so such a column keeps its `required`, `unique`,
   `primaryKey` and rules instead of being flagged as not declared. A declared name that holds the
   quotes itself is still found as written.
+- `dbt.generate` writes a strict `relationships` test whose target the manifest does not hold (a
+  literal relation such as `analytics.some_table`, a var, a macro, or a ref to a disabled model)
+  as a `custom` rule with its `to` and `field`, where it wrote a relationship back to the tested
+  node. A relationship to the tested node itself is written only when the test refs that node a
+  second time, which the test's `refs` show; they are in `source_sha256` for a `relationships`
+  test. `dbt.tests_by_node` leaves out a test whose `config.enabled` is false, which dbt keeps in
+  the manifest and never runs.
+- `dbt.generate` tells dbt's own `not_null`, `unique`, `accepted_values` and `relationships` by
+  what dbt resolved: a test written `dbt.not_null` is dbt's (a library rule, and `required` when
+  strict), where it was a `custom` rule, and a bare `not_null` is dbt's only when the first entry
+  of its `depends_on.macros` is `macro.dbt.test_not_null`, so a project's own `test_not_null`
+  macro gives a `custom` rule and no `required`. That first entry is in `source_sha256`, which
+  moves for every node with one of these tests; no `contract_hash` moves. A dispatch override
+  (`default__test_not_null`) is not visible in the test node and is not detected.
 
 ## [0.2.0] - 2026-11-15
 

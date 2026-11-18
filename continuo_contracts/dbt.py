@@ -162,6 +162,17 @@ _TEST_FIELDS: Final = (
     "config.fail_calc",
 )
 _MODEL_KWARG, _COLUMN_KWARG = "model", "column_name"
+# Two more fields of a test that `generate` reads only for some tests. Of a test whose generic
+# test has the name of one of dbt's own and no namespace, it reads the first macro dbt resolved
+# for it, and of one that may be dbt's `relationships`, the refs dbt recorded for it. The step
+# `0` reads the first item of a list alone, so a helper macro that a dbt upgrade adds after it
+# moves nothing.
+_FIRST: Final = "0"
+_RESOLVED_MACRO_FIELD: Final = f"depends_on.macros.{_FIRST}"
+_REF_FIELDS: Final = ("refs.*.name", "refs.*.package", "refs.*.version")
+# The namespace of dbt's own tests, and the macro dbt resolves its test `<name>` to.
+_DBT_NAMESPACE: Final = "dbt"
+_DBT_MACRO: Final = "macro.dbt.test_{}"
 
 # The fields of the manifest node or source that a `relationships` test points to, which give
 # its id, and the same as dotted paths from the manifest.
@@ -179,6 +190,9 @@ _NOT_NULL, _UNIQUE, _ACCEPTED_VALUES, _RELATIONSHIPS = (
     "unique",
     "accepted_values",
     "relationships",
+)
+_BUILT_INS: Final = frozenset(
+    (_NOT_NULL, _UNIQUE, _ACCEPTED_VALUES, _RELATIONSHIPS)
 )
 _METRICS: Final = MappingProxyType(
     {
@@ -446,7 +460,9 @@ def tests_by_node(
 
     The key is a node id. A test counts for its `attached_node` when it has one, and for every
     entry of its `depends_on.nodes` otherwise, once for each node. Only a node of resource type
-    `test` is joined, and the tests of one node come in the order of the manifest's keys.
+    `test` is joined, and not one whose `config.enabled` is false: dbt keeps a test whose `ref`
+    names a disabled model in `nodes`, disabled, and never runs it. The tests of one node come in
+    the order of the manifest's keys.
 
     A `nodes` that is not a mapping of mappings raises `DbtNodeError`, whose message starts with
     `manifest`, and so does, starting with the test's id, a test whose `attached_node` is not a
@@ -458,6 +474,9 @@ def tests_by_node(
     for key in nodes:
         node = _mapping(_MANIFEST, f"nodes.{key}", nodes[key])
         if node.get("resource_type") != "test":
+            continue
+        config = node.get("config")
+        if isinstance(config, Mapping) and config.get("enabled") is False:
             continue
         attached = _optional_string(
             node, "attached_node", node.get("attached_node")
@@ -976,18 +995,53 @@ def _source_id(source: Mapping[str, Any]) -> str:
     return f"{schema}.{identifier or name}".lower()
 
 
-def _relationship_target(run: _Run, test: Mapping[str, Any], label: str) -> str:
+def _refs_to_itself(run: _Run, test: Mapping[str, Any], label: str) -> int:
+    """Return how many of the refs dbt recorded for `test` name the tested node.
+
+    A ref names it when its `name` is the node's `name`, its `package`, when it has one, the
+    node's package (the first entry of its `fqn`), and its `version`, when it has one, the node's
+    `version`, compared as text. dbt records one ref for each `ref()` call of the test, the one in
+    its `model` kwarg among them.
+    """
+    refs = test.get("refs")
+    if refs is None:
+        return 0
+    if not isinstance(refs, list):
+        raise _refusal(label, "refs", "a list", refs)
+    node = run.node
+    count = 0
+    for index, ref in enumerate(refs):
+        field = f"refs[{index}]"
+        if not isinstance(ref, Mapping):
+            raise _refusal(label, field, "a mapping", ref)
+        name = _required_string(label, f"{field}.name", ref.get("name"))
+        package = _optional_string(label, f"{field}.package", ref.get("package"))
+        version = ref.get("version")
+        count += (
+            name == node.get("name")
+            and (not package or package.replace("_", "-") == node_service(node))
+            and (_is_empty(version) or str(version) == str(node.get("version")))
+        )
+    return count
+
+
+def _relationship_target(
+    run: _Run, test: Mapping[str, Any], label: str
+) -> str | None:
     """Return the id of the node or source that the `relationships` test `test` points to.
 
-    It is the entry of the test's `depends_on.nodes` other than its `attached_node`, and the
-    tested node itself when there is none.
+    It is the entry of the test's `depends_on.nodes` other than its `attached_node`. With none,
+    the test points to the tested node itself when it refs it a second time, besides its `model`
+    kwarg, and otherwise to nothing the manifest holds (a literal relation, a var or a macro, or
+    a model that is disabled or absent), which gives `None`.
     """
     depends_on = _mapping(label, "depends_on", test.get("depends_on"))
     nodes = _strings(label, "depends_on.nodes", depends_on.get("nodes"))
     attached = test.get("attached_node")
     others = list(dict.fromkeys(entry for entry in nodes if entry != attached))
+    to_itself = _refs_to_itself(run, test, label) > 1
     if not others:
-        return unique_id(run.node)
+        return unique_id(run.node) if to_itself else None
     if len(others) > 1:
         raise DbtNodeError(
             f"{label}: depends_on.nodes must name one node besides attached_node, "
@@ -1041,6 +1095,35 @@ def _rule_settings(
     return severity == "error" and not settings, common
 
 
+def _built_in(
+    label: str, test: Mapping[str, Any], generic: str, namespace: str
+) -> str:
+    """Return the name of the dbt test that `test` runs, or `""` when it runs another.
+
+    It is dbt's `not_null`, `unique`, `accepted_values` or `relationships` when the generic test
+    has that name and the namespace `dbt`, or that name, no namespace, and dbt's own macro for it
+    (`macro.dbt.test_<name>`) as the first entry of the test's `depends_on.macros`, which is the
+    macro dbt resolved the bare name to. A project or a package that writes its own macro of the
+    name is not dbt's, and neither is a test with no resolved macro or of another namespace.
+    """
+    if generic not in _BUILT_INS:
+        return ""
+    if namespace:
+        return generic if namespace == _DBT_NAMESPACE else ""
+    depends_on = _mapping(label, "depends_on", test.get("depends_on"))
+    macros = depends_on.get("macros")
+    if macros is None:
+        return ""
+    if not isinstance(macros, list):
+        raise _refusal(label, "depends_on.macros", "a list", macros)
+    if not macros:
+        return ""
+    first = macros[0]
+    if not isinstance(first, str):
+        raise _refusal(label, "depends_on.macros[0]", "a string", first)
+    return generic if first == _DBT_MACRO.format(generic) else ""
+
+
 def _add_test(
     run: _Run,
     test: Mapping[str, Any],
@@ -1054,9 +1137,10 @@ def _add_test(
     A singular test, and a test on no declared column, gives a rule on the schema object; the
     latter, whose column may be an expression, keeps that column in its `column_name` argument
     and flags the contract. dbt's `not_null`,
-    `unique` and `accepted_values` give library rules, the last with its `values` as
-    `validValues` beside its other kwargs, a strict `relationships` test on a declared column
-    gives a relationship, and any other generic test, a `relationships` test that is not strict
+    `unique` and `accepted_values`, as `_built_in` tells them, give library rules, the last with
+    its `values` as `validValues` beside its other kwargs, a strict `relationships` test on a
+    declared column gives a relationship to the target the manifest holds, and any other generic
+    test, a `relationships` test that is not strict or whose target the manifest does not hold
     among them, gives a `custom` rule with the generic test and its arguments as its
     `implementation`.
     """
@@ -1095,14 +1179,16 @@ def _add_test(
     if column_name and column is None:
         run.flags.add("test_column_not_declared")
         arguments[_COLUMN_KWARG] = column_name
-    built_in = "" if namespace else generic
+    built_in = _built_in(label, test, generic, namespace)
     if built_in == _RELATIONSHIPS and column is not None and strict:
         field = _required_string(
             label, "test_metadata.kwargs.field", arguments.get("field")
         )
         target = _relationship_target(run, test, label)
-        column["relationships"].append({"to": f"{target}.{field}"})
-        return
+        if target is not None:
+            column["relationships"].append({"to": f"{target}.{field}"})
+            return
+        built_in = ""
     if built_in in _METRICS:
         if built_in == _ACCEPTED_VALUES:
             others = {key: arguments[key] for key in arguments if key != "values"}
@@ -1207,7 +1293,9 @@ def _test_tree(test: Mapping[str, Any]) -> dict[str, Any]:
     """Return the tree of the fields of `test` that `generate` reads.
 
     It is `_TEST_FIELDS`, with the kwargs wildcard written as the test's own kwargs but those
-    `_repeats` names.
+    `_repeats` names; then the first resolved macro of a generic test with the name of one of
+    dbt's own and no namespace, and the refs of a `relationships` test with no namespace or the
+    namespace `dbt`.
     """
     metadata = test.get("test_metadata") or {}
     kwargs = metadata.get("kwargs") or {}
@@ -1217,6 +1305,11 @@ def _test_tree(test: Mapping[str, Any]) -> dict[str, Any]:
         for key in kwargs
         if not _repeats(test, kwargs, key)
     ]
+    generic, namespace = metadata.get("name"), metadata.get("namespace")
+    if generic in _BUILT_INS and not namespace:
+        paths.append(_RESOLVED_MACRO_FIELD.split("."))
+    if generic == _RELATIONSHIPS and namespace in (None, "", _DBT_NAMESPACE):
+        paths += [field.split(".") for field in _REF_FIELDS]
     return _tree(paths)
 
 
@@ -1229,9 +1322,12 @@ def read_tree(
     `nodes` or `sources` for the manifest node or source that a `relationships` test points to.
     The tree is a dict whose keys are the field names, each holding the tree of the fields read
     inside it, and `{}` for a field read whole; the key `*` stands for every key of a mapping or
-    every item of a list, in order. The tree of a test names each of its own kwargs but `model`
-    and a `column_name` equal to the test's own `column_name`. `source_sha256` covers exactly
-    these fields. The result is a new dict.
+    every item of a list, in order, and the key `0` under a list for its first item alone. The
+    tree of a test names each of its own kwargs but `model` and a `column_name` equal to the
+    test's own `column_name`; it names the first of its `depends_on.macros` when its generic test
+    has the name of one of dbt's own and no namespace, and the `name`, `package` and `version` of
+    each of its `refs` when it is a `relationships` test with no namespace or the namespace
+    `dbt`. `source_sha256` covers exactly these fields. The result is a new dict.
 
     Raises `ValueError` for another `part`, for `test` with no test node, and for a test node
     given with another part.
@@ -1255,7 +1351,8 @@ def _select(source: Any, tree: Mapping[str, Any], label: str, name: str) -> Any:
     """Return the fields of `source` that `tree` names, nested as `source` holds them.
 
     A `*` step gives a list in the order of `source`: `[key, value]` pairs for a mapping and the
-    items of a list, so the order of a node's columns reaches the hash. A field that is missing is
+    items of a list, so the order of a node's columns reaches the hash. A `0` step over a list
+    gives a list of its first item alone, or an empty one. A field that is missing is
     left out. A value on the way that is not a mapping or a list is kept as it is, since it is
     what the field's reader saw. A value that canonical JSON cannot write raises `DbtNodeError`,
     which starts with `label` and names the field.
@@ -1271,6 +1368,10 @@ def _select(source: Any, tree: Mapping[str, Any], label: str, name: str) -> Any:
             _field(item, each, label, f"{name}[{index}]")
             for index, item in enumerate(source)
         ]
+    if isinstance(source, list):
+        return [
+            _field(item, tree[_FIRST], label, f"{name}[0]") for item in source[:1]
+        ]
     picked = {}
     for key, branch in tree.items():
         if key in source:
@@ -1283,7 +1384,7 @@ def _select(source: Any, tree: Mapping[str, Any], label: str, name: str) -> Any:
 def _field(value: Any, tree: Mapping[str, Any], label: str, name: str) -> Any:
     if isinstance(value, Mapping) and tree:
         return _select(value, tree, label, name)
-    if isinstance(value, list) and "*" in tree:
+    if isinstance(value, list) and ("*" in tree or _FIRST in tree):
         return _select(value, tree, label, name)
     return _writable(value, label, name)
 

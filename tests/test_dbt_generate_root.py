@@ -649,12 +649,28 @@ class _Recording(Mapping):
         return len(self._data)
 
 
+class _RecordingList(list):
+    """A list whose items read by index are recorded, the index a step of the path."""
+
+    def __init__(self, items, seen, path):
+        super().__init__(items)
+        self._seen = seen
+        self._path = path
+
+    def __getitem__(self, index):
+        if isinstance(index, int):
+            self._seen.add((*self._path, str(index)))
+        return super().__getitem__(index)
+
+
 def _recorded(value, seen, path):
     """Return `value`, read at `path`, as a view that records the reads inside it."""
     if isinstance(value, Mapping):
         return _Recording(value, seen, path)
     if isinstance(value, list):
-        return [_recorded(item, seen, (*path, "*")) for item in value]
+        return _RecordingList(
+            [_recorded(item, seen, (*path, "*")) for item in value], seen, path
+        )
     return value
 
 
@@ -789,6 +805,33 @@ def test_every_declared_field_is_read_for_some_fixture_node(monkeypatch):
     assert _unread(seen["node"], dbt._READ_PATHS) == []
     assert _unread(seen["test"], dbt._TEST_FIELDS) == []
     assert _unread(seen["manifest"], dbt._MANIFEST_PATHS) == []
+    # The fields only some tests declare: the first resolved macro and the refs.
+    conditional = [dbt._RESOLVED_MACRO_FIELD, *dbt._REF_FIELDS]
+    assert _unread(seen["test"], conditional) == []
+
+
+@pytest.mark.parametrize(
+    ("field", "unread"),
+    [
+        ("_RESOLVED_MACRO_FIELD", ["depends_on.macros.0"]),
+        ("_REF_FIELDS", ["refs.*.name", "refs.*.package", "refs.*.version"]),
+    ],
+)
+def test_the_read_guard_sees_a_conditional_test_field_read_but_not_declared(
+    monkeypatch, field, unread
+):
+    declared = getattr(dbt, field)
+    elsewhere = (
+        "depends_on.other.0"
+        if isinstance(declared, str)
+        else tuple(path.replace("refs", "other") for path in declared)
+    )
+    monkeypatch.setattr(dbt, field, elsewhere)
+    found = set()
+    for test, seen in _reads_of_each_test("cases", "model.cases.generic_tests"):
+        declared_paths = _tree_fields(dbt.read_tree("test", test=test))
+        found |= set(_undeclared(seen, [*declared_paths, _COMPARED_KWARG]))
+    assert set(unread) <= found
 
 
 def test_the_read_guard_sees_a_table_test_key_read_but_not_declared(monkeypatch):

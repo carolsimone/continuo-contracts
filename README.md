@@ -596,7 +596,14 @@ A declared column has:
   in that list counted from 1, when the key has two or more columns;
 - what the tests on it say, below.
 
-Each dbt test the node has becomes a quality rule, or a relationship:
+Each dbt test the node has becomes a quality rule, or a relationship. dbt's own `not_null`,
+`unique`, `accepted_values` and `relationships` are the generic tests of those names written
+`dbt.<name>`, and those written with no namespace that dbt resolved to its own macro: the first
+entry of the test's `depends_on.macros` is `macro.dbt.test_<name>`. A test of such a name that a
+project or a package overrides with its own `test_<name>` macro, or whose `depends_on.macros` is
+empty or missing, is a `custom` rule like any other generic test, and sets no `required` or
+`unique`. An override through dbt's dispatch (a project's `default__test_not_null` macro) is not
+visible in the test node and is not detected.
 
 - `not_null` is `{id: <test name>, metric: nullValues, mustBe: 0}`, `unique` the same with
   `duplicateValues`, and `accepted_values` `{id, metric: invalidValues, mustBe: 0, arguments:
@@ -610,13 +617,18 @@ Each dbt test the node has becomes a quality rule, or a relationship:
   and `fail_calc`, the same rule as for `required` and `unique`) adds `{to: "<target id>.<field>"}`
   to the column's `relationships`. The target is the entry of the test's `depends_on.nodes` other
   than its `attached_node`: a manifest node is named by `unique_id`, a source by
-  `<schema>.<identifier or name>` in lower case, and with no other entry the target is the node
-  itself. A `relationships` test that is not strict is a `custom` rule like any other generic
-  test, below, with its severity and its `where`, and adds no relationship.
+  `<schema>.<identifier or name>` in lower case. With no other entry the target is the node
+  itself when the test refs it a second time, besides the ref of its `model` kwarg: two entries
+  of its `refs` have the node's `name`, and, when they have one, its package (the first entry of
+  its `fqn`) and its `version`. Otherwise the target is not in the manifest (a literal relation,
+  a var or a macro, or a ref to a model that is disabled or absent), and the test is a `custom`
+  rule like one that is not strict. A `relationships` test that is not strict is a `custom` rule
+  like any other generic test, below, with its severity and its `where`, and adds no
+  relationship.
 - Any other generic test is `{id, name: <test name>, type: custom, engine: dbt, implementation:
   {test, arguments}}`, where `test` is the generic test's name, written `<namespace>.<name>` for a
-  test from a package (so `not_null` from a package is not dbt's), and `arguments` are its kwargs
-  but `model` and `column_name`, left out when there are none.
+  test with a namespace (so `not_null` from a package is not dbt's), and `arguments` are its
+  kwargs but `model` and `column_name`, left out when there are none.
 - A singular test is `{id, name, type: custom, engine: dbt, implementation: <test name>}` on the
   schema object.
 - Every rule from a test carries `severity` when it is not `error` (`warn` is written `warning`),
@@ -662,7 +674,11 @@ and `timeout_minutes`; from `config.meta.continuo`, `readers`, `reads` and each 
 `name`, `column_name`, `attached_node`, `depends_on.nodes`, `test_metadata`'s `name`,
 `namespace` and kwargs (but `model`, and a `column_name` equal to the test's own `column_name`,
 which that field covers), `description`, `tags`, and `config`'s
-`severity`, `where`, `warn_if`, `error_if` and `fail_calc`; and of a relationship's target, a
+`severity`, `where`, `warn_if`, `error_if` and `fail_calc`, then the first entry of
+`depends_on.macros` of a test of one of dbt's four names with no namespace (not the rest of the
+list, so a helper macro that a dbt upgrade adds never moves it), and the `name`, `package` and
+`version` of each of the `refs` of a `relationships` test with no namespace or the namespace
+`dbt`; and of a relationship's target, a
 node's `schema`, `name` and `version` or a source's `schema`, `identifier` and `name`. Any other
 `config` or `meta` key, a column's `quote` or `constraints`, a test's `limit` or `store_failures`,
 `created_at`, `raw_code` and the compiled SQL never move it. A field it reads whose value canonical
@@ -675,8 +691,8 @@ canonical JSON (`canonical.canonical_json`) of an object with three keys:
 - `node`: the fields of the node that `read_tree("node")` names;
 - `tests`: for each test, the fields that `read_tree("test", test=test)` names, the list sorted by
   the canonical JSON of each item, so the order of the tests does not count;
-- `targets`: for each manifest node or source that a strict `relationships` test on a declared
-  column points to, other than the tested node, its manifest key, such as
+- `targets`: for each manifest node or source that a strict dbt `relationships` test on a
+  declared column points to, other than the tested node, its manifest key, such as
   `model.shop.customer.v2`, mapped to the fields that `read_tree("nodes")` or
   `read_tree("sources")` names. A mapping with no such target is `{}`.
 
@@ -685,10 +701,11 @@ picked by the tree under that key, a key the value does not hold is left out (no
 for it), and a leaf `{}` keeps the value whole. A `*` step turns a mapping into a list of
 `[key, value]` pairs in the mapping's own order and keeps the items of a list in their order, so
 the columns are an ordered list of `[name, column]` pairs, whose order counts although canonical
-JSON sorts object keys. A value that is not a mapping where the tree names keys, or neither a
-mapping nor a list at a `*`, is kept whole. Left out are the `unique_id` of the node and of each
-test, every field no tree names, and the target of a `relationships` test that is not strict or
-is on a column the node does not declare.
+JSON sorts object keys. A `0` step over a list keeps a list of its first item alone, or an empty
+list, so the first resolved macro is `"macros": ["macro.dbt.test_not_null"]`. A value that is not
+a mapping where the tree names keys, or neither a mapping nor a list at a `*`, is kept whole. Left out are the `unique_id` of the node and of each
+test, every field no tree names, and the target of a `relationships` test that is not strict,
+is not dbt's, or is on a column the node does not declare.
 
 ```python
 generated = generate(
@@ -759,7 +776,9 @@ facts == run_facts(normalise_dbt(generated.document, reads=[]))  # True
 - `tests_by_node`: `tests_by_node(manifest) -> dict[str, list[Mapping[str, Any]]]` joins the nodes
   of resource type `test` to the nodes they test, the way dbt counts them: a test counts for its
   `attached_node` when it has one, else for every entry of its `depends_on.nodes`, once for each.
-  The key is a node id and the tests of one node come in the order of the manifest's keys. A
+  A test whose `config.enabled` is false, which dbt keeps in `nodes` when it refs a disabled
+  model and never runs, is not joined. The key is a node id and the tests of one node come in the
+  order of the manifest's keys. A
   `nodes` that is not a mapping of mappings raises `DbtNodeError`, whose message starts with
   `manifest`, and so does, starting with the test's id, a test whose `attached_node` is not a
   string, whose `depends_on` is not a mapping or whose `depends_on.nodes` is not a list of
@@ -807,9 +826,12 @@ facts == run_facts(normalise_dbt(generated.document, reads=[]))  # True
   the model, seed or snapshot, `test` with the test node as `test`, and `nodes` or `sources` for
   the manifest node or source that a `relationships` test points to. The tree is a dict whose keys
   are field names, each holding the tree of the fields read inside it and `{}` for a field read
-  whole; the key `*` stands for every key of a mapping or every item of a list, in order. A
-  test's tree names each of its own kwargs but `model` and a `column_name` equal to the test's own
-  `column_name`. The result is a new dict
+  whole; the key `*` stands for every key of a mapping or every item of a list, in order, and the
+  key `0` under a list for its first item alone. A test's tree names each of its own kwargs but
+  `model` and a `column_name` equal to the test's own `column_name`, the first entry of its
+  `depends_on.macros` when its generic test has the name of one of dbt's four and no namespace,
+  and the `name`, `package` and `version` of each of its `refs` when it is a `relationships` test
+  with no namespace or the namespace `dbt`. The result is a new dict
   on every call. It raises `ValueError` for another `part`, for `test` with no test node, and for a
   test node given with another part.
 - `RunFacts`: what `run_facts` returns, a frozen dataclass with the fields `unique_id`, `schema`,

@@ -212,9 +212,9 @@ def golden_texts() -> dict[Path, str]:
 def _prune(value: Any, tree: Mapping[str, Any]) -> Any:
     """Return the fields of `value` that `tree`, a tree of `dbt.read_tree`, names.
 
-    A `*` step keeps every key of a mapping, in its order, or every item of a list. A value that
-    is not a mapping, or a list where the tree names keys, is kept whole, since `generate` reads
-    it whole.
+    A `*` step keeps every key of a mapping, in its order, or every item of a list, and a `0`
+    step over a list keeps its first item alone. A value that is not a mapping, or a list where
+    the tree names other keys, is kept whole, since `generate` reads it whole.
     """
     if not tree:
         return value
@@ -224,6 +224,8 @@ def _prune(value: Any, tree: Mapping[str, Any]) -> Any:
         if isinstance(value, list):
             return [_prune(item, tree["*"]) for item in value]
         return value
+    if isinstance(value, list) and "0" in tree:
+        return [_prune(item, tree["0"]) for item in value[:1]]
     if not isinstance(value, Mapping):
         return value
     return {key: _prune(value[key], tree[key]) for key in tree if key in value}
