@@ -2,8 +2,9 @@
 
 An ODCS contract carries custom properties as `{vendor, property, value}` items in a
 `customProperties` list. The ones with `vendor: continuo` are continuo's own. `PROPERTIES` names
-each one the library knows, the place of the contract where it sits and who may write it in a
-Python contract. `continuo_values` reads the values of the items of one list.
+each one the library knows, the place of the contract where it sits, who may write it in a
+Python contract and what a dbt contract does with it. `continuo_values` reads the values of the
+items of one list.
 """
 
 from collections.abc import Mapping
@@ -23,16 +24,21 @@ class ContinuoProperty:
     `python` says who may write it in a Python contract: `authored` (the author writes it),
     `filled` (continuo writes it and the author may not) or `refused` (no Python contract
     carries it).
+    `dbt` says what a dbt contract does with it: `written` (the generator writes it), `filled`
+    (continuo fills it) or `not_used` (no dbt contract carries it).
     """
 
     name: str
     sits_on: str
     python: str
+    dbt: str
 
 
-def _rows(sits_on: str, python: str, names: str) -> tuple[ContinuoProperty, ...]:
+def _rows(
+    sits_on: str, python: str, dbt: str, names: str
+) -> tuple[ContinuoProperty, ...]:
     return tuple(
-        ContinuoProperty(name, sits_on, python) for name in names.split()
+        ContinuoProperty(name, sits_on, python, dbt) for name in names.split()
     )
 
 
@@ -40,17 +46,25 @@ _ROWS: Final = (
     *_rows(
         "root",
         "authored",
-        "service kind schedule criticality timeoutMinutes script readQueries csvSource "
-        "extraColumns config secretRef modeType assets",
+        "written",
+        "service kind schedule criticality timeoutMinutes",
+    ),
+    *_rows(
+        "root",
+        "authored",
+        "not_used",
+        "script readQueries csvSource extraColumns config secretRef modeType assets",
     ),
     *_rows(
         "root",
         "refused",
+        "written",
         "filePath materialization contractEnforced access group deprecationDate "
-        "freshnessBuildAfter snapshot quoteColumns provenance",
+        "freshnessBuildAfter snapshot quoteColumns",
     ),
-    *_rows("schema", "filled", "reads"),
-    *_rows("quality", "authored", "where warnIf errorIf failCalc"),
+    *_rows("root", "refused", "not_used", "provenance"),
+    *_rows("schema", "filled", "filled", "reads"),
+    *_rows("quality", "authored", "written", "where warnIf errorIf failCalc"),
 )
 
 PROPERTIES: Final[Mapping[str, ContinuoProperty]] = MappingProxyType(

@@ -587,19 +587,23 @@ with `vendor: continuo` are continuo's own, and their names are camel case. This
 ones the package knows and where each may sit. It reads no file and checks no contract.
 
 - `PROPERTIES` maps each property name to a `ContinuoProperty` row. The mapping is read-only.
-  `sits_on` says which `customProperties` list carries the property, and `python` says who may
-  write it in a Python contract.
+  `sits_on` says which `customProperties` list carries the property, `python` says who may write
+  it in a Python contract, and `dbt` says what a dbt contract does with it.
 
-  | `sits_on` | `python` | Names |
-  |---|---|---|
-  | `root` | `authored` | `service`, `kind`, `schedule`, `criticality`, `timeoutMinutes`, `script`, `readQueries`, `csvSource`, `extraColumns`, `config`, `secretRef`, `modeType`, `assets` |
-  | `root` | `refused` | `filePath`, `materialization`, `contractEnforced`, `access`, `group`, `deprecationDate`, `freshnessBuildAfter`, `snapshot`, `quoteColumns`, `provenance` |
-  | `schema` | `filled` | `reads` |
-  | `quality` | `authored` | `where`, `warnIf`, `errorIf`, `failCalc` |
+  | `sits_on` | `python` | `dbt` | Names |
+  |---|---|---|---|
+  | `root` | `authored` | `written` | `service`, `kind`, `schedule`, `criticality`, `timeoutMinutes` |
+  | `root` | `authored` | `not_used` | `script`, `readQueries`, `csvSource`, `extraColumns`, `config`, `secretRef`, `modeType`, `assets` |
+  | `root` | `refused` | `written` | `filePath`, `materialization`, `contractEnforced`, `access`, `group`, `deprecationDate`, `freshnessBuildAfter`, `snapshot`, `quoteColumns` |
+  | `root` | `refused` | `not_used` | `provenance` |
+  | `schema` | `filled` | `filled` | `reads` |
+  | `quality` | `authored` | `written` | `where`, `warnIf`, `errorIf`, `failCalc` |
 
   `authored` means the author writes the property. `filled` means continuo writes it and the
-  author may not. `refused` means no Python contract carries it. A property that is not in the
-  mapping is unknown to this release.
+  author may not. `refused` means no Python contract carries it. For a dbt contract, `written`
+  means the generator writes the property, `filled` means continuo fills it, and `not_used` means
+  no dbt contract carries it. The two answers are independent: no rule for a Python contract reads
+  `dbt`. A property that is not in the mapping is unknown to this release.
 - `continuo_values(custom_properties: object) -> dict[str, Any]` returns the value of each
   `continuo` item of a `customProperties` list, by property name, in the order of the names' first
   appearance in the list. It takes any object, so it can run on a contract that nothing has
@@ -618,14 +622,15 @@ continuo_values(
 )
 # {"schedule": "daily"}
 PROPERTIES["reads"]
-# ContinuoProperty(name="reads", sits_on="schema", python="filled")
+# ContinuoProperty(name="reads", sits_on="schema", python="filled", dbt="filled")
 ```
 
 ### Public names
 
 - `VENDOR`: the vendor name of continuo's custom properties, `continuo`.
 - `ContinuoProperty`: one custom property, a frozen dataclass with the fields `name`, `sits_on`
-  (`root`, `schema` or `quality`) and `python` (`authored`, `filled` or `refused`).
+  (`root`, `schema` or `quality`), `python` (`authored`, `filled` or `refused`) and `dbt`
+  (`written`, `filled` or `not_used`).
 - `PROPERTIES`: the read-only mapping from each property name to its `ContinuoProperty`.
 - `continuo_values`: returns the value of each `continuo` item of a `customProperties` list, by
   property name, and skips every item it cannot use.

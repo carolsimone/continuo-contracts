@@ -7,6 +7,14 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- `continuo_contracts.vocabulary`: `ContinuoProperty` has a fourth field, `dbt`, that says what a dbt
+  contract does with the property: `written` (the generator writes it), `filled` (continuo fills
+  it, as it does `reads`) or `not_used`. A dbt contract may carry the fourteen root properties
+  `service`, `kind`, `schedule`, `criticality`, `timeoutMinutes`, `filePath`, `materialization`,
+  `contractEnforced`, `access`, `group`, `deprecationDate`, `freshnessBuildAfter`, `snapshot` and
+  `quoteColumns`, the schema property `reads` and the four quality properties; the nine
+  Python-only properties are `not_used`. The `python` answers do not change. A caller that builds a
+  `ContinuoProperty` by hand passes the new `dbt` argument.
 - `continuo_contracts.dbt`: the gates and the names of a dbt manifest node. `skip_reason` gives the
   reason continuo leaves a model, seed or snapshot out (`no_owner`, `local_stub` or
   `installed_package`, checked in that order) or `None` for a node it keeps, `node_service`,
