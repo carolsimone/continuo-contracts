@@ -154,7 +154,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   environment does not set, and changes no other variable. It reads the header of each seed of
   the project from the first row of the seed's CSV file in the project (UTF-8 with or without a
   byte order mark, the delimiter of the seed's `config`; a file it cannot read, a delimiter `csv`
-  refuses or a path with a NUL is an error line), checks the manifest with `lite.check_manifest`,
+  refuses or a path with a NUL is an error line), reading only a regular file in a folder that
+  `seed-paths` of the project's `dbt_project.yml` names and only its first MiB, checks the manifest with `lite.check_manifest`,
   and logs the banner, each line of the report, the six things only the release does and the
   banner again, at INFO or, for an error, at ERROR. With `--json`, stdout is one document,
   `{"lite", "ok", "service", "lines", "contracts"}`. `--manifest` reads a manifest that already
@@ -191,6 +192,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   profile, no longer leaves the check without a manifest (it was a usage error, exit 2, for a
   valid project), and dbt writes its log in the temporary folder, so it no longer writes a `logs`
   folder in the project and a project folder that cannot be written no longer fails the check.
+- `continuo-contracts dbt check` reads a seed's CSV file only when it is a regular file whose real
+  path, its symbolic links resolved, lies in a folder that `seed-paths` of the project's
+  `dbt_project.yml` names (`seeds` when it names none), and reads at most its first MiB. A
+  manifest that names a file outside those folders (such as `../x`, an absolute path, a link to
+  another file, or `.env`) no longer shows that file's first row in the report, and a pipe or a
+  device file no longer stalls the check: each gives the line for a file that cannot be read.
 
 ## [0.2.0] - 2026-11-15
 

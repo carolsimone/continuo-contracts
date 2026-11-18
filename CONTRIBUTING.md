@@ -124,7 +124,11 @@ imports `canonical`, `errors`, `hashing`, `fingerprints` and `vocabulary`, `vali
 `fingerprints.load()`, the packaged ODCS schema, in `schema.load()`, and the files `cli` reads: the
 contract files that its arguments name and, for `dbt check`, the `profiles.yml` of the profiles
 folder, the manifest (the file `--manifest` names, or the `manifest.json` that `dbt parse` writes
-in a temporary folder that `cli` makes and removes) and the CSV file of each seed. The only program
+in a temporary folder that `cli` makes and removes), the project's `dbt_project.yml` and the CSV
+file of each seed. A CSV file is read only when it is a regular file whose real path, its
+symbolic links resolved, lies in a folder that `seed-paths` of `dbt_project.yml` names (`seeds`
+by default), and only its first MiB, so the manifest, which may come from another job, cannot
+choose another file for `cli` to read. The only program
 the package runs is the `dbt` executable that `dbt check` is given, as a new process: dbt runs on
 its own Python, which is not the one this package needs, so no module imports dbt, and `cli` is
 the only module that imports `subprocess`. A split into layers is proposed only when a module gets

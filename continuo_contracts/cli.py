@@ -11,8 +11,9 @@ with the `dbt` executable it is given, as a new process, so that dbt runs on its
 this package imports none of it, reads the `manifest.json` that dbt writes and the first row of
 the CSV file of each seed, and logs the report of `lite.check_manifest`. With `--manifest` it
 reads a manifest that already exists and runs nothing. The files the command reads are the files
-its arguments name, the profiles file in the profiles folder of `dbt check`, the manifest and
-the CSV files of the seeds.
+its arguments name, the profiles file in the profiles folder of `dbt check`, the manifest, the
+project's `dbt_project.yml` and the CSV files of the seeds, each only when it is a regular file
+in a seed folder that `dbt_project.yml` names.
 
 Output follows one rule. The human text goes through `logging` to stderr. Stdout carries only the
 machine-read result: with `--json` one JSON document, and for `hash` without it the hash alone.
@@ -31,6 +32,7 @@ status. The console script `continuo-contracts` calls it.
 
 import argparse
 import csv
+import io
 import json
 import logging
 import os
@@ -41,7 +43,7 @@ import subprocess
 import sys
 import tempfile
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import Any, Final, cast
 
@@ -107,6 +109,10 @@ _ENV_VAR_WITHOUT_DEFAULT: Final = re.compile(
 # writes into them even when its output goes to a pipe.
 _OUTPUT_TAIL: Final = 20
 _COLOUR: Final = re.compile(r"\x1b\[[0-9;]*m")
+# The seed folder of a project whose `dbt_project.yml` names none, as dbt has it, and the most
+# bytes of a seed's CSV file that its first row may take.
+_SEED_FOLDER: Final = "seeds"
+_HEADER_BYTES: Final = 2**20
 # The level of a `lite.Line` that fails the check.
 _ERROR_LEVEL: Final = "error"
 _RELEASE_ONLY: Final = "What only the release does:"
@@ -153,7 +159,10 @@ NAME is set, is set to continuo-lite-check for dbt alone. Nothing else of the
 environment changes, and no other dbt command runs.
 
 The header of a seed is the first row of its CSV file in PROJECT_DIR, read as UTF-8
-with an optional byte order mark and with the delimiter of the seed's config.
+with an optional byte order mark and with the delimiter of the seed's config. Only a
+regular file whose real path lies in a folder that seed-paths of
+PROJECT_DIR/dbt_project.yml names (seeds by default) is read, and only its first MiB;
+any other file is reported as a file that cannot be read.
 
 With --json, stdout is
   {"lite": true, "ok": bool, "service": str, "lines": [{"level": str,
@@ -425,28 +434,85 @@ def _read_manifest(path: Path) -> dict[str, Any]:
     return document
 
 
+def _seed_folders(project: Path) -> list[Path]:
+    """Return the real paths of the seed folders of the dbt project `project`.
+
+    They are the folders that the list `seed-paths` of `project/dbt_project.yml` names, each
+    read from `project` (an absolute one as it is), with its symbolic links resolved. An entry
+    that is not a string or that holds a NUL names no folder. The file is read as
+    `yaml_strict.load` reads it, and the folder is `seeds` when the file is missing or cannot be
+    read, is not a mapping, or has no string in a list under `seed-paths`, as dbt's default is.
+    """
+    try:
+        document = yaml_strict.load(
+            (project / "dbt_project.yml").read_text(encoding="utf-8")
+        )
+    except OSError, UnicodeError, StrictYamlError:
+        document = None
+    listed = document.get("seed-paths") if isinstance(document, dict) else None
+    names = (
+        [name for name in listed if isinstance(name, str)]
+        if isinstance(listed, list)
+        else []
+    )
+    return [
+        Path(os.path.realpath(project / name))
+        for name in names or [_SEED_FOLDER]
+        if "\0" not in name
+    ]
+
+
+def _first_row(path: Path, delimiter: str) -> list[str]:
+    """Return the first row of the CSV file `path`, read from its first `_HEADER_BYTES` bytes.
+
+    Raises `ValueError` when the row, with its line ending, does not end in those bytes and the
+    file goes on, and the errors of reading the file and of `csv`.
+    """
+    with path.open("rb") as stream:
+        head = stream.read(_HEADER_BYTES)
+        longer = stream.read(1) != b""
+    text = io.TextIOWrapper(io.BytesIO(head), encoding="utf-8-sig", newline="")
+    last = [""]
+
+    def lines() -> Iterator[str]:
+        for line in text:
+            last[0] = line
+            yield line
+
+    row = next(csv.reader(lines(), delimiter=delimiter), [])
+    if longer and not last[0].endswith(("\n", "\r")):
+        raise ValueError(f"the first row is longer than {_HEADER_BYTES} bytes")
+    return row
+
+
 def _header_reader(
     project: Path,
 ) -> Callable[[Mapping[str, Any]], list[str] | None]:
     """Return the `read_header` of the lite check for the seeds of the dbt project `project`.
 
-    A seed's header is the first row of its CSV file, read as UTF-8 with an optional byte order
-    mark and with the delimiter of the seed's `config` (a comma when it has none), so a CRLF line
-    ending changes nothing. An empty file has an empty header. A file that cannot be read gives
-    `None`: one that is missing, whose path holds a NUL, that is not UTF-8, that has a field over
-    the limit of `csv`, or whose delimiter is not one character or is one `csv` refuses, such as a
-    quote, a newline or a carriage return.
+    A seed's header is the first row of its CSV file `project/<original_file_path>`, read as
+    UTF-8 with an optional byte order mark and with the delimiter of the seed's `config` (a comma
+    when it has none), so a CRLF line ending changes nothing. An empty file has an empty header.
+    Only a regular file whose real path, its symbolic links resolved, lies in a folder of
+    `_seed_folders(project)` is read, and only its first MiB. Any other file gives `None`, as does
+    a file that cannot be read: one that is missing, whose path holds a NUL, that is not UTF-8,
+    whose first row is longer than a MiB, that has a field over the limit of `csv`, or whose
+    delimiter is not one character or is one `csv` refuses, such as a quote, a newline or a
+    carriage return. A manifest therefore cannot name another file for the check to show.
     """
+    folders = _seed_folders(project)
 
     def read(node: Mapping[str, Any]) -> list[str] | None:
         # A node that the lite check reads a header of is a kept seed, so `config` is a mapping
         # and `original_file_path` a non-empty string.
         delimiter = node["config"].get("delimiter") or ","
         try:
-            with (project / node["original_file_path"]).open(
-                newline="", encoding="utf-8-sig"
-            ) as stream:
-                return next(csv.reader(stream, delimiter=delimiter), [])
+            real = Path(os.path.realpath(project / node["original_file_path"]))
+            if not real.is_file() or not any(
+                real.is_relative_to(folder) for folder in folders
+            ):
+                return None
+            return _first_row(real, delimiter)
         except OSError, ValueError, csv.Error, TypeError:
             return None
 

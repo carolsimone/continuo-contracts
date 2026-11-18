@@ -1429,10 +1429,19 @@ producer's lite check of a dbt project, described below.
   `PROJECT_DIR` with `_` written `-`, and `.` names the current folder. The header of a seed is the
   first row of `PROJECT_DIR/<original_file_path>` of its manifest node, read as UTF-8 with an
   optional byte order mark and with the delimiter of the seed's `config.delimiter`, a comma when it
-  has none, so a BOM or CRLF line endings change nothing. A file that cannot be read (missing, not
-  UTF-8, a path with a NUL, or a delimiter `csv` refuses, such as a quote or a newline) gives the
-  error line that `lite.check_manifest` words for it, and an empty file has an empty header. A seed
-  of an installed package gets the information line instead.
+  has none, so a BOM or CRLF line endings change nothing. The command reads that file only when it
+  is a regular file whose real path, its symbolic links resolved, lies in a seed folder of the
+  project, and reads at most its first MiB, so a manifest from another job cannot make it show
+  another file, and a pipe or a device never stalls it. The seed folders are the entries of the
+  list `seed-paths` of `PROJECT_DIR/dbt_project.yml`, each read from `PROJECT_DIR` (an absolute
+  one as it is, so a folder outside the project works), with an entry that is not a string or
+  holds a NUL left out; the folder is `seeds`, dbt's default, when that file is missing, cannot be
+  read as `yaml_strict` reads YAML, is not a mapping or has no string in a list under
+  `seed-paths`. A file that cannot be read (missing, outside the seed folders, not a regular file,
+  not UTF-8, a first row longer than a MiB, a path with a NUL, or a delimiter `csv` refuses, such
+  as a quote or a newline) gives the error line that `lite.check_manifest` words for it, which
+  shows nothing of the file, and an empty file has an empty header. A seed of an installed package
+  gets the information line instead.
 
   The report goes through `logging` to stderr: the `lite.BANNER` at INFO, one line for each line
   of the check, `<node id>: <message>` (the message alone for the line about the whole service),

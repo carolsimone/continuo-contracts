@@ -1087,6 +1087,232 @@ def test_the_seeds_are_read_from_the_project_folder(tmp_path, capsys):
     assert _lines(document, FX_SEED) == []
 
 
+# Where a seed's CSV file may be: only a regular file inside a folder of `seed-paths`.
+
+SECRET = b"db_password,aws_secret_access_key\nhunter2,abc\n"
+MATCHING = b"currency,rate_date,rate_to_eur\nAUD,2023-02-17,0.6\n"
+
+
+def _seed_at(manifest, original_file_path):
+    """Point the fx seed of the manifest file `manifest` at `original_file_path`."""
+    document = json.loads(manifest.read_text(encoding="utf-8"))
+    document["nodes"][FX_SEED]["original_file_path"] = original_file_path
+    return _write_json(manifest, document)
+
+
+def _seed_paths(project, text):
+    """Replace the `seed-paths` line of the project file with `text`."""
+    file = project / "dbt_project.yml"
+    written = file.read_text(encoding="utf-8")
+    assert 'seed-paths: ["seeds"]\n' in written
+    file.write_text(
+        written.replace('seed-paths: ["seeds"]\n', text), encoding="utf-8"
+    )
+
+
+def _shows_the_secret(project, manifest, capsys):
+    _check(project, "--manifest", manifest, "--json")
+    return any(
+        name in capsys.readouterr().out for name in ("hunter2", "password")
+    )
+
+
+@pytest.mark.parametrize(
+    "where",
+    [
+        "../outside.csv",
+        "seeds/../../outside.csv",
+        "absolute",
+        ".env",
+        "dbt_project.yml",
+        "profiles.yml",
+    ],
+)
+def test_a_seed_path_outside_the_seed_folders_gives_the_unreadable_line(
+    where, tmp_path, capsys
+):
+    project, manifest = _seed_project(tmp_path, MATCHING)
+    (tmp_path / "outside.csv").write_bytes(SECRET)
+    (project / ".env").write_bytes(b"DB_PASSWORD=hunter2\n")
+    target = str(tmp_path / "outside.csv") if where == "absolute" else where
+    manifest = _seed_at(manifest, target)
+
+    assert _fx_lines(project, manifest, capsys) == [UNREADABLE]
+    assert not _shows_the_secret(project, manifest, capsys)
+
+
+def test_a_link_in_the_seed_folder_to_a_file_outside_it_gives_the_unreadable_line(
+    tmp_path, capsys
+):
+    project, manifest = _seed_project(tmp_path, MATCHING)
+    (tmp_path / "outside.csv").write_bytes(SECRET)
+    (project / "seeds" / "leak.csv").symlink_to(tmp_path / "outside.csv")
+    manifest = _seed_at(manifest, "seeds/leak.csv")
+
+    assert _fx_lines(project, manifest, capsys) == [UNREADABLE]
+    assert not _shows_the_secret(project, manifest, capsys)
+
+
+def test_a_link_in_the_seed_folder_to_a_file_in_it_is_read(tmp_path, capsys):
+    project, manifest = _seed_project(tmp_path, MATCHING)
+    (project / "seeds" / "alias.csv").symlink_to(
+        project / "seeds" / "seed_fx_rates_eur.csv"
+    )
+    manifest = _seed_at(manifest, "seeds/alias.csv")
+
+    assert _fx_lines(project, manifest, capsys) == []
+
+
+def test_a_csv_file_in_a_folder_below_a_seed_folder_is_read(tmp_path, capsys):
+    project, manifest = _seed_project(tmp_path, MATCHING)
+    (project / "seeds" / "fx").mkdir()
+    (project / "seeds" / "fx" / "rates.csv").write_bytes(MATCHING)
+    manifest = _seed_at(manifest, "seeds/fx/rates.csv")
+
+    assert _fx_lines(project, manifest, capsys) == []
+
+
+def test_a_seed_that_is_a_folder_or_a_pipe_gives_the_unreadable_line(
+    tmp_path, capsys
+):
+    project, manifest = _seed_project(tmp_path, MATCHING)
+    pipe = project / "seeds" / "pipe.csv"
+    os.mkfifo(pipe)
+    # A writer holds the pipe open with data in it, so a reader that opened it would read the
+    # data instead of waiting.
+    writer = os.open(pipe, os.O_RDWR)
+    try:
+        os.write(writer, SECRET)
+        for where in ("seeds", "seeds/pipe.csv"):
+            manifest = _seed_at(manifest, where)
+            assert _fx_lines(project, manifest, capsys) == [UNREADABLE]
+    finally:
+        os.close(writer)
+
+
+@pytest.mark.parametrize("named", ["relative", "absolute"])
+def test_a_seed_folder_that_the_project_names_outside_it_is_read(
+    named, tmp_path, capsys
+):
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    (shared / "seed_fx_rates_eur.csv").write_bytes(MATCHING)
+    project, manifest = _seed_project(tmp_path, SECRET)
+    folder = "../shared" if named == "relative" else str(shared)
+    _seed_paths(project, f'seed-paths: ["{folder}"]\n')
+    manifest = _seed_at(manifest, f"{folder}/seed_fx_rates_eur.csv")
+
+    assert _fx_lines(project, manifest, capsys) == []
+    # `seeds` is no seed folder of this project any more.
+    manifest = _seed_at(manifest, "seeds/seed_fx_rates_eur.csv")
+    assert _fx_lines(project, manifest, capsys) == [UNREADABLE]
+
+
+def test_a_seed_folder_that_is_a_link_is_followed(tmp_path, capsys):
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    project, manifest = _seed_project(tmp_path, MATCHING)
+    shutil.move(project / "seeds", shared / "seeds")
+    (project / "seeds").symlink_to(shared / "seeds")
+
+    assert _fx_lines(project, manifest, capsys) == []
+
+
+@pytest.mark.parametrize(
+    "project_file",
+    [
+        None,
+        b"name: [\n",
+        b"\xff\xfe",
+        b"base: &a {x: 1}\nother: *a\nseed-paths: [elsewhere]\n",
+        b"seed-paths: seeds_elsewhere\n",
+        b"seed-paths: [1, null]\n",
+        b"seed-paths: []\n",
+        b"- seed-paths\n",
+    ],
+    ids=[
+        "missing",
+        "not yaml",
+        "not text",
+        "refused by the strict reader",
+        "not a list",
+        "no string",
+        "empty",
+        "not a mapping",
+    ],
+)
+def test_the_seed_folder_is_seeds_unless_the_project_file_names_others(
+    project_file, tmp_path, capsys
+):
+    project, manifest = _seed_project(tmp_path, MATCHING)
+    file = project / "dbt_project.yml"
+    if project_file is None:
+        file.unlink()
+    else:
+        file.write_bytes(project_file)
+
+    assert _fx_lines(project, manifest, capsys) == []
+
+
+def test_an_entry_of_seed_paths_that_is_not_a_string_or_holds_a_nul_is_left_out(
+    tmp_path, capsys
+):
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    (shared / "seed_fx_rates_eur.csv").write_bytes(MATCHING)
+    project, manifest = _seed_project(tmp_path, MATCHING)
+    _seed_paths(project, 'seed-paths: [1, "a\\0b", "../shared"]\n')
+
+    assert _fx_lines(project, manifest, capsys) == [UNREADABLE]
+    manifest = _seed_at(manifest, "../shared/seed_fx_rates_eur.csv")
+    assert _fx_lines(project, manifest, capsys) == []
+
+
+def _row_of(size):
+    """A first row of `size` bytes with its line ending: the declared columns, then others."""
+    row = b"currency,rate_date,rate_to_eur"
+    extra = [b"x" * 99] * ((size - len(row)) // 100 - 1)
+    last = b"y" * (size - len(row) - 100 * len(extra) - len(b",\n"))
+    return b",".join([row, *extra, last]) + b"\n"
+
+
+def test_a_first_row_of_up_to_one_mebibyte_is_read(tmp_path, capsys):
+    # The first row fills the first MiB exactly, with its line ending, and more rows follow.
+    first = _row_of(2**20)
+    assert len(first) == 2**20
+    project, manifest = _seed_project(
+        tmp_path, first + b"AUD,2023-02-17,0.6\n" * 10
+    )
+
+    lines = _fx_lines(project, manifest, capsys)
+    assert lines == [
+        f"{name} is in the CSV header but not declared"
+        for name in ("x" * 99, first.rstrip(b"\n").rsplit(b",", 1)[1].decode())
+    ]
+
+
+@pytest.mark.parametrize(
+    "rows",
+    [b"", b"AUD,2023-02-17,0.6\n"],
+    ids=["the whole file", "more rows after it"],
+)
+def test_a_first_row_longer_than_one_mebibyte_gives_the_unreadable_line(
+    rows, tmp_path, capsys
+):
+    first = _row_of(2**20 + 1)
+    project, manifest = _seed_project(tmp_path, first + rows)
+
+    assert _fx_lines(project, manifest, capsys) == [UNREADABLE]
+
+
+def test_a_device_file_gives_the_unreadable_line_at_once(tmp_path, capsys):
+    project, manifest = _seed_project(tmp_path, MATCHING)
+    (project / "seeds" / "zero.csv").symlink_to("/dev/zero")
+    manifest = _seed_at(manifest, "seeds/zero.csv")
+
+    assert _fx_lines(project, manifest, capsys) == [UNREADABLE]
+
+
 # A manifest whose fields are not the shape a dbt manifest has.
 
 
