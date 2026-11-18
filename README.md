@@ -492,9 +492,12 @@ load("a: &x 1\nb: *x\n")
 ```python
 from continuo_contracts.dbt import (
     DEFAULT_CRITICALITY,
+    FLAGS,
     RESOURCE_TYPES,
     SEED_SCHEDULE,
     SKIP_REASONS,
+    Generated,
+    generate,
     node_service,
     project_service,
     schedule,
@@ -538,6 +541,45 @@ kept = {
 # {"analytics.orders": "daily", "analytics.customer.v2": "daily", ...}
 ```
 
+`generate` writes the ODCS contract of a kept node from the node and its tests, with nothing from
+the database or the compiled SQL:
+
+- the envelope `apiVersion: v3.2.0`, `kind: DataContract`, `version: "0"` and `status: active`;
+- `id` from `unique_id`, `name` from `table_name`, the node's `description`, trimmed, as
+  `description.purpose`, `config.meta.owner` as `team.name`, and the node's `tags` in the order
+  dbt lists them, so a project's tags come before the ones a model adds;
+- `roles`: each of `config.meta.continuo.readers` as `{role: <reader>, access: read}`, then each
+  grantee of each privilege of `config.grants`, in privilege name order, as
+  `{role: <grantee>, access: <privilege>}`;
+- the root `customProperties`, each a `{vendor: continuo, property, value}` item, in this order and
+  only when it has a value: `service` (`node_service`), `kind` (`dbt-model`, `dbt-seed` or
+  `dbt-snapshot`), `schedule` (`schedule`, left out for a dormant node), `criticality`
+  (`config.meta.criticality`, else `SECONDARY`), `timeoutMinutes` (`config.meta.timeout_minutes`),
+  `filePath` (`original_file_path`), `materialization` (`{materialized}` with `uniqueKey` and
+  `incrementalStrategy` when set and `onSchemaChange` when it is not `ignore`),
+  `contractEnforced` (`true` when `config.contract.enforced` is), `access` (a model's
+  `config.access` when it is not `protected`), `group` (`config.group`), `deprecationDate` (the
+  date of a model's `deprecation_date` in the offset it carries, so it is the date the team wrote
+  in every time zone), `freshnessBuildAfter` (`{count, period}` of a model's
+  `config.freshness.build_after`), `snapshot` (a snapshot's `strategy`, `uniqueKey`, `updatedAt`,
+  `checkCols`, `hardDeletes`, `metaColumnNames` and `validToCurrent`, each when set) and
+  `quoteColumns` (a seed's `config.quote_columns` when set);
+- one schema object with `name` the table, `physicalName` the alias (else the table),
+  `physicalType` `view` for a view, `ephemeral` for an ephemeral model and `table` otherwise, the
+  node's description, and `config.meta.continuo.reads` as its `reads` custom property.
+
+A field with no value is left out of the document. The result does not depend on the order of the
+keys of the node or on the machine's time zone, and `source_sha256` covers only the manifest fields
+`generate` reads, so `created_at` and the compiled SQL never move it.
+
+```python
+generated = generate(
+    node, tests_by_node(manifest).get(node["unique_id"], []), manifest=manifest
+)
+generated.document["id"]  # "analytics.fx_transactions_eur"
+generated.flags  # ()
+```
+
 ### Public names
 
 - `RESOURCE_TYPES`: `("model", "seed", "snapshot")`, the resource types of the nodes that can get a
@@ -569,6 +611,18 @@ kept = {
   of resource type `test` to the nodes they test, the way dbt counts them: a test counts for its
   `attached_node` when it has one, else for every entry of its `depends_on.nodes`, once for each.
   The key is a node id and the tests of one node come in the order of the manifest's keys.
+- `FLAGS`: `("jinja_in_test_arguments", "test_column_not_declared",
+  "primary_key_column_not_declared")`, the marks a generated contract may carry for a fact that
+  `generate` keeps as written but that the team may want to look at.
+- `Generated`: what `generate` returns, a frozen dataclass with the fields `document` (the ODCS
+  contract, a `dict`), `flags` (the marks of `FLAGS` the contract carries, a tuple) and
+  `source_sha256` (the lowercase hex SHA-256 of the canonical JSON of the manifest fields
+  `generate` read for the node and its tests).
+- `generate`: `generate(node, tests, *, manifest) -> Generated` writes the ODCS contract of a node
+  that `skip_reason` keeps, from the node, its tests as `tests_by_node` joins them and the
+  manifest they come from. A field of the node in a shape it cannot read, such as a `config.meta`
+  that is not a mapping or a `config.meta.owner` that is not a non-empty string, raises
+  `DbtNodeError`.
 
 ## vocabulary
 
@@ -601,7 +655,7 @@ ones the package knows and where each may sit. It reads no file and checks no co
 
   `authored` means the author writes the property. `filled` means continuo writes it and the
   author may not. `refused` means no Python contract carries it. For a dbt contract, `written`
-  means the generator writes the property, `filled` means continuo fills it, and `not_used` means
+  means `dbt.generate` writes the property, `filled` means continuo fills it, and `not_used` means
   no dbt contract carries it. The two answers are independent: no rule for a Python contract reads
   `dbt`. A property that is not in the mapping is unknown to this release.
 - `continuo_values(custom_properties: object) -> dict[str, Any]` returns the value of each
@@ -1012,9 +1066,10 @@ surrogate, and an argument of the wrong type can raise `TypeError` or `Attribute
   names the service or the entry.
 - `ProjectionError`: `canonical_sql_type`, `PythonNode.from_mapping`, `code_projection` and
   `projection_hash` refuse an SQL type or a Python node.
-- `DbtNodeError`: `dbt.skip_reason`, `dbt.node_service`, `dbt.schedule`, `dbt.table_name` and
-  `dbt.unique_id` refuse a field of a manifest node in a shape they cannot read, and the message
-  starts with the node's id, then `: ` and the field with what it must be and what it is.
+- `DbtNodeError`: `dbt.skip_reason`, `dbt.node_service`, `dbt.schedule`, `dbt.table_name`,
+  `dbt.unique_id` and `dbt.generate` refuse a field of a manifest node in a shape they cannot read,
+  and the message starts with the node's id, then `: ` and the field with what it must be and what
+  it is.
 - `FingerprintsFileError`: `parse_fingerprints` and `load` refuse a fingerprints file that is not
   in the form described under [fingerprints](#fingerprints), and the message names the location in
   the file.

@@ -23,6 +23,14 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   parser does today for every node of the five fixture manifests, which
   `tests/fixtures/dbt/todays_gates.json` records. A field of a node in a shape these functions cannot
   read raises the new `DbtNodeError`.
+- `continuo_contracts.dbt.generate` writes the ODCS contract of a kept dbt model, seed or snapshot
+  from its manifest node: the envelope, `id`, `name`, `description.purpose`, `team.name`, `tags`,
+  `roles` (readers and grants), the fourteen root `continuo` properties a dbt contract may carry,
+  each only when it has a value, and one schema object with its `physicalName`, `physicalType` and
+  declared `reads`. It returns a `Generated` with the document, the contract's flags (`FLAGS`) and
+  `source_sha256`, the SHA-256 of the manifest fields it read. A `deprecationDate` is the date the
+  team wrote in every time zone. A field of the node in a shape it cannot read raises
+  `DbtNodeError`.
 - Test fixtures for dbt nodes: `tests/fixtures/dbt/projects` holds the dbt projects `core`,
   `finance`, `marketing` and `service_1`, copied from continuo-demo at commit
   `d92d371223107e77f5ca9291bfff5f6bb25e1703`, and a `cases` project with a local package `cases_pkg`
