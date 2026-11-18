@@ -727,7 +727,9 @@ facts == run_facts(normalise_dbt(generated.document, reads=[]))  # True
   written `-`, and `""` for a node with no `fqn` or an empty one. An `fqn` that is not a list of
   strings raises `DbtNodeError`.
 - `project_service`: `project_service(manifest, declared_service) -> str` returns the manifest's
-  `metadata.project_name` with `_` written `-`, else `declared_service` as given.
+  `metadata.project_name` with `_` written `-`, else `declared_service` as given. A `metadata`
+  that is not a mapping, or a `project_name` that is not a string, raises `DbtNodeError`, whose
+  message starts with `manifest`.
 - `skip_reason`: `skip_reason(node, *, project) -> str | None` returns the first of
   `SKIP_REASONS` that applies to the node, or `None` for a node continuo keeps. `project` is what
   `project_service` returns, and with `""` no node is left out as `installed_package`. It raises
@@ -745,7 +747,11 @@ facts == run_facts(normalise_dbt(generated.document, reads=[]))  # True
 - `tests_by_node`: `tests_by_node(manifest) -> dict[str, list[Mapping[str, Any]]]` joins the nodes
   of resource type `test` to the nodes they test, the way dbt counts them: a test counts for its
   `attached_node` when it has one, else for every entry of its `depends_on.nodes`, once for each.
-  The key is a node id and the tests of one node come in the order of the manifest's keys.
+  The key is a node id and the tests of one node come in the order of the manifest's keys. A
+  `nodes` that is not a mapping of mappings raises `DbtNodeError`, whose message starts with
+  `manifest`, and so does, starting with the test's id, a test whose `attached_node` is not a
+  string, whose `depends_on` is not a mapping or whose `depends_on.nodes` is not a list of
+  strings.
 - `FLAGS`: `("jinja_in_test_arguments", "test_column_not_declared",
   "primary_key_column_not_declared")`, the marks a generated contract may carry for a fact that
   `generate` keeps as written but that the team may want to look at.
@@ -755,11 +761,12 @@ facts == run_facts(normalise_dbt(generated.document, reads=[]))  # True
   `generate` reads for the node and its tests, and of nothing else).
 - `generate`: `generate(node, tests, *, manifest) -> Generated` writes the ODCS contract of a node
   that `skip_reason` keeps, from the node, its tests as `tests_by_node` joins them and the
-  manifest they come from, which holds the targets of its `relationships` tests. A field of the
-  node, of a test or of a target in a shape it cannot read, such as a `config.meta` that is not a
-  mapping, a `config.meta.owner` that is not a non-empty string or a test `severity` other than
-  `warn` or `error`, or a field it reads whose value canonical JSON cannot write, raises
-  `DbtNodeError`. The message starts with the node's id; for a test it then names the test, as in
+  manifest they come from, which holds the targets of its `relationships` tests. A test that is
+  not a mapping, a manifest `nodes` or `sources` that a `relationships` test reads and that is not
+  a mapping, a field of the node, of a test or of a target in a shape it cannot read, such as a
+  `config.meta` that is not a mapping, a `config.meta.owner` that is not a non-empty string or a
+  test `severity` other than `warn` or `error`, or a field it reads whose value canonical JSON
+  cannot write, raises `DbtNodeError`. The message starts with the node's id; for a test it then names the test, as in
   `model.shop.orders: test test.shop.not_null_orders_id.1a2b: config.where must be a string, got
   int`.
 - `logical_type`: `logical_type(data_type) -> dict[str, Any] | None` returns the ODCS logical type
@@ -1283,15 +1290,21 @@ order:
    `contracts` never suggests that the release creates a contract it would reject. A declared read
    that is not `<schema>.<table>` gives an `error` line and no hash, because the stored form cannot
    be written.
-6. For a kept seed, `read_header(node)` gives the names in the first row of its CSV file, or
-   `None` when the file cannot be read, which gives one `error` line. Otherwise
+6. For a kept seed of the project, `read_header(node)` gives the names in the first row of its CSV
+   file, or `None` when the file cannot be read, which gives one `error` line. Otherwise
    `dbt.seed_header_issues` compares them with the seed's declared columns, the names of the
-   properties of its contract in order, and each difference gives an `error` line.
+   properties of its contract in order, and each difference gives an `error` line. A kept seed of
+   an installed package, one whose `package_name` is not the manifest's `metadata.project_name`,
+   has its CSV file in that package and not in the project: it gets the `info` line `a seed of an
+   installed package: its CSV header is not checked`, and `read_header` is not called for it. A
+   seed with no `package_name`, or a manifest that names no project, counts as the project's.
 
 When every model, seed and snapshot is skipped, or the manifest has none, the last line is an
 `error` with the empty `node_id`, `every node of the service is skipped: the release rejects it as
 invalid_artifact (manifest contains no model/seed nodes)`. A node whose gate cannot read it counts
-as one that is not skipped.
+as one that is not skipped. A field of the manifest that is no node's, a `metadata` or a `nodes`
+or a field of a test that `dbt.tests_by_node` reads, in a shape the library cannot read raises
+`DbtNodeError` from `check_manifest`.
 
 The contract of the lite check is the one `dbt.generate` writes, stored with no tables from
 compiled SQL, since `dbt parse` compiles nothing. Its hash is the `contract_hash` of that stored
@@ -1307,8 +1320,8 @@ because its contract is valid.
   text in this order: `dbt runs in the team's image`, `the whole estate is parsed`, `the tables a
   node reads`, `the install's library version`, `install settings` and `the install's ontology`.
 - `Line`: one thing the check says about a node, a frozen dataclass with the fields `level`
-  (`info` for a node the check leaves out or a dormant node, `error` for a problem that fails the
-  check), `node_id` (the key of the node in the manifest, or `""` for the line about the whole
+  (`info` for a node the check leaves out, a dormant node or a seed of an installed package,
+  `error` for a problem that fails the check), `node_id` (the key of the node in the manifest, or `""` for the line about the whole
   service) and `message`.
 - `LiteReport`: what `check_manifest` returns, a frozen dataclass with the fields `service` (the
   service the gates compare each node with, as `dbt.project_service` gives it), `lines` (a tuple of
@@ -1319,7 +1332,9 @@ because its contract is valid.
   checks the manifest `json.load` returns. `declared_service` is the service of the project when
   the manifest names none, as in `dbt.project_service`. `read_header` takes a seed's manifest node
   and returns the column names of its CSV header, or `None` when the file cannot be read; it is
-  called once for each seed that gets a contract, and an exception it raises is not caught.
+  called once for each seed of the project that gets a contract, and an exception it raises is not
+  caught. It raises `DbtNodeError` for a manifest `metadata`, `nodes` or test field in a shape the
+  library cannot read.
 
 ## cli
 
@@ -1382,8 +1397,11 @@ producer's lite check of a dbt project, described below.
   there, as it does for any run. The command runs no other dbt command: it never runs `dbt deps`. dbt gets the environment of the command, and, for each `env_var('NAME')` of
   `<DIR>/profiles.yml` that has no default (single or double quotes, `env_var('NAME')` and not
   `env_var('NAME', default)`) when no variable `NAME` is set, the placeholder `continuo-lite-check`
-  as that variable. The command scans the text of the profiles file for those calls and never
-  evaluates Jinja, so it also finds a call that a condition would leave out. A profiles file that
+  as that variable. `NAME` is a plain name, a letter or `_` and then letters, digits and `_`, so a
+  call such as `env_var('A=B')` gets no placeholder. The command scans the text of the profiles
+  file for those calls and never evaluates Jinja, so it also finds a call that a condition would
+  leave out. The placeholder is text, so a profile that reads a variable as a number, such as
+  `env_var('PORT') | as_number`, needs a real value in CI. A profiles file that
   cannot be read adds nothing, and dbt reports what is wrong with it. A `dbt parse` that exits
   with a status other than 0 gives exit status 1, no report and nothing on stdout: the command
   logs `dbt parse exited with status <N>` at ERROR, then the last 20 lines of dbt's output,
@@ -1393,16 +1411,19 @@ producer's lite check of a dbt project, described below.
   With `--manifest FILE` the command reads that `manifest.json`, which a team may have built
   already, and runs no dbt: `--dbt`, `--profiles-dir` and `--target` have no effect, and no `dbt`
   need be installed. The manifest must be a JSON object, and its `nodes`, when it has them, an
-  object of objects. `PROJECT_DIR` must still be a folder, because the CSV files of the seeds are
-  read from it.
+  object of objects; a `metadata`, or a field of a test that `dbt.tests_by_node` reads, in a shape
+  the library cannot read is a usage error too, and a field of a node gives that node an error
+  line. `PROJECT_DIR` must still be a folder, because the CSV files of the seeds are read from it.
 
   `--service` is the service of the project that the gates compare each node with when the
   manifest names none, as in `dbt.project_service`; without it the service is the name of
   `PROJECT_DIR` with `_` written `-`, and `.` names the current folder. The header of a seed is the
   first row of `PROJECT_DIR/<original_file_path>` of its manifest node, read as UTF-8 with an
   optional byte order mark and with the delimiter of the seed's `config.delimiter`, a comma when it
-  has none, so a BOM or CRLF line endings change nothing. A file that cannot be read gives the
-  error line that `lite.check_manifest` words for it, and an empty file has an empty header.
+  has none, so a BOM or CRLF line endings change nothing. A file that cannot be read (missing, not
+  UTF-8, a path with a NUL, or a delimiter `csv` refuses, such as a quote or a newline) gives the
+  error line that `lite.check_manifest` words for it, and an empty file has an empty header. A seed
+  of an installed package gets the information line instead.
 
   The report goes through `logging` to stderr: the `lite.BANNER` at INFO, one line for each line
   of the check, `<node id>: <message>` (the message alone for the line about the whole service),
@@ -1432,7 +1453,7 @@ stdout is empty.
 |---|---|---|
 | 0 | every contract is valid, or `hash` printed its hash | the check found no error |
 | 1 | a contract has an issue | the check found an error line, or `dbt parse` exited with a status other than 0 |
-| 2 | a usage error of the arguments (a `--service` that is empty or blank among them), a path that names no contract file (a folder with no `*.odcs.yaml` file, a path that does not exist, a file not named `*.odcs.yaml`), a path that cannot be looked up (one below a folder the process may not search, among them), a folder that cannot be listed, a file that is not UTF-8 text or cannot be read, or a `--read` value that is not a table. An ERROR line names each such path and what the system refused | a usage error of the arguments (a `--service` that is empty or blank among them), a `PROJECT_DIR` that is not a folder or cannot be looked up, no `dbt` executable (`--dbt` names none that can run, or there is no `dbt` on `PATH`), or a manifest that cannot be read, is not JSON, or is not the shape above, whether `--manifest` names it or `dbt parse` wrote it. An ERROR line says which |
+| 2 | a usage error of the arguments (a `--service` that is empty or blank among them), a path that names no contract file (a folder with no `*.odcs.yaml` file, a path that does not exist, a file not named `*.odcs.yaml`), a path that cannot be looked up (one below a folder the process may not search, among them), a folder that cannot be listed, a file that is not UTF-8 text or cannot be read, or a `--read` value that is not a table. An ERROR line names each such path and what the system refused | a usage error of the arguments (a `--service` that is empty or blank among them), a `PROJECT_DIR` that is not a folder or cannot be looked up, no `dbt` executable (`--dbt` names none that can run, or there is no `dbt` on `PATH`), or a manifest that cannot be read, is not JSON (or is nested deeper than the JSON reader goes), or is not the shape above, whether `--manifest` names it or `dbt parse` wrote it. An ERROR line says which |
 
 Nothing is checked when one path of `validate` or `hash` is refused with status 2.
 
@@ -1488,9 +1509,10 @@ surrogate, and an argument of the wrong type can raise `TypeError` or `Attribute
 - `ProjectionError`: `canonical_sql_type`, `PythonNode.from_mapping`, `code_projection` and
   `projection_hash` refuse an SQL type or a Python node.
 - `DbtNodeError`: `dbt.skip_reason`, `dbt.node_service`, `dbt.schedule`, `dbt.table_name`,
-  `dbt.unique_id` and `dbt.generate` refuse a field of a manifest node in a shape they cannot read,
-  and the message starts with the node's id, then `: ` and the field with what it must be and what
-  it is.
+  `dbt.unique_id`, `dbt.tests_by_node`, `dbt.project_service` and `dbt.generate` refuse a field of
+  a manifest node, or of the manifest, in a shape they cannot read, and the message starts with
+  the node's id (`manifest` for a field of the manifest), then `: ` and the field with what it
+  must be and what it is. `lite.check_manifest` raises it for a field of the manifest.
 - `FingerprintsFileError`: `parse_fingerprints` and `load` refuse a fingerprints file that is not
   in the form described under [fingerprints](#fingerprints), and the message names the location in
   the file.

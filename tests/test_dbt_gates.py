@@ -462,3 +462,81 @@ def test_every_test_of_a_fixture_manifest_is_joined_once_per_target(project):
     for tests in joined.values():
         positions = [test_ids.index(t["unique_id"]) for t in tests]
         assert positions == sorted(positions)
+
+
+@pytest.mark.parametrize(
+    ("manifest", "message"),
+    [
+        ({"metadata": "x"}, "manifest: metadata must be a mapping, got str"),
+        ({"metadata": ["a"]}, "manifest: metadata must be a mapping, got list"),
+        (
+            {"metadata": {"project_name": 5}},
+            "manifest: metadata.project_name must be a string, got int",
+        ),
+        (
+            {"metadata": {"project_name": True}},
+            "manifest: metadata.project_name must be a string, got bool",
+        ),
+        (
+            {"metadata": {"project_name": ["a"]}},
+            "manifest: metadata.project_name must be a string, got list",
+        ),
+    ],
+)
+def test_a_project_of_the_wrong_shape_raises_dbt_node_error(manifest, message):
+    with pytest.raises(DbtNodeError) as raised:
+        dbt.project_service(manifest, "declared")
+    assert str(raised.value) == message
+
+
+def test_a_project_with_no_metadata_or_no_name_is_the_declared_service():
+    for manifest in ({"metadata": None}, {"metadata": {"project_name": None}}):
+        assert dbt.project_service(manifest, "declared") == "declared"
+
+
+def _test_node(**fields):
+    node = {
+        "unique_id": "test.shop.t",
+        "resource_type": "test",
+        "attached_node": None,
+        "depends_on": {"nodes": ["model.shop.a"]},
+    }
+    node.update(fields)
+    return {"nodes": {"test.shop.t": node}}
+
+
+@pytest.mark.parametrize(
+    ("manifest", "message"),
+    [
+        ({"nodes": "x"}, "manifest: nodes must be a mapping, got str"),
+        ({"nodes": ["x"]}, "manifest: nodes must be a mapping, got list"),
+        (
+            {"nodes": {"model.shop.a": "x"}},
+            "manifest: nodes.model.shop.a must be a mapping, got str",
+        ),
+        (
+            _test_node(depends_on="x"),
+            "test.shop.t: depends_on must be a mapping, got str",
+        ),
+        (
+            _test_node(depends_on={"nodes": "model.shop.a"}),
+            "test.shop.t: depends_on.nodes must be a list of strings, got str",
+        ),
+        (
+            _test_node(depends_on={"nodes": [{"a": 1}]}),
+            "test.shop.t: depends_on.nodes[0] must be a string, got dict",
+        ),
+        (
+            _test_node(attached_node=["model.shop.a"]),
+            "test.shop.t: attached_node must be a string, got list",
+        ),
+        (
+            _test_node(attached_node={"a": 1}),
+            "test.shop.t: attached_node must be a string, got dict",
+        ),
+    ],
+)
+def test_tests_of_the_wrong_shape_raise_dbt_node_error(manifest, message):
+    with pytest.raises(DbtNodeError) as raised:
+        dbt.tests_by_node(manifest)
+    assert str(raised.value) == message

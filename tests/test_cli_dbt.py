@@ -1045,3 +1045,164 @@ def test_the_seeds_are_read_from_the_project_folder(tmp_path, capsys):
     document = json.loads(capsys.readouterr().out)
     assert _lines(document, COSTS_SEED) != []
     assert _lines(document, FX_SEED) == []
+
+
+# A manifest whose fields are not the shape a dbt manifest has.
+
+
+def _reshaped(change):
+    manifest = copy.deepcopy(load_manifest("finance"))
+    change(manifest)
+    return manifest
+
+
+def _first_test(manifest):
+    return next(
+        node
+        for node in manifest["nodes"].values()
+        if node["resource_type"] == "test" and node.get("attached_node")
+    )
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        (
+            lambda m: m.update(metadata="x"),
+            "manifest: metadata must be a mapping, got str",
+        ),
+        (
+            lambda m: m["metadata"].update(project_name=5),
+            "manifest: metadata.project_name must be a string, got int",
+        ),
+        (
+            lambda m: _first_test(m).update(depends_on="x"),
+            "depends_on must be a mapping, got str",
+        ),
+        (
+            lambda m: _first_test(m).update(depends_on={"nodes": "x"}),
+            "depends_on.nodes must be a list of strings, got str",
+        ),
+        (
+            lambda m: _first_test(m).update(depends_on={"nodes": [{"a": 1}]}),
+            "depends_on.nodes[0] must be a string, got dict",
+        ),
+        (
+            lambda m: _first_test(m).update(attached_node=["x"]),
+            "attached_node must be a string, got list",
+        ),
+    ],
+    ids=["metadata", "project_name", "depends_on", "nodes", "node", "attached"],
+)
+def test_a_manifest_field_of_the_wrong_shape_is_a_usage_error(
+    change, message, tmp_path, capsys, caplog
+):
+    path = _write_json(tmp_path / "manifest.json", _reshaped(change))
+
+    assert _check(FINANCE, "--manifest", path, "--json") == 2
+
+    assert capsys.readouterr().out == ""
+    (error,) = _errors(caplog)
+    assert error.endswith(message)
+    assert lite.BANNER not in _infos(caplog)
+
+
+def test_sources_of_the_wrong_shape_are_an_error_line_of_the_node_that_reads_them(
+    tmp_path, capsys, caplog
+):
+    # Only a relationships test to a source reads `sources`, so the node gets an error line.
+    manifest = copy.deepcopy(load_manifest("cases"))
+    manifest["sources"] = "x"
+    path = _write_json(tmp_path / "manifest.json", manifest)
+
+    assert _check(FINANCE, "--manifest", path) == 1
+
+    assert capsys.readouterr().out == ""
+    assert any(
+        error.startswith("model.cases.generic_tests: test ")
+        and error.endswith(": sources must be a mapping, got str")
+        for error in _errors(caplog)
+    )
+
+
+def test_a_manifest_nested_too_deep_for_the_json_reader_is_a_usage_error(
+    tmp_path, capsys, caplog
+):
+    path = tmp_path / "manifest.json"
+    path.write_text("[" * 200_000 + "]" * 200_000, encoding="utf-8")
+
+    assert _check(FINANCE, "--manifest", path, "--json") == 2
+
+    assert capsys.readouterr().out == ""
+    (message,) = _errors(caplog)
+    assert message.startswith(f"{path.as_posix()}: cannot read the manifest: ")
+
+
+@pytest.mark.parametrize(
+    "delimiter",
+    ['"', "\n", "\r"],
+    ids=["a quote", "a newline", "a carriage return"],
+)
+def test_a_delimiter_csv_refuses_gives_the_unreadable_line(
+    delimiter, tmp_path, capsys
+):
+    project, manifest = _seed_project(
+        tmp_path, b"currency,rate_date,rate_to_eur\n", delimiter=delimiter
+    )
+
+    assert _fx_lines(project, manifest, capsys) == [UNREADABLE]
+
+
+def test_a_seed_path_with_a_nul_gives_the_unreadable_line(tmp_path, capsys):
+    project, path = _seed_project(tmp_path, b"currency,rate_date,rate_to_eur\n")
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    manifest["nodes"][FX_SEED]["original_file_path"] = (
+        "seeds/seed_fx\x00rates_eur.csv"
+    )
+    _write_json(path, manifest)
+
+    assert _fx_lines(project, path, capsys) == [UNREADABLE]
+
+
+@pytest.mark.parametrize(
+    "name", ["A=B", "A\x00B", "1A", "A-B", "A B", ""], ids=repr
+)
+def test_an_env_var_that_is_not_a_plain_name_gets_no_placeholder(
+    name, fake_dbt, tmp_path
+):
+    project = _copy_project(tmp_path)
+    _profiles(project, "host: \"{{ env_var('" + name + "') }}\"\n")
+
+    assert _check(project, "--dbt", fake_dbt.executable) == 1
+
+    environ = fake_dbt.record["environ"]
+    assert PLACEHOLDER not in environ.values()
+
+
+def test_the_project_folder_and_the_target_reach_dbt_as_written(
+    fake_dbt, tmp_path
+):
+    # The command runs dbt with no shell, so no character of an argument is read by one.
+    project = tmp_path / 'a b; echo x $(x) `y` it\'s "q" | z'
+    shutil.copytree(FINANCE, project)
+    target = "a b; echo x $(x) 'it''s' \"q\" > out"
+
+    assert _check(project, "--dbt", fake_dbt.executable, "--target", target) == 1
+
+    argv = fake_dbt.record["argv"]
+    assert argv[argv.index("--project-dir") + 1] == str(project)
+    assert argv[argv.index("--profiles-dir") + 1] == str(project)
+    assert argv[argv.index("--target") + 1] == target
+    assert not (tmp_path / "out").exists()
+
+
+@pytest.mark.parametrize(
+    "argv", [["--help"], ["dbt", "--help"]], ids=["program", "dbt"]
+)
+def test_the_help_calls_dbt_check_a_lite_check(argv, capsys):
+    with pytest.raises(SystemExit):
+        main(argv)
+
+    out = " ".join(capsys.readouterr().out.split())
+    assert "lite check of a dbt project" in out
+    assert "the way continuo does at release time" not in out

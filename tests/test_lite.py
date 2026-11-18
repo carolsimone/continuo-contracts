@@ -370,6 +370,61 @@ def test_the_header_is_read_only_for_a_seed_that_gets_a_contract():
     ]
 
 
+INSTALLED_SEED = "a seed of an installed package: its CSV header is not checked"
+
+
+def test_a_kept_seed_of_an_installed_package_gets_an_information_line_and_no_read():
+    seed = _seed("rates", project="pkg", columns=["a"])
+    seed.update(package_name="pkg", tags=["daily"])
+    asked = []
+
+    def read(node):
+        asked.append(node["unique_id"])
+        return ["other"]
+
+    report = _check(_manifest(seed), read_header=read)
+
+    assert asked == []
+    assert report.lines == (Line("info", "seed.pkg.rates", INSTALLED_SEED),)
+    assert report.ok is True
+    assert set(report.contracts) == {"analytics.rates"}
+
+
+@pytest.mark.parametrize("package", ["shop", None, "absent"])
+def test_a_seed_of_the_project_has_its_header_checked(package):
+    seed = _seed("rates", columns=["a"])
+    if package != "absent":
+        seed["package_name"] = package
+
+    report = _check(_manifest(seed), read_header=lambda node: ["b"])
+
+    assert [line.message for line in report.lines] == [
+        "b is in the CSV header but not declared",
+        "a is declared but not in the CSV header",
+    ]
+
+
+def test_with_no_project_name_every_kept_seed_has_its_header_checked():
+    seed = _seed("rates", project="pkg", columns=["a"])
+    seed.update(package_name="pkg", tags=["daily"])
+    manifest = {"nodes": {seed["unique_id"]: seed}}
+
+    report = _check(manifest, read_header=lambda node: ["a"], service="shop")
+
+    assert report.lines == ()
+
+
+def test_an_installed_seed_with_a_contract_issue_gets_both_lines():
+    seed = _seed("rates", project="pkg", columns=["a"])
+    seed.update(package_name="pkg", tags=["x" * 51])
+
+    report = _check(_manifest(seed), read_header=lambda node: None)
+
+    assert [line.level for line in report.lines] == ["error", "info"]
+    assert report.lines[-1] == Line("info", "seed.pkg.rates", INSTALLED_SEED)
+    assert report.contracts == {}
+
+
 def test_the_cases_seed_without_a_declaration_fails_against_its_csv():
     report = _check(load_manifest("cases"), read_header=_csv_header("cases"))
 

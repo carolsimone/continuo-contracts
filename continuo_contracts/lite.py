@@ -81,14 +81,19 @@ _ALL_SKIPPED: Final = (
     "(manifest contains no model/seed nodes)"
 )
 _UNREADABLE: Final = "the CSV file cannot be read, so its header is not checked against the declared columns"
+# What the check says about a kept seed of an installed package, whose CSV file is not in the
+# project.
+_INSTALLED_SEED: Final = (
+    "a seed of an installed package: its CSV header is not checked"
+)
 
 
 @dataclass(frozen=True)
 class Line:
     """One thing the lite check says about a node.
 
-    `level` is `info` for a node the check leaves out or a dormant node, and `error` for a
-    problem that fails the check. `node_id` is the node's key in the manifest, such as
+    `level` is `info` for a node the check leaves out, a dormant node or a seed of an installed
+    package, and `error` for a problem that fails the check. `node_id` is the node's key in the manifest, such as
     `model.shop.orders`, or the empty string for a line about the whole service. `message` does
     not repeat the node.
     """
@@ -147,6 +152,17 @@ def _header_lines(
     ]
 
 
+def _is_installed(node: Mapping[str, Any], manifest: Mapping[str, Any]) -> bool:
+    """Say whether `node` comes from a package the project installs.
+
+    It does when the manifest names its project and the node's `package_name` is another one; a
+    node with no `package_name` is the project's.
+    """
+    project = (manifest.get("metadata") or {}).get("project_name")
+    package = node.get("package_name")
+    return bool(project) and package is not None and package != project
+
+
 def _check_kept_node(
     node_id: str,
     node: Mapping[str, Any],
@@ -178,7 +194,10 @@ def _check_kept_node(
         else:
             hashed = (document["id"], contract.contract_hash(stored))
     if node.get("resource_type") == "seed":
-        lines.extend(_header_lines(node_id, node, document, read_header))
+        if _is_installed(node, manifest):
+            lines.append(Line(_INFO, node_id, _INSTALLED_SEED))
+        else:
+            lines.extend(_header_lines(node_id, node, document, read_header))
     return lines, hashed
 
 
@@ -193,8 +212,8 @@ def check_manifest(
     `manifest` is a `manifest.json` as `json.load` returns it. `declared_service` is the service
     of the project when the manifest names none, as in `dbt.project_service`. `read_header` gives
     the column names in the first row of a seed's CSV file, from the seed's manifest node, and
-    `None` when the file cannot be read; it is called once for each seed that gets a contract,
-    and an exception it raises is not caught.
+    `None` when the file cannot be read; it is called once for each seed of the project that gets
+    a contract, and an exception it raises is not caught.
 
     The models, seeds and snapshots of the manifest are taken by node id, in code point order,
     whatever the order of the manifest. For each node, in this order:
@@ -209,14 +228,22 @@ def check_manifest(
        reads from compiled SQL, hashed with `contract.contract_hash`, and `contracts` maps the
        contract's id to the hash. A contract with an issue has no hash, as only a valid contract
        gets one. A declared read that is not a table gives an `error` line and no hash.
-    6. For a kept seed, `read_header` gives its header. `None` gives an `error` line. Otherwise
-       each column the header and the declared columns disagree on gives an `error` line, as
-       `dbt.seed_header_issues` words it. The declared columns are the names of the contract's
-       properties, in order.
+    6. For a kept seed of the project, `read_header` gives its header. `None` gives an `error`
+       line. Otherwise each column the header and the declared columns disagree on gives an
+       `error` line, as `dbt.seed_header_issues` words it. The declared columns are the names of
+       the contract's properties, in order. A kept seed of an installed package, one whose
+       `package_name` is not the manifest's `metadata.project_name`, has its CSV file outside the
+       project: it gets an `info` line that says its header is not checked, and `read_header` is
+       not called for it. A seed with no `package_name`, or a manifest that names no project,
+       counts as the project's.
 
     The message of an `error` line from a `DbtNodeError` does not repeat the node id. When every
     model, seed and snapshot is skipped, or there is none, the last line is an `error` that the
     release rejects the service. A node whose gate cannot read it is not counted as skipped.
+
+    A `metadata` or a `nodes` of the manifest, or a field of a test that `dbt.tests_by_node`
+    reads, in a shape the library cannot read raises `DbtNodeError`, since it is no node's to
+    report.
     """
     service = dbt.project_service(manifest, declared_service)
     tests = dbt.tests_by_node(manifest)

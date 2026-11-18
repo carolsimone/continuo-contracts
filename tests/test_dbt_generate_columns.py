@@ -1364,9 +1364,12 @@ def _test_label(name):
 def test_a_test_field_of_the_wrong_shape_names_the_node_then_the_test(
     name, path, value, message
 ):
-    manifest = _edited("cases", name, lambda test: _set(test, path, value))
+    # The tests are joined before the change, which `tests_by_node` would refuse for some.
+    manifest = _manifest("cases")
+    tests = dbt.tests_by_node(manifest)[GENERIC]
+    _set(_test(manifest, name), path, value)
     with pytest.raises(DbtNodeError) as raised:
-        _run(manifest, GENERIC)
+        dbt.generate(manifest["nodes"][GENERIC], tests, manifest=manifest)
     assert str(raised.value) == f"{_test_label(name)}: {message}"
 
 
@@ -1627,3 +1630,25 @@ def test_a_change_to_the_contracts_tags_leaves_the_node_and_its_schedule():
     document["tags"].insert(0, "another")
     assert node["tags"] == tags
     assert dbt.schedule(node) == schedule
+
+
+def test_sources_that_are_not_a_mapping_raise_dbt_node_error():
+    manifest = _manifest("cases")
+    manifest["sources"] = "x"
+    test = "relationships_generic_tests_event_id__id__source_raw_events_"
+    with pytest.raises(DbtNodeError) as raised:
+        _run(manifest, GENERIC)
+    assert str(raised.value) == (
+        f"{_test_label(test)}: sources must be a mapping, got str"
+    )
+
+
+@pytest.mark.parametrize("item", ["not_null_id", ["x"], None])
+def test_a_test_that_is_not_a_mapping_raises_dbt_node_error(item):
+    manifest = load_manifest("cases")
+    tests = [*dbt.tests_by_node(manifest)[GENERIC], item]
+    with pytest.raises(DbtNodeError) as raised:
+        dbt.generate(manifest["nodes"][GENERIC], tests, manifest=manifest)
+    assert str(raised.value) == (
+        f"{GENERIC}: tests[11] must be a mapping, got {type(item).__name__}"
+    )

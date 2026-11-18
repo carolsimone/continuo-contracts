@@ -297,8 +297,10 @@ def _label(node: Mapping[str, Any]) -> str:
 
 
 # Where a field sits, for an error: a node, whose label `_label` gives, or the label itself, such
-# as `<node id>: test <test id>` for a field of a test.
+# as `<node id>: test <test id>` for a field of a test, or `manifest` for a field of the manifest.
 type _Where = Mapping[str, Any] | str
+
+_MANIFEST: Final = "manifest"
 
 
 def _refusal(
@@ -355,10 +357,14 @@ def project_service(manifest: Mapping[str, Any], declared_service: str) -> str:
 
     It is the manifest's `metadata.project_name` with `_` written `-`. A manifest with no
     project name gives `declared_service` as it is, which is the empty string when no service is
-    declared either, and then `skip_reason` leaves no node out as `installed_package`.
+    declared either, and then `skip_reason` leaves no node out as `installed_package`. A
+    `metadata` that is not a mapping, or a `project_name` that is not a string, raises
+    `DbtNodeError`, whose message starts with `manifest`.
     """
-    metadata = manifest.get("metadata") or {}
-    name = metadata.get("project_name")
+    metadata = _mapping(_MANIFEST, "metadata", manifest.get("metadata"))
+    name = _optional_string(
+        _MANIFEST, "metadata.project_name", metadata.get("project_name")
+    )
     return name.replace("_", "-") if name else declared_service
 
 
@@ -430,14 +436,24 @@ def tests_by_node(
     The key is a node id. A test counts for its `attached_node` when it has one, and for every
     entry of its `depends_on.nodes` otherwise, once for each node. Only a node of resource type
     `test` is joined, and the tests of one node come in the order of the manifest's keys.
+
+    A `nodes` that is not a mapping of mappings raises `DbtNodeError`, whose message starts with
+    `manifest`, and so does, starting with the test's id, a test whose `attached_node` is not a
+    string, whose `depends_on` is not a mapping or whose `depends_on.nodes` is not a list of
+    strings.
     """
     joined: dict[str, list[Mapping[str, Any]]] = {}
-    for node in (manifest.get("nodes") or {}).values():
+    nodes = _mapping(_MANIFEST, "nodes", manifest.get("nodes"))
+    for key in nodes:
+        node = _mapping(_MANIFEST, f"nodes.{key}", nodes[key])
         if node.get("resource_type") != "test":
             continue
-        attached = node.get("attached_node")
-        depends_on = node.get("depends_on") or {}
-        targets = [attached] if attached else depends_on.get("nodes") or []
+        attached = _optional_string(
+            node, "attached_node", node.get("attached_node")
+        )
+        depends_on = _mapping(node, "depends_on", node.get("depends_on"))
+        nodes_read = _strings(node, "depends_on.nodes", depends_on.get("nodes"))
+        targets = [attached] if attached else nodes_read
         for target in dict.fromkeys(targets):
             joined.setdefault(target, []).append(node)
     return joined
@@ -943,7 +959,7 @@ def _relationship_target(run: _Run, test: Mapping[str, Any], label: str) -> str:
         )
     (key,) = others
     for kind, _ in _TARGET_FIELDS:
-        target = (run.manifest.get(kind) or {}).get(key)
+        target = _mapping(label, kind, run.manifest.get(kind)).get(key)
         if isinstance(target, Mapping):
             run.targets.setdefault(key, (kind, target, label))
             try:
@@ -1294,6 +1310,9 @@ def generate(
     starts with the node's id and names the field. A field of a test also names the test, as
     `<node id>: test <test id>: <field> ...`.
     """
+    for index, test in enumerate(tests):
+        if not isinstance(test, Mapping):
+            raise _refusal(node, f"tests[{index}]", "a mapping", test)
     config = _mapping(node, "config", node.get("config"))
     meta = _mapping(node, "config.meta", config.get("meta"))
     continuo = _mapping(node, "config.meta.continuo", meta.get("continuo"))

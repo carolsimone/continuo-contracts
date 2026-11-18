@@ -22,7 +22,8 @@ means the command could not run: a usage error (a `--service` that is empty or b
 a path that names no contract file, a path that cannot be looked up, a folder or a file that
 cannot be read, or a `--read` value that is not a table. For `dbt check`, 0 means the check found
 no error, 1 means it found an error or `dbt parse` failed, and 2 means it could not run: a usage
-error, a folder that does not exist, no `dbt` executable, or a manifest that cannot be read.
+error, a folder that does not exist, no `dbt` executable, or a manifest that cannot be read or is
+not the shape of a dbt manifest.
 
 `main` configures logging when it runs, not when the module is imported, and returns the exit
 status. The console script `continuo-contracts` calls it.
@@ -46,7 +47,11 @@ from typing import Any, Final, cast
 
 from continuo_contracts import lite, yaml_strict
 from continuo_contracts.contract import contract_hash, normalise_python
-from continuo_contracts.errors import HashInputError, StrictYamlError
+from continuo_contracts.errors import (
+    DbtNodeError,
+    HashInputError,
+    StrictYamlError,
+)
 from continuo_contracts.validate import Issue, validate_python_contract
 
 _logger = logging.getLogger(__name__)
@@ -86,15 +91,17 @@ exit status:
   0  the check found no error
   1  the check found an error, or dbt parse exited with a status other than 0
   2  a usage error (an empty or blank --service among them), a PROJECT_DIR that is not a
-     folder, no dbt executable, or a manifest that cannot be read
+     folder, no dbt executable, or a manifest that cannot be read or is not the shape of a
+     dbt manifest
 """
 
 # The placeholder that dbt gets for a profile variable that nothing sets, and the text scanned
 # for those variables: `env_var('NAME')` or `env_var("NAME")`, with nothing after the name but
-# the closing parenthesis, which is a variable with no default.
+# the closing parenthesis, which is a variable with no default. NAME is a plain identifier, so a
+# name that no environment can hold, such as one with `=` or NUL, gets no placeholder.
 _PLACEHOLDER: Final = "continuo-lite-check"
 _ENV_VAR_WITHOUT_DEFAULT: Final = re.compile(
-    r"""env_var\(\s*(?P<quote>['"])(?P<name>[^'"]+)(?P=quote)\s*\)"""
+    r"""env_var\(\s*(?P<quote>['"])(?P<name>[A-Za-z_][A-Za-z0-9_]*)(?P=quote)\s*\)"""
 )
 # The lines of dbt's output that a failed `dbt parse` has logged, and the colour codes that dbt
 # writes into them even when its output goes to a pipe.
@@ -126,7 +133,8 @@ exits 1.
 
 
 _DBT_DESCRIPTION: Final = """\
-Check a dbt project the way continuo does at release time, without a warehouse.
+Run the producer's lite check of a dbt project, without a warehouse. Passing it
+does not guarantee that continuo will create the contracts at release time.
 """
 
 _DBT_CHECK_DESCRIPTION: Final = """\
@@ -176,7 +184,9 @@ def _posix(path: Path) -> str:
     return path.as_posix()
 
 
-def _cannot(path: Path, action: str, error: OSError | ValueError) -> str:
+def _cannot(
+    path: Path, action: str, error: OSError | ValueError | RecursionError
+) -> str:
     """Write the problem of an `action` on `path` that the system refused with `error`."""
     return f"{_posix(path)}: cannot {action}: {getattr(error, 'strerror', None) or error}"
 
@@ -394,12 +404,12 @@ def _require_folder(path: Path) -> None:
 def _read_manifest(path: Path) -> dict[str, Any]:
     """Return the manifest in the JSON file `path`.
 
-    Raises `_UsageError` when the file cannot be read, is not JSON, is not an object, or has a
-    `nodes` that is not an object of objects.
+    Raises `_UsageError` when the file cannot be read, is not JSON, is nested deeper than the JSON
+    reader goes, is not an object, or has a `nodes` that is not an object of objects.
     """
     try:
         document = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as error:
+    except (OSError, ValueError, RecursionError) as error:
         raise _UsageError(_cannot(path, "read the manifest", error)) from error
     if not isinstance(document, dict):
         raise _UsageError(f"{_posix(path)}: the manifest is not a JSON object")
@@ -422,8 +432,9 @@ def _header_reader(
     A seed's header is the first row of its CSV file, read as UTF-8 with an optional byte order
     mark and with the delimiter of the seed's `config` (a comma when it has none), so a CRLF line
     ending changes nothing. An empty file has an empty header. A file that cannot be read gives
-    `None`: one that is missing, that is not UTF-8, that has a field over the limit of `csv`, or
-    whose delimiter is not one character.
+    `None`: one that is missing, whose path holds a NUL, that is not UTF-8, that has a field over
+    the limit of `csv`, or whose delimiter is not one character or is one `csv` refuses, such as a
+    quote, a newline or a carriage return.
     """
 
     def read(node: Mapping[str, Any]) -> list[str] | None:
@@ -435,7 +446,7 @@ def _header_reader(
                 newline="", encoding="utf-8-sig"
             ) as stream:
                 return next(csv.reader(stream, delimiter=delimiter), [])
-        except OSError, UnicodeError, csv.Error, TypeError:
+        except OSError, ValueError, csv.Error, TypeError:
             return None
 
     return read
@@ -577,11 +588,17 @@ def _dbt_check(args: argparse.Namespace) -> int:
                     _logger.error("%s", _COLOUR.sub("", output))
                 return _INVALID
             manifest = _read_manifest(target_path / "manifest.json")
-    report = lite.check_manifest(
-        manifest,
-        declared_service=args.service or _folder_service(project),
-        read_header=_header_reader(project),
-    )
+    try:
+        report = lite.check_manifest(
+            manifest,
+            declared_service=args.service or _folder_service(project),
+            read_header=_header_reader(project),
+        )
+    except DbtNodeError as error:
+        # A field of a node is reported on the node's line, so this is a field of the manifest.
+        raise _UsageError(
+            f"the manifest is not the shape of a dbt manifest: {error}"
+        ) from error
     _log_report(report)
     if args.json:
         _print_json(_report_document(report))
@@ -592,8 +609,8 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="continuo-contracts",
         description=(
-            "Check the ODCS contract of a Python node and print its contract_hash, or check "
-            "a dbt project the way continuo does at release time."
+            "Check the ODCS contract of a Python node and print its contract_hash, or run "
+            "the lite check of a dbt project."
         ),
         epilog=_ALL_EXIT_CODES,
         formatter_class=argparse.RawDescriptionHelpFormatter,

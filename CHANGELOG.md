@@ -22,7 +22,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `tests_by_node` joins the tests of a manifest to the nodes they test. `skip_reason` gives the
   reason continuo's parser gives today for every node of the five fixture manifests, which
   `tests/fixtures/dbt/todays_gates.json` records. A field of a node in a shape these functions cannot
-  read raises the new `DbtNodeError`.
+  read raises the new `DbtNodeError`, and so does, from `project_service` and `tests_by_node`, a
+  manifest `metadata`, `nodes` or test field in a shape they cannot read.
 - `continuo_contracts.dbt.generate` writes the ODCS contract of a kept dbt model, seed or snapshot
   from its manifest node: the envelope, `id`, `name`, `description.purpose`, `team.name`, `tags`,
   `roles` (readers and grants), the fourteen root `continuo` properties a dbt contract may carry,
@@ -141,7 +142,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   snapshot with no tag) give an `info` line. A node whose fields the library cannot read, each
   issue of `validate_dbt_contract`, a declared read that is not a table, a seed whose CSV cannot
   be read, each column a seed's header and declared columns disagree on, and a service whose every
-  node is skipped give an `error` line. `contracts` maps the id of each contract that has no issue
+  node is skipped give an `error` line. A kept seed of an installed package gets an `info` line
+  that says its CSV header is not checked, since its CSV file is not in the project. `contracts` maps the id of each contract that has no issue
   to its `contract_hash`, with no tables from compiled SQL; a contract with an issue has none. `BANNER` is the text that
   says passing the check guarantees nothing about the release, and `RELEASE_ONLY` lists the six
   things only the release does. The module reads no file and prints and logs nothing.
@@ -159,8 +161,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `--json`, stdout is one document, `{"lite", "ok", "service", "lines", "contracts"}`. `--manifest`
   reads a manifest that already exists and runs no dbt. The exit status is 0 when the check finds no
   error, 1 for an error or a `dbt parse` that fails (the last 20 lines of its output, without its
-  colour codes, are logged at ERROR), and 2 when the command cannot run: no such project folder, no `dbt` executable or a
-  manifest that cannot be read. `--service` is the service of the project when the manifest names
+  colour codes, are logged at ERROR), and 2 when the command cannot run: no such project folder, no
+  `dbt` executable, or a manifest that cannot be read or whose `metadata` or tests are not the
+  shape of a dbt manifest. A seed delimiter `csv` refuses and a seed path with a NUL make the CSV
+  unreadable, an error line, and an `env_var` name that is not a plain identifier gets no
+  placeholder. dbt runs with no shell, so a folder or a target with spaces or shell
+  metacharacters reaches it as written. `--service` is the service of the project when the manifest names
   none, by default the folder name with `_` written `-`.
 - The import-linter contract `subprocess-is-confined-to-cli`: no module but `cli` imports
   `subprocess`. `tests/test_architecture.py` holds it to the code, and checks that a planted import
