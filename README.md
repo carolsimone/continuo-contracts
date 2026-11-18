@@ -770,23 +770,26 @@ facts == run_facts(normalise_dbt(generated.document, reads=[]))  # True
   names the test, as in `model.shop.orders: test test.shop.not_null_orders_id.1a2b: config.where
   must be a string, got int`.
 - `logical_type`: `logical_type(data_type) -> dict[str, Any] | None` returns the ODCS logical type
-  of a declared column type. The type is a name, then at most one `(...)` with no parenthesis
-  inside it, then nothing but whitespace: text after the closing `)`, as in `varchar(10) not
-  null`, `varchar(10)x` or `timestamp(6) with time zone`, gives `None`. Whitespace is a space or a
-  tab and no other character, so a newline or U+001C is part of the name. The name is read in
-  lower case, without the whitespace at its ends and with each run of whitespace inside it read
-  as one space, so `varchar (10)` is `varchar` and `Character  Varying` is `character varying`:
-  `int`, `integer`, `int4`, `bigint`, `int8`, `smallint` and `int2` are `integer`; `numeric`,
-  `decimal`, `double precision`, `float`, `float4`, `float8`, `real` and `double` are `number`;
-  `text`, `string`, `varchar`, `character varying`, `char` and `character` are `string`; `date` is
-  `date`; `timestamp`, `timestamptz`, `timestamp with time zone`, `timestamp without time zone`
-  and `datetime` are `timestamp`; `boolean` and `bool` are `boolean`. Any other name gives `None`,
-  and so does an array type (one with `[`, such as `integer[]` or `varchar(10)[]`) and a type with
-  a character outside ASCII. A string type whose parentheses hold a length, ASCII digits with
-  optional whitespace around them, has `logicalTypeOptions: {maxLength: n}` when the length, read
-  with its leading zeros left out (so `varchar(00000000000000010)` has 10), is from 1 to
-  2**53 - 1; another length, such as `0`, or other text, such as `max`, keeps the type with no
-  `maxLength`. The result is a new dict, such as `{"logicalType": "integer"}`.
+  of a declared column type. The type is a name, then at most one `(...)` with no parenthesis inside
+  it, then nothing but whitespace: text after the closing `)`, as in `varchar(10) not null`,
+  `varchar(10)x` or `varchar(10) with time zone`, gives `None`. The one exception is `timestamp`,
+  whose `(...)` may be followed by `with time zone` or `without time zone`, in any case and with
+  whitespace between the words, so `timestamp(6) with time zone` and `TIMESTAMP(3) WITHOUT TIME
+  ZONE` are `timestamp`. Whitespace is a space or a tab and no other character, so a newline or
+  U+001C is part of the name. The name is read in lower case, without the whitespace at its ends and
+  with each run of whitespace inside it read as one space, so `varchar (10)` is `varchar` and
+  `Character  Varying` is `character varying`: `int`, `integer`, `int4`, `bigint`, `int8`,
+  `smallint` and `int2` are `integer`; `numeric`, `decimal`, `double precision`, `float`, `float4`,
+  `float8`, `real` and `double` are `number`; `text`, `string`, `varchar`, `character varying`,
+  `char` and `character` are `string`; `date` is `date`; `timestamp`, `timestamptz`, `timestamp with
+  time zone`, `timestamp without time zone` and `datetime` are `timestamp`; `boolean` and `bool` are
+  `boolean`. Any other name gives `None`, and so does an array type (one with `[`, such as
+  `integer[]` or `varchar(10)[]`) and a type with a character outside ASCII. A string type whose
+  parentheses hold a length, ASCII digits with optional whitespace around them, has
+  `logicalTypeOptions: {maxLength: n}` when the length, read with its leading zeros left out (so
+  `varchar(00000000000000010)` has 10), is from 1 to 2**53 - 1; another length, such as `0`, or
+  other text, such as `max`, keeps the type with no `maxLength`. The result is a new dict, such as
+  `{"logicalType": "integer"}`.
 - `read_tree`: `read_tree(part, *, test=None) -> dict[str, Any]` returns the fields that `generate`
   reads, and `source_sha256` covers, of one part of its input, as a tree: `part` is `node` for
   the model, seed or snapshot, `test` with the test node as `test`, and `nodes` or `sources` for

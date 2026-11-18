@@ -54,7 +54,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   its name before `(` in lower case (`float4` among the numbers), with `maxLength` for a string
   type that gives a length from 1 to 2**53 - 1 in ASCII digits, read with its leading zeros left
   out, or `None` for a type it does not know, an array type (with `[`), a type with a character
-  outside ASCII or a type with text after its closing `)`. Whitespace is a space or a tab only.
+  outside ASCII or a type with text after its closing `)`, but `with time zone` or
+  `without time zone` after a `timestamp(...)`, as in `timestamp(6) with time zone`, which is
+  `timestamp`. Whitespace is a space or a tab only.
 - `continuo_contracts.dbt.read_tree` names the fields `generate` reads, and `source_sha256`
   covers, of a node, a test and a relationship's target, as trees. The README writes down the
   structure `source_sha256` hashes, `{node, tests, targets}`, so another implementation can

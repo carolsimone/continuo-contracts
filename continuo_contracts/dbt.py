@@ -253,7 +253,12 @@ _LOGICAL_TYPES: Final = MappingProxyType(
 )
 # A declared type: its name, then at most one `(...)` with no parenthesis inside, then only
 # whitespace, which is a space or a tab.
-_DECLARED_TYPE: Final = re.compile(r"([^()]*)(?:\(([^()]*)\)[ \t]*)?")
+_DECLARED_TYPE: Final = re.compile(
+    r"([^()]*)(?:\(([^()]*)\)([ \t]+with(?:out)?[ \t]+time[ \t]+zone)?[ \t]*)?",
+    re.IGNORECASE,
+)
+# The one name whose parentheses may be followed by `with time zone` or `without time zone`.
+_ZONED: Final = "timestamp"
 _WHITESPACE: Final = re.compile(r"[ \t]+")
 # The length of a string type, ASCII digits between optional whitespace, and the most digits a
 # length from 1 to 2**53 - 1 has once its leading zeros are left out, so `int` never reads a huge
@@ -707,7 +712,9 @@ def logical_type(data_type: str) -> dict[str, Any] | None:
     """Return the ODCS logical type of the declared column type `data_type`, or `None`.
 
     The type is a name, then at most one `(...)` with no parenthesis inside it, then nothing but
-    whitespace; any other type has none. Whitespace is a space or a tab and nothing else, so
+    whitespace; any other type has none. The one exception is `timestamp`, whose `(...)` may be
+    followed by `with time zone` or `without time zone`, in any case and with whitespace between
+    the words, as in `timestamp(6) with time zone`, which is `timestamp`. Whitespace is a space or a tab and nothing else, so
     a newline or U+001C is a character of the name. The name is read in lower case, without the
     whitespace at its ends and with each run of whitespace inside it read as one space, so
     `Character  Varying (10)` is `character varying`. `int`, `integer`, `int4`, `bigint`, `int8`,
@@ -729,8 +736,11 @@ def logical_type(data_type: str) -> dict[str, Any] | None:
     parts = _DECLARED_TYPE.fullmatch(data_type)
     if parts is None:
         return None
-    name, inside = parts.groups()
-    logical = _LOGICAL_TYPES.get(_WHITESPACE.sub(" ", name).strip(" ").lower())
+    name, inside, zone = parts.groups()
+    base = _WHITESPACE.sub(" ", name).strip(" ").lower()
+    if zone is not None and base != _ZONED:
+        return None
+    logical = _LOGICAL_TYPES.get(base)
     if logical is None:
         return None
     written: dict[str, Any] = {"logicalType": logical}
