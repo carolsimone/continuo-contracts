@@ -5,6 +5,25 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-19
+
+**TL;DR**
+
+- dbt contracts: continuo-contracts turns a dbt manifest node into its ODCS v3.2.0 contract
+  (`dbt.generate`), checks it (`validate.validate_dbt_contract`), stores and hashes it
+  (`contract.normalise_dbt`, `contract.contract_hash`), and reads the node's run facts back from
+  the stored form (`dbt.run_facts`). The gates that decide which nodes get a contract
+  (`dbt.skip_reason`) are the ones continuo's parser applies today.
+- `continuo-contracts dbt check`: the producer's lite check. It runs `dbt parse` with the `dbt`
+  executable it is given, generates and checks every contract of the service, and prints what the
+  release would reject. Passing it does not guarantee that the release creates the contracts.
+- The first dbt `contract_hash` values are pinned by the new vector `vectors/dbt_contracts.json`
+  and by the golden contracts of the fixtures. No hash of 0.2.0 moves: the six 0.2.0 vector files
+  are byte for byte the same, and Python contracts hash as before.
+- `ContinuoProperty` has a required fourth field, `dbt`: code that builds one by hand passes it.
+- The runtime dependencies are unchanged (`jsonschema` and `PyYAML`), the library still requires
+  Python 3.14, and it never imports dbt.
+
 ### Added
 
 - `continuo_contracts.dbt`: the gates and the names of a dbt manifest node. `skip_reason` gives the
