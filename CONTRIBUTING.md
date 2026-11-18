@@ -92,7 +92,11 @@ not a service, and layers would add indirection without a second implementation.
 - `schema`: the packaged ODCS v3.2.0 JSON schema and the check of its bytes.
 - `yaml_strict`: the reader of a contract file, YAML 1.2 core with no aliases, merge keys or
   repeated keys.
-- `dbt`: the gates of a dbt manifest node, the names a kept node gets and the join of its tests.
+- `dbt`: the gates of a dbt manifest node, the names a kept node gets and the join of its tests to
+  it; `generate`, which writes the ODCS contract of a kept node with the flags it carries and the
+  SHA-256 of the manifest fields it read; `logical_type`, the ODCS logical type of a declared column
+  type; `run_facts`, which reads back from a contract what continuo runs the node with; and
+  `seed_header_issues`, the comparison of a seed's CSV header with its declared columns.
 - `vocabulary`: the custom properties of the `continuo` vendor and where each may sit.
 - `validate`: the check of a Python node's or a dbt node's ODCS contract, the JSON schema and
   continuo's rules, with every problem as an `Issue` that has a path and a closed reason.
@@ -101,7 +105,8 @@ not a service, and layers would add indirection without a second implementation.
 - `lite`: the producer's lite check of a dbt manifest, the report of the nodes it skips, the
   problems of each contract it generates and the seeds whose CSV header and declared columns
   differ.
-- `cli`: the `continuo-contracts` command, `validate` and `hash`, over contract files.
+- `cli`: the `continuo-contracts` command: `validate` and `hash` over Python contract files, and
+  `dbt check`, which runs `dbt parse` and prints the lite check's report.
 
 `errors` and `vocabulary` import nothing from the package. `canonical`, `hashing`, `fingerprints`
 and `schema` import only `errors` (`fingerprints` also PyYAML), `yaml_strict` imports `canonical`,
@@ -110,11 +115,16 @@ imports `canonical`, `errors`, `hashing`, `fingerprints` and `vocabulary`, `vali
 `canonical`, `contract`, `dbt`, `errors`, `python`, `schema`, `vocabulary` and jsonschema,
 `contract` imports `canonical`, `errors`, `fingerprints`, `hashing`, `python` and `vocabulary`,
 `lite` imports `contract`, `dbt`, `errors` and `validate`, `cli` imports `contract`, `errors`,
-`validate` and `yaml_strict`, nothing but `cli` imports `lite`, and nothing imports `scripts` or
-`tests`. The only files the package reads are the packaged `fingerprints.yaml`, in
-`fingerprints.load()`, the packaged ODCS schema, in `schema.load()`, and the contract files that
-the arguments of `cli` name. A split into layers is proposed only when a module gets a second
-reason to change.
+`lite`, `validate` and `yaml_strict`, nothing but `cli` imports `lite`, and nothing imports
+`scripts` or `tests`. The only files the package reads are the packaged `fingerprints.yaml`, in
+`fingerprints.load()`, the packaged ODCS schema, in `schema.load()`, and the files `cli` reads: the
+contract files that its arguments name and, for `dbt check`, the `profiles.yml` of the profiles
+folder, the manifest (the file `--manifest` names, or the `manifest.json` that `dbt parse` writes
+in a temporary folder that `cli` makes and removes) and the CSV file of each seed. The only program
+the package runs is the `dbt` executable that `dbt check` is given, as a new process: dbt runs on
+its own Python, which is not the one this package needs, so no module imports dbt, and `cli` is
+the only module that imports `subprocess`. A split into layers is proposed only when a module gets
+a second reason to change.
 
 import-linter (`uv run lint-imports`) enforces the ordering of these modules and the confinement of
 the libraries, with the contracts under `[tool.importlinter]` in `pyproject.toml` and no
@@ -130,15 +140,16 @@ edge by edge: the layers allow, for example, `canonical` to import `vocabulary` 
   `errors` and `vocabulary` import nothing from the package. The contract is exhaustive: a module
   that no layer names fails it.
 - `jsonschema-is-confined-to-validate` and `yaml-is-confined-to-fingerprints-and-yaml-strict` keep
-  each library to the modules that use it, and `only-cli-logs` keeps `logging` to `cli`, so the
-  library modules log nothing.
+  each library to the modules that use it, `only-cli-logs` keeps `logging` to `cli`, so the library
+  modules log nothing, and `subprocess-is-confined-to-cli` keeps `subprocess` to `cli`, so the
+  library modules start no process.
 
 `tests/test_architecture.py` holds the contracts to the code. It fails on an `ignore_imports`, on a
 module that a layer or a confinement does not name, on an import of `scripts` or `tests`, which sit
-outside the package, and on an import of `cli`, `lite`, `logging`, `jsonschema` or `yaml` from a
-file that may not make it. That last check covers `__init__.py`, which no contract can name without
-naming every module. The test also plants an import that breaks each contract in a copy of the
-package and checks that `lint-imports` fails.
+outside the package, and on an import of `cli`, `lite`, `logging`, `subprocess`, `jsonschema` or
+`yaml` from a file that may not make it. That last check covers `__init__.py`, which no contract
+can name without naming every module. The test also plants an import that breaks each contract in
+a copy of the package and checks that `lint-imports` fails.
 
 ## Releasing
 

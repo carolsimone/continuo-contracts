@@ -1179,7 +1179,7 @@ does with each model, seed and snapshot what the release does: it leaves out the
 with `validate.validate_dbt_contract`, and hashes its stored form with `contract.normalise_dbt` and
 `contract.contract_hash`. It also compares the columns each seed declares with the header of its
 CSV file. It reads no file, runs no program, logs nothing and prints nothing: the caller reads the
-manifest and the CSV headers, and prints the report.
+manifest and the CSV headers, and prints the report. [cli](#cli) is that caller for `dbt check`.
 
 The check is lite because the release does more than it, so a report with no error does not
 guarantee that the release creates the service's contracts. A caller prints `BANNER` first and
@@ -1272,17 +1272,20 @@ because its contract is valid.
 ```bash
 continuo-contracts validate PATH... [--service SERVICE] [--json]
 continuo-contracts hash FILE --service SERVICE [--read TABLE]... [--json]
+continuo-contracts dbt check PROJECT_DIR [--dbt PATH] [--profiles-dir DIR] [--target NAME] \
+  [--manifest FILE] [--service SERVICE] [--json]
 ```
 
 ```python
 from continuo_contracts.cli import main
 ```
 
-The package installs the console script `continuo-contracts`, which checks the ODCS contract of a
-Python node. A producer's CI runs `validate` on its contract files, and a person runs `hash` to
-see the `contract_hash` of a file. Both commands read a file with `yaml_strict.load` and check it
-with `validate.validate_python_contract`, so they find what topology-controller finds. Both log
-`this release checks Python contracts` at INFO, in either output mode.
+The package installs the console script `continuo-contracts`. `validate` and `hash` check the ODCS
+contract of a Python node: a producer's CI runs `validate` on its contract files, and a person runs
+`hash` to see the `contract_hash` of a file. Both commands read a file with `yaml_strict.load` and
+check it with `validate.validate_python_contract`, so they find what topology-controller finds.
+Both log `this release checks Python contracts` at INFO, in either output mode. `dbt check` is the
+producer's lite check of a dbt project, described below.
 
 - `validate PATH...` checks each `PATH`, a `*.odcs.yaml` file or a folder. A folder gives its
   `*.odcs.yaml` files in name order, without the folders below it. Every issue is logged at ERROR
@@ -1308,17 +1311,76 @@ with `validate.validate_python_contract`, so they find what topology-controller 
   at release time and the hash covers them, so pass the same tables to get the hash it stores. A
   file with an issue logs each issue at ERROR, prints nothing on stdout and exits 1.
 
+- `dbt check PROJECT_DIR` is the producer's lite check of a dbt project: what continuo will make of
+  its models, seeds and snapshots at release time, found without a warehouse. It runs the `dbt`
+  executable it is given, as a new process, and never imports dbt, so it runs in a Python 3.14
+  environment of its own while dbt runs on the Python of the team's image. Without `--manifest`
+  it runs
+
+  ```bash
+  <dbt> parse --project-dir PROJECT_DIR --profiles-dir <DIR> --target-path <TMP> [--target NAME]
+  ```
+
+  and reads `<TMP>/manifest.json`. `<dbt>` is `--dbt`, a path or a name on `PATH`, and `dbt` on
+  `PATH` without it. `<DIR>` is `--profiles-dir`, and `PROJECT_DIR` without it. `<TMP>` is a
+  temporary folder that the command makes before dbt runs and removes when it is done, on every
+  path, so dbt writes no `target` folder in the project; dbt still writes its own `logs` folder
+  there, as it does for any run. The command runs no other dbt command: it never runs `dbt deps`. dbt gets the environment of the command, and, for each `env_var('NAME')` of
+  `<DIR>/profiles.yml` that has no default (single or double quotes, `env_var('NAME')` and not
+  `env_var('NAME', default)`) when no variable `NAME` is set, the placeholder `continuo-lite-check`
+  as that variable. The command scans the text of the profiles file for those calls and never
+  evaluates Jinja, so it also finds a call that a condition would leave out. A profiles file that
+  cannot be read adds nothing, and dbt reports what is wrong with it. A `dbt parse` that exits
+  with a status other than 0 gives exit status 1, no report and nothing on stdout: the command
+  logs `dbt parse exited with status <N>` at ERROR, then the last 20 lines of dbt's output,
+  standard error and standard output together, each at ERROR with the colour codes dbt writes
+  left out.
+
+  With `--manifest FILE` the command reads that `manifest.json`, which a team may have built
+  already, and runs no dbt: `--dbt`, `--profiles-dir` and `--target` have no effect, and no `dbt`
+  need be installed. The manifest must be a JSON object, and its `nodes`, when it has them, an
+  object of objects. `PROJECT_DIR` must still be a folder, because the CSV files of the seeds are
+  read from it.
+
+  `--service` is the service of the project that the gates compare each node with when the
+  manifest names none, as in `dbt.project_service`; without it the service is the name of
+  `PROJECT_DIR` with `_` written `-`, and `.` names the current folder. The header of a seed is the
+  first row of `PROJECT_DIR/<original_file_path>` of its manifest node, read as UTF-8 with an
+  optional byte order mark and with the delimiter of the seed's `config.delimiter`, a comma when it
+  has none, so a BOM or CRLF line endings change nothing. A file that cannot be read gives the
+  error line that `lite.check_manifest` words for it, and an empty file has an empty header.
+
+  The report goes through `logging` to stderr: the `lite.BANNER` at INFO, one line for each line
+  of the check, `<node id>: <message>` (the message alone for the line about the whole service),
+  at INFO for an `info` line and at ERROR for an `error` line, `What only the release does:` and
+  one INFO line for each row of `lite.RELEASE_ONLY`, `  <what>: <why>`, and the banner again. The
+  command does not log the line `this release checks Python contracts`. With `--json`, stdout is
+  one document, and `contracts` holds the `contract_hash` of each valid contract by contract id:
+
+  ```json
+  {"lite": true,
+   "ok": false,
+   "service": "finance",
+   "lines": [{"level": "error",
+              "node_id": "seed.finance.seed_operational_costs",
+              "message": "cost_date is in the CSV header but not declared"}],
+   "contracts": {"analytics.fx_transactions_eur": "sha256:..."}}
+  ```
+
+  `ok` is true when no line is an `error`.
+
 The human text goes through `logging` to stderr. Stdout holds only the result, so
 `continuo-contracts hash ... > hash.txt` and `continuo-contracts validate ... --json | jq` read
-it whole. When the command cannot run, stdout is empty.
+it whole, and `dbt check` without `--json` prints nothing on stdout. When the command cannot run,
+stdout is empty.
 
-| Exit status | Meaning |
-|---|---|
-| 0 | every contract is valid, or `hash` printed its hash |
-| 1 | a contract has an issue |
-| 2 | a usage error of the arguments (a `--service` that is empty or blank among them), a path that names no contract file (a folder with no `*.odcs.yaml` file, a path that does not exist, a file not named `*.odcs.yaml`), a path that cannot be looked up (one below a folder the process may not search, among them), a folder that cannot be listed, a file that is not UTF-8 text or cannot be read, or a `--read` value that is not a table. An ERROR line names each such path and what the system refused |
+| Exit status | `validate` and `hash` | `dbt check` |
+|---|---|---|
+| 0 | every contract is valid, or `hash` printed its hash | the check found no error |
+| 1 | a contract has an issue | the check found an error line, or `dbt parse` exited with a status other than 0 |
+| 2 | a usage error of the arguments (a `--service` that is empty or blank among them), a path that names no contract file (a folder with no `*.odcs.yaml` file, a path that does not exist, a file not named `*.odcs.yaml`), a path that cannot be looked up (one below a folder the process may not search, among them), a folder that cannot be listed, a file that is not UTF-8 text or cannot be read, or a `--read` value that is not a table. An ERROR line names each such path and what the system refused | a usage error of the arguments (a `--service` that is empty or blank among them), a `PROJECT_DIR` that is not a folder or cannot be looked up, no `dbt` executable (`--dbt` names none that can run, or there is no `dbt` on `PATH`), or a manifest that cannot be read, is not JSON, or is not the shape above, whether `--manifest` names it or `dbt parse` wrote it. An ERROR line says which |
 
-Nothing is checked when one path of the command is refused with status 2.
+Nothing is checked when one path of `validate` or `hash` is refused with status 2.
 
 - `main(argv: Sequence[str] | None = None) -> int` runs the command with `argv` (`sys.argv[1:]`
   by default) and returns the exit status. It sets up logging to stderr when it runs, not when
@@ -1329,6 +1391,8 @@ Nothing is checked when one path of the command is refused with status 2.
 continuo-contracts hash contracts/py_daily_kpis.odcs.yaml --service service-py \
   --read analytics.daily_transactions
 # sha256:15268bb30f205e0e5cfb4791715391f3cf7ba527a671f319a6b77e1b087dda59
+
+continuo-contracts dbt check services/finance --dbt .venv-dbt/bin/dbt --json
 ```
 
 ### Public names

@@ -5,13 +5,17 @@ interpreter in isolated mode, from a directory that is not the checkout:
 `<venv>/bin/python -I scripts/smoke_installed.py`. The package must come from a `site-packages`
 directory, `fingerprints.yaml` must load with entries in every section, the packaged ODCS schema
 must load with its pinned bytes, every case of the seven vector files must pass when read through
-`importlib.resources`, and canonical JSON must give the documented bytes. Exit status 0 means all
-of it held, 1 means a failure was logged.
+`importlib.resources`, canonical JSON must give the documented bytes, and the installed console
+script `continuo-contracts` must run `dbt check` on a manifest and refuse a folder that does not
+exist. Exit status 0 means all of it held, 1 means a failure was logged.
 """
 
 import json
 import logging
+import shutil
+import subprocess
 import sys
+import tempfile
 
 from collections.abc import Mapping
 from importlib import resources
@@ -53,6 +57,23 @@ logger = logging.getLogger(__name__)
 # "e acute" and its two UTF-8 bytes, built from numbers so that the file stays ASCII.
 NON_ASCII = chr(0xE9)
 NON_ASCII_UTF8 = bytes([0xC3, 0xA9])
+
+# The smallest manifest that `dbt check` turns into a contract: one model with an owner and a tag.
+DBT_MANIFEST = {
+    "metadata": {"project_name": "smoke_project"},
+    "nodes": {
+        "model.smoke_project.orders": {
+            "resource_type": "model",
+            "unique_id": "model.smoke_project.orders",
+            "name": "orders",
+            "schema": "analytics",
+            "fqn": ["smoke_project", "orders"],
+            "tags": ["daily"],
+            "original_file_path": "models/orders.sql",
+            "config": {"materialized": "table", "meta": {"owner": "data-team"}},
+        }
+    },
+}
 
 
 def _vector_cases(name: str) -> list[dict[str, Any]]:
@@ -324,6 +345,67 @@ def _dbt_contract_failures(cases: list[dict[str, Any]]) -> list[str]:
     return failures
 
 
+def _run_script(script: str, *args: str) -> subprocess.CompletedProcess[str]:
+    """Run the installed console script `script` with `args` and return the finished process."""
+    return subprocess.run(
+        [script, *args], capture_output=True, text=True, check=False
+    )
+
+
+def _dbt_check_failures() -> list[str]:
+    """Return what the installed console script gets wrong when it runs `dbt check`.
+
+    It must find no error in a manifest that holds one model with an owner and a tag, print
+    one JSON document that says so with one `contract_hash`, and exit with status 2, printing
+    nothing, for a project folder that does not exist. It runs no `dbt`: it reads the manifest.
+    """
+    script = shutil.which(
+        "continuo-contracts", path=str(Path(sys.executable).parent)
+    )
+    if script is None:
+        return [
+            "the console script continuo-contracts is not installed beside this Python"
+        ]
+    with tempfile.TemporaryDirectory() as folder:
+        project = Path(folder) / "smoke_project"
+        project.mkdir()
+        manifest = Path(folder) / "manifest.json"
+        manifest.write_text(json.dumps(DBT_MANIFEST), encoding="utf-8")
+        check = ("dbt", "check")
+        checked = _run_script(
+            script, *check, str(project), "--manifest", str(manifest), "--json"
+        )
+        refused = _run_script(
+            script, *check, str(project / "absent"), "--manifest", str(manifest)
+        )
+    failures: list[str] = []
+    if checked.returncode != 0:
+        failures.append(
+            f"dbt check exited with {checked.returncode}: {checked.stderr!r}"
+        )
+    else:
+        try:
+            document = json.loads(checked.stdout)
+        except ValueError:
+            return [
+                *failures,
+                f"dbt check --json printed {checked.stdout!r}, not JSON",
+            ]
+        hashes = list(document.get("contracts", {}).values())
+        if document.get("lite") is not True or document.get("ok") is not True:
+            failures.append(f"dbt check did not say lite and ok: {document!r}")
+        if len(hashes) != 1 or not str(hashes[0]).startswith("sha256:"):
+            failures.append(
+                f"dbt check gave the contracts {hashes!r}, not one hash"
+            )
+    if refused.returncode != 2 or refused.stdout:
+        failures.append(
+            f"dbt check of a missing folder exited with {refused.returncode} and printed "
+            f"{refused.stdout!r}, not 2 and nothing"
+        )
+    return failures
+
+
 def _canonical_json_failures() -> list[str]:
     """Return a problem when `canonical_json` does not give the documented bytes."""
     expected = b'{"a":true,"b":[1,"' + NON_ASCII_UTF8 + b'"]}'
@@ -354,6 +436,7 @@ def main() -> int:
         *_contract_failures(contracts),
         *_dbt_contract_failures(dbt_contracts),
         *_canonical_json_failures(),
+        *_dbt_check_failures(),
     ]
     for name, cases in (
         ("projection.json", projections),

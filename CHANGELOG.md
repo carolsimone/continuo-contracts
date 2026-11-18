@@ -131,6 +131,26 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   to its `contract_hash`, with no tables from compiled SQL; a contract with an issue has none. `BANNER` is the text that
   says passing the check guarantees nothing about the release, and `RELEASE_ONLY` lists the six
   things only the release does. The module reads no file and prints and logs nothing.
+- `continuo-contracts dbt check PROJECT_DIR [--dbt PATH] [--profiles-dir DIR] [--target NAME]
+  [--manifest FILE] [--service NAME] [--json]`, the producer's lite check of a dbt project. It runs
+  `<dbt> parse --project-dir PROJECT_DIR --profiles-dir <DIR> --target-path <temporary folder>`,
+  with `dbt` on `PATH` or the executable `--dbt` names, as a new process, and reads the
+  `manifest.json` that dbt writes, so the command imports no dbt and runs on a Python of its own.
+  It gives the placeholder `continuo-lite-check` to each variable that `profiles.yml` reads with
+  `env_var('NAME')`, with no default, and that the environment does not set, and changes no other
+  variable. It reads the header of each seed from the first row of the seed's CSV file in the
+  project (UTF-8 with or without a byte order mark, the delimiter of the seed's `config`), checks
+  the manifest with `lite.check_manifest`, and logs the banner, each line of the report, the six
+  things only the release does and the banner again, at INFO or, for an error, at ERROR. With
+  `--json`, stdout is one document, `{"lite", "ok", "service", "lines", "contracts"}`. `--manifest`
+  reads a manifest that already exists and runs no dbt. The exit status is 0 when the check finds no
+  error, 1 for an error or a `dbt parse` that fails (the last 20 lines of its output, without its
+  colour codes, are logged at ERROR), and 2 when the command cannot run: no such project folder, no `dbt` executable or a
+  manifest that cannot be read. `--service` is the service of the project when the manifest names
+  none, by default the folder name with `_` written `-`.
+- The import-linter contract `subprocess-is-confined-to-cli`: no module but `cli` imports
+  `subprocess`. `tests/test_architecture.py` holds it to the code, and checks that a planted import
+  breaks it. The `validate` and `hash` commands do not change.
 
 ## [0.2.0] - 2026-11-15
 

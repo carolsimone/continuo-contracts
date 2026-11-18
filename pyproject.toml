@@ -189,6 +189,27 @@ source_modules = [
 ]
 forbidden_modules = ["logging"]
 
+# The library modules start no process; `cli` runs the `dbt` executable.
+[[tool.importlinter.contracts]]
+name = "subprocess-is-confined-to-cli"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = [
+    "continuo_contracts.canonical",
+    "continuo_contracts.contract",
+    "continuo_contracts.dbt",
+    "continuo_contracts.errors",
+    "continuo_contracts.fingerprints",
+    "continuo_contracts.hashing",
+    "continuo_contracts.lite",
+    "continuo_contracts.python",
+    "continuo_contracts.schema",
+    "continuo_contracts.validate",
+    "continuo_contracts.vocabulary",
+    "continuo_contracts.yaml_strict",
+]
+forbidden_modules = ["subprocess"]
+
 [tool.coverage.run]
 branch = true
 source = ["continuo_contracts"]

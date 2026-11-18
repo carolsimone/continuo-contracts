@@ -8,10 +8,11 @@ tests cover what it cannot say by itself:
   cannot sit outside the graph;
 - each third-party confinement names every module but the ones that may use the library,
   so a new module cannot import the library unnoticed;
-- no file of the package, `__init__.py` included, imports `cli`, `logging` or a confined
-  library outside the modules that may, and none imports `scripts` or `tests`: a contract
-  that named `__init__` would name every module of the package with it, and the other two
-  are outside the package, so import-linter cannot say this by itself;
+- no file of the package, `__init__.py` included, imports `cli`, `lite` or a confined
+  library (`jsonschema`, `yaml`, `logging` or `subprocess`) outside the modules that may, and
+  none imports `scripts` or `tests`: a contract that named `__init__` would name every module
+  of the package with it, and the other two are outside the package, so import-linter cannot
+  say this by itself;
 - the contracts fail when an import crosses them, so they cannot silently stop working.
 """
 
@@ -36,6 +37,7 @@ CONFINED = {
     "jsonschema": {"validate"},
     "yaml": {"fingerprints", "yaml_strict"},
     "logging": {"cli"},
+    "subprocess": {"cli"},
 }
 
 # What a file of the package may not import unless its module is named: `cli` is imported by
@@ -214,7 +216,9 @@ def test_a_planted_import_of_scripts_or_tests_is_found(tmp_path: Path) -> None:
     assert _outside_the_package(planted) == {"scripts", "tests"}
 
 
-def test_no_file_imports_cli_or_a_confined_library_outside_its_users() -> None:
+def test_no_file_imports_cli_lite_or_a_confined_library_outside_its_users() -> (
+    None
+):
     """`__init__.py` is scanned with the modules: no contract reaches it."""
     assert _guarded_imports(PACKAGE) == {}
 
@@ -222,6 +226,9 @@ def test_no_file_imports_cli_or_a_confined_library_outside_its_users() -> None:
 # Each way a file may import a guarded module, and the module it is found importing.
 PLANTED_IMPORTS = {
     "import logging": "logging",
+    "import subprocess": "subprocess",
+    "from subprocess import run": "subprocess",
+    "import subprocess as sp": "subprocess",
     "import yaml": "yaml",
     "import jsonschema.exceptions": "jsonschema",
     "from yaml.reader import ReaderError": "yaml",
@@ -382,6 +389,12 @@ OFFENCES = {
         "only-cli-logs",
         "continuo_contracts.lite is not allowed to import logging",
     ),
+    "subprocess in lite": (
+        "lite",
+        "import subprocess\n",
+        "subprocess-is-confined-to-cli",
+        "continuo_contracts.lite is not allowed to import subprocess",
+    ),
     "jsonschema in a module that may not use it": (
         "canonical",
         "import jsonschema\n",
@@ -399,6 +412,12 @@ OFFENCES = {
         "import logging\n",
         "only-cli-logs",
         "continuo_contracts.validate is not allowed to import logging",
+    ),
+    "subprocess in a library module": (
+        "validate",
+        "import subprocess\n",
+        "subprocess-is-confined-to-cli",
+        "continuo_contracts.validate is not allowed to import subprocess",
     ),
 }
 
