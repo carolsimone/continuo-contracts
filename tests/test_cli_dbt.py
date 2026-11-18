@@ -151,6 +151,9 @@ def test_check_runs_dbt_parse_with_the_project_and_profiles_dirs(fake_dbt):
     argv = fake_dbt.record["argv"]
     target = fake_dbt.target
     assert argv == [
+        "--write-json",
+        "--log-path",
+        str(target),
         "parse",
         "--project-dir",
         str(FINANCE),
@@ -183,6 +186,9 @@ def test_the_profiles_dir_and_the_target_are_passed_to_dbt(fake_dbt, tmp_path):
     )
 
     assert fake_dbt.record["argv"] == [
+        "--write-json",
+        "--log-path",
+        str(fake_dbt.target),
         "parse",
         "--project-dir",
         str(FINANCE),
@@ -200,7 +206,41 @@ def test_dbt_is_found_on_the_path_when_dbt_is_not_given(fake_dbt, monkeypatch):
 
     assert _check(FINANCE) == 1
 
-    assert fake_dbt.record["argv"][0] == "parse"
+    assert fake_dbt.record["argv"][:4] == [
+        "--write-json",
+        "--log-path",
+        str(fake_dbt.target),
+        "parse",
+    ]
+
+
+@pytest.mark.parametrize("name", ["DBT_WRITE_JSON", "DBT_ENGINE_WRITE_JSON"])
+def test_a_caller_that_turns_dbts_json_files_off_still_gets_the_manifest(
+    fake_dbt, monkeypatch, capsys, name
+):
+    monkeypatch.setenv(name, "false")
+
+    assert _check(FINANCE, "--dbt", fake_dbt.executable, "--json") == 1
+
+    document = json.loads(capsys.readouterr().out)
+    assert document["lite"] is True
+    assert document["contracts"]
+    # The flag did it, not a change of the environment: dbt still gets the caller's variable.
+    assert fake_dbt.record["environ"][name] == "false"
+
+
+def test_dbt_writes_its_log_in_the_temporary_folder_and_not_in_the_project(
+    fake_dbt, tmp_path, scratch
+):
+    project = _copy_project(tmp_path)
+    shutil.rmtree(project / "logs", ignore_errors=True)
+
+    assert _check(project, "--dbt", fake_dbt.executable) == 1
+
+    argv = fake_dbt.record["argv"]
+    assert argv[argv.index("--log-path") + 1] == str(fake_dbt.target)
+    assert not (project / "logs").exists()
+    assert list(scratch.iterdir()) == []
 
 
 def test_a_relative_project_folder_is_passed_to_dbt_as_given(

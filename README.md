@@ -1392,14 +1392,18 @@ producer's lite check of a dbt project, described below.
   it runs
 
   ```bash
-  <dbt> parse --project-dir PROJECT_DIR --profiles-dir <DIR> --target-path <TMP> [--target NAME]
+  <dbt> --write-json --log-path <TMP> parse --project-dir PROJECT_DIR --profiles-dir <DIR> \
+    --target-path <TMP> [--target NAME]
   ```
 
   and reads `<TMP>/manifest.json`. `<dbt>` is `--dbt`, a path or a name on `PATH`, and `dbt` on
   `PATH` without it. `<DIR>` is `--profiles-dir`, and `PROJECT_DIR` without it. `<TMP>` is a
   temporary folder that the command makes before dbt runs and removes when it is done, on every
-  path, so dbt writes no `target` folder in the project; dbt still writes its own `logs` folder
-  there, as it does for any run. The command runs no other dbt command: it never runs `dbt deps`.
+  path, so dbt writes neither a `target` nor a `logs` folder in the project, and a project folder
+  that cannot be written is checked all the same. `--write-json` makes dbt write the manifest even
+  when `DBT_WRITE_JSON=false` or the project's `flags` turn dbt's JSON files off; it and
+  `--log-path` come before `parse`, where every dbt from 1.5 reads them. The command runs no
+  other dbt command: it never runs `dbt deps`.
   dbt gets the environment of the command, and, for each `env_var('NAME')` of `<DIR>/profiles.yml`
   that has no default (single or double quotes, `env_var('NAME')` and not `env_var('NAME',
   default)`) when no variable `NAME` is set, the placeholder `continuo-lite-check` as that variable.

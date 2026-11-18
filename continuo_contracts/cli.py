@@ -144,9 +144,10 @@ does, and the banner again. Passing it does not guarantee that the release creat
 contracts.
 
 Without --manifest the command runs
-  <dbt> parse --project-dir PROJECT_DIR --profiles-dir <DIR> --target-path <TMP>
+  <dbt> --write-json --log-path <TMP> parse --project-dir PROJECT_DIR
+    --profiles-dir <DIR> --target-path <TMP>
 and reads the manifest that dbt writes in <TMP>, a temporary folder that the command
-makes and removes. <DIR> is --profiles-dir, or PROJECT_DIR. <dbt> is --dbt, or dbt on
+makes and removes, where dbt also writes its log. <DIR> is --profiles-dir, or PROJECT_DIR. <dbt> is --dbt, or dbt on
 PATH. Each env_var('NAME') of the profiles file that has no default, when no variable
 NAME is set, is set to continuo-lite-check for dbt alone. Nothing else of the
 environment changes, and no other dbt command runs.
@@ -504,7 +505,10 @@ def _dbt_parse(
 ) -> subprocess.CompletedProcess[str]:
     """Run `dbt parse` in the project of `args`, writing its manifest to `target_path`.
 
-    The program starts without a shell, with the standard input closed. Its output, the standard
+    `--write-json` and `--log-path` come before `parse`, where every dbt from 1.5 reads them:
+    the manifest is written even when the environment or the project turns dbt's JSON files
+    off, and dbt's log goes to `target_path`, not to the project. The program starts without a
+    shell, with the standard input closed. Its output, the standard
     error with the standard output, is captured as UTF-8 text, which holds the colour codes dbt
     writes. It gets the environment of this
     process and, for each variable of the profiles file that nothing sets, the placeholder.
@@ -514,6 +518,9 @@ def _dbt_parse(
     profiles: Path = args.profiles_dir or args.project_dir
     command = [
         executable,
+        "--write-json",
+        "--log-path",
+        str(target_path),
         "parse",
         "--project-dir",
         str(args.project_dir),

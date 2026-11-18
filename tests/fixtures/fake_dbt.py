@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """A stand-in for the `dbt` executable, for the tests of `continuo-contracts dbt check`.
 
-The check runs `dbt parse --project-dir ... --profiles-dir ... --target-path <folder>` and
-reads `<folder>/manifest.json`. This script does what the check needs of that run, and nothing
-else: it records how it was called, writes a manifest and exits with a status the test chooses.
+The check runs `dbt --write-json --log-path <folder> parse --project-dir ... --profiles-dir ...
+--target-path <folder>` and reads `<folder>/manifest.json`. This script does what the check needs
+of that run, and nothing else: it records how it was called, writes a manifest and exits with a
+status the test chooses. It follows two rules of dbt: with `DBT_WRITE_JSON` or
+`DBT_ENGINE_WRITE_JSON` set to `false` and no `--write-json`, it writes no manifest; and it writes
+its log file, `dbt.log`, in the `--log-path` folder, or in a `logs` folder of the `--project-dir`
+when it has no `--log-path`.
 It uses the standard library only, so any Python runs it. The tests start it through a small
 wrapper that names the interpreter, so the shebang line is not relied on.
 
@@ -30,9 +34,36 @@ import sys
 from pathlib import Path
 
 
+def _value(argv: list[str], flag: str) -> str | None:
+    """Return the value that follows `flag` in `argv`, or `None` when `flag` is not there."""
+    return argv[argv.index(flag) + 1] if flag in argv else None
+
+
 def _target_path(argv: list[str]) -> Path:
     """Return the value of `--target-path`."""
     return Path(argv[argv.index("--target-path") + 1])
+
+
+def _writes_json(argv: list[str]) -> bool:
+    """Say whether dbt writes its JSON files: `--write-json` wins over the environment."""
+    if "--write-json" in argv:
+        return True
+    return all(
+        os.environ.get(name, "").lower() != "false"
+        for name in ("DBT_WRITE_JSON", "DBT_ENGINE_WRITE_JSON")
+    )
+
+
+def _write_log(argv: list[str]) -> None:
+    """Write `dbt.log` in the `--log-path` folder, else in `logs` of the `--project-dir`."""
+    folder = _value(argv, "--log-path")
+    logs = (
+        Path(folder)
+        if folder
+        else Path(_value(argv, "--project-dir") or ".") / "logs"
+    )
+    logs.mkdir(parents=True, exist_ok=True)
+    (logs / "dbt.log").write_text("a log line\n", encoding="utf-8")
 
 
 def _write_manifest(source: Path, target: Path) -> None:
@@ -67,9 +98,10 @@ def main(argv: list[str]) -> int:
         text = os.environ.get(name, "")
         stream.buffer.write(text.encode("utf-8", "surrogateescape"))
         stream.flush()
+    _write_log(argv)
     status = int(os.environ.get("FAKE_DBT_STATUS", "0"))
     manifest = os.environ.get("FAKE_DBT_MANIFEST")
-    if status == 0 and manifest:
+    if status == 0 and manifest and _writes_json(argv):
         _write_manifest(Path(manifest), target)
     return status
 

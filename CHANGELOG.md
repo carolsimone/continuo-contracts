@@ -145,8 +145,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   six things only the release does. The module reads no file and prints and logs nothing.
 - `continuo-contracts dbt check PROJECT_DIR [--dbt PATH] [--profiles-dir DIR] [--target NAME]
   [--manifest FILE] [--service NAME] [--json]`, the producer's lite check of a dbt project. It
-  runs `<dbt> parse --project-dir PROJECT_DIR --profiles-dir <DIR> --target-path <temporary
-  folder>`, with `dbt` on `PATH` or the executable `--dbt` names, as a new process with no shell,
+  runs `<dbt> --write-json --log-path <temporary folder> parse --project-dir PROJECT_DIR
+  --profiles-dir <DIR> --target-path <temporary folder>`, with `dbt` on `PATH` or the executable `--dbt` names, as a new process with no shell,
   and reads the `manifest.json` that dbt writes, so the command imports no dbt and runs on a
   Python of its own; a folder or a target with spaces or shell metacharacters reaches dbt as
   written. It gives the placeholder `continuo-lite-check` to each variable that `profiles.yml`
@@ -186,6 +186,11 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `scripts/build_dbt_fixtures.py` drops every `POSTGRES_` variable of the caller's environment, as
   it drops every `DBT_` one, so a `POSTGRES_DB` set on the machine no longer changes the database
   names in a rebuilt fixture manifest.
+- `continuo-contracts dbt check` runs `dbt --write-json --log-path <temporary folder> parse ...`:
+  a `DBT_WRITE_JSON=false` in the environment, or `flags: write_json: false` in the project or
+  profile, no longer leaves the check without a manifest (it was a usage error, exit 2, for a
+  valid project), and dbt writes its log in the temporary folder, so it no longer writes a `logs`
+  folder in the project and a project folder that cannot be written no longer fails the check.
 
 ## [0.2.0] - 2026-11-15
 
