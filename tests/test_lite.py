@@ -799,3 +799,49 @@ def test_release_only_carries_no_reference_code():
     text = " ".join(" ".join(row) for row in lite.RELEASE_ONLY)
 
     assert re.search(r"\b[A-Z]{1,2}\d+[a-z]?\b", text) is None
+
+
+# A value the JSON reader accepts but canonical JSON cannot write is a node's error line.
+
+
+def _nested(depth):
+    value = 1
+    for _ in range(depth):
+        value = [value]
+    return value
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        (
+            lambda manifest: manifest["nodes"][
+                "test.cases.unique_generic_tests_id.ade3165569"
+            ].update(description="\ud800"),
+            "test test.cases.unique_generic_tests_id.ade3165569: description: "
+            "string holds a lone surrogate",
+        ),
+        (
+            lambda manifest: manifest["nodes"]["model.cases.generic_tests"][
+                "config"
+            ].update(unique_key=_nested(97)),
+            "contract.customProperties[",
+        ),
+    ],
+    ids=["a lone surrogate", "a value too deep for the contract"],
+)
+def test_a_value_canonical_json_cannot_write_is_one_error_line(change, message):
+    manifest = copy.deepcopy(load_manifest("cases"))
+    change(manifest)
+    report = lite.check_manifest(
+        manifest, declared_service="cases", read_header=lambda node: []
+    )
+    (line,) = [
+        line
+        for line in report.lines
+        if line.node_id == "model.cases.generic_tests"
+    ]
+    assert line.level == "error"
+    assert line.message.startswith(message)
+    assert "analytics.generic_tests" not in report.contracts
+    assert "analytics.governed" in report.contracts

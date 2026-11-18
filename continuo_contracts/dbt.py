@@ -795,15 +795,15 @@ class _Run:
     """What one call of `generate` shares while it reads a node's tests.
 
     `label` names the node in an error. `flags` collects the marks of `FLAGS` the contract
-    carries, and `targets` the manifest node or source each relationship points to, by its
-    manifest key, with its kind (`nodes` or `sources`) and the label of the test that read it.
+    carries, and `targets` the fields `generate` reads of the manifest node or source each
+    relationship points to, by its manifest key.
     """
 
     node: Mapping[str, Any]
     manifest: Mapping[str, Any]
     label: str
     flags: set[str]
-    targets: dict[str, tuple[str, Mapping[str, Any], str]]
+    targets: dict[str, Any]
 
 
 def _column_types(
@@ -1051,7 +1051,9 @@ def _relationship_target(
     for kind, _ in _TARGET_FIELDS:
         target = _mapping(label, kind, run.manifest.get(kind)).get(key)
         if isinstance(target, Mapping):
-            run.targets.setdefault(key, (kind, target, label))
+            run.targets[key] = _read_fields(
+                target, read_tree(kind), f"{label}: {key}"
+            )
             try:
                 return (
                     unique_id(target) if kind == "nodes" else _source_id(target)
@@ -1224,8 +1226,9 @@ def _add_test(
     rules.append(_without_empty({**rule, **common}))
 
 
-def _in_order(rules: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return sorted(rules, key=canonical_json)
+def _in_order(label: str, rules: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return `rules` in the order of their canonical JSON."""
+    return sorted(rules, key=lambda rule: _canonical(rule, label, "rule"))
 
 
 def _schema_parts(
@@ -1253,12 +1256,14 @@ def _schema_parts(
         _add_test(run, test, columns, table_rules)
     written = []
     for column in properties:
-        column["relationships"] = _in_order(column["relationships"])
-        column["quality"] = _in_order(column["quality"])
+        column["relationships"] = _in_order(run.label, column["relationships"])
+        column["quality"] = _in_order(run.label, column["quality"])
         written.append(_without_empty(column))
     if node.get("resource_type") == "snapshot":
         written += _history_columns(node, config, columns)
-    return written, _in_order(table_rules) + _table_tests(node, continuo)
+    return written, _in_order(run.label, table_rules) + _table_tests(
+        node, continuo
+    )
 
 
 def _tree(paths: Iterable[Sequence[str]]) -> dict[str, Any]:
@@ -1289,16 +1294,17 @@ def _repeats(
     return key == _COLUMN_KWARG and kwargs[key] == test.get(_COLUMN_KWARG)
 
 
-def _test_tree(test: Mapping[str, Any]) -> dict[str, Any]:
+def _test_tree(test: Mapping[str, Any], label: str) -> dict[str, Any]:
     """Return the tree of the fields of `test` that `generate` reads.
 
     It is `_TEST_FIELDS`, with the kwargs wildcard written as the test's own kwargs but those
     `_repeats` names; then the first resolved macro of a generic test with the name of one of
     dbt's own and no namespace, and the refs of a `relationships` test with no namespace or the
-    namespace `dbt`.
+    namespace `dbt`. A `test_metadata` or a `test_metadata.kwargs` that is not a mapping raises
+    `DbtNodeError`, which starts with `label`.
     """
-    metadata = test.get("test_metadata") or {}
-    kwargs = metadata.get("kwargs") or {}
+    metadata = _mapping(label, "test_metadata", test.get("test_metadata"))
+    kwargs = _mapping(label, "test_metadata.kwargs", metadata.get("kwargs"))
     paths = [field.split(".") for field in _TEST_FIELDS if field != _KWARGS_FIELD]
     paths += [
         ["test_metadata", "kwargs", key]
@@ -1306,7 +1312,7 @@ def _test_tree(test: Mapping[str, Any]) -> dict[str, Any]:
         if not _repeats(test, kwargs, key)
     ]
     generic, namespace = metadata.get("name"), metadata.get("namespace")
-    if generic in _BUILT_INS and not namespace:
+    if isinstance(generic, str) and generic in _BUILT_INS and not namespace:
         paths.append(_RESOLVED_MACRO_FIELD.split("."))
     if generic == _RELATIONSHIPS and namespace in (None, "", _DBT_NAMESPACE):
         paths += [field.split(".") for field in _REF_FIELDS]
@@ -1330,14 +1336,15 @@ def read_tree(
     `dbt`. `source_sha256` covers exactly these fields. The result is a new dict.
 
     Raises `ValueError` for another `part`, for `test` with no test node, and for a test node
-    given with another part.
+    given with another part, and `DbtNodeError`, which starts with the test's id, for a test whose
+    `test_metadata` or `test_metadata.kwargs` is not a mapping.
     """
     if (part == "test") != (test is not None):
         raise ValueError(
             "read_tree takes a test node with the part test and with no other part"
         )
     if test is not None:
-        return _test_tree(test)
+        return _test_tree(test, _label(test))
     trees = {"node": _NODE_TREE, **_TARGET_TREES}
     if part in trees:
         tree: dict[str, Any] = _plain(trees[part])
@@ -1354,14 +1361,17 @@ def _select(source: Any, tree: Mapping[str, Any], label: str, name: str) -> Any:
     items of a list, so the order of a node's columns reaches the hash. A `0` step over a list
     gives a list of its first item alone, or an empty one. A field that is missing is
     left out. A value on the way that is not a mapping or a list is kept as it is, since it is
-    what the field's reader saw. A value that canonical JSON cannot write raises `DbtNodeError`,
-    which starts with `label` and names the field.
+    what the field's reader saw. A value or a mapping key that canonical JSON cannot write raises
+    `DbtNodeError`, which starts with `label` and names the field.
     """
     if "*" in tree:
         each = tree["*"]
         if isinstance(source, Mapping):
             return [
-                [key, _field(source[key], each, label, f"{name}.{key}")]
+                [
+                    _key(key, label, name),
+                    _field(source[key], each, label, f"{name}.{key}"),
+                ]
                 for key in source
             ]
         return [
@@ -1375,7 +1385,7 @@ def _select(source: Any, tree: Mapping[str, Any], label: str, name: str) -> Any:
     picked = {}
     for key, branch in tree.items():
         if key in source:
-            picked[key] = _field(
+            picked[_key(key, label, name)] = _field(
                 source[key], branch, label, f"{name}.{key}" if name else key
             )
     return picked
@@ -1389,17 +1399,32 @@ def _field(value: Any, tree: Mapping[str, Any], label: str, name: str) -> Any:
     return _writable(value, label, name)
 
 
+def _canonical(value: Any, label: str, name: str) -> bytes:
+    """Return the canonical JSON of `value`, the field `name` of what `label` names.
+
+    A value that canonical JSON cannot write, such as a lone surrogate, a number outside its
+    range or a nesting deeper than it allows, raises `DbtNodeError`, which starts with `label` and
+    names the field and the path in it; with no `name`, the path alone.
+    """
+    try:
+        return canonical_json(value)
+    except CanonicalJsonError as error:
+        path = f"{name}{str(error).removeprefix('$')}".removeprefix(".")
+        raise DbtNodeError(f"{label}: {path}") from None
+
+
+def _key(key: Any, label: str, name: str) -> Any:
+    """Return `key`, a key of the mapping `name`, which canonical JSON must be able to write."""
+    _canonical({key: None}, label, name)
+    return key
+
+
 def _writable(value: Any, label: str, name: str) -> Any:
     """Return a copy of `value`, the field `name`, which canonical JSON must be able to write.
 
     The copy holds plain dicts and lists, so a change to the contract never reaches the manifest.
     """
-    try:
-        canonical_json(value)
-    except CanonicalJsonError as error:
-        raise DbtNodeError(
-            f"{label}: {name}{str(error).removeprefix('$')}"
-        ) from None
+    _canonical(value, label, name)
     return _plain(value)
 
 
@@ -1411,29 +1436,44 @@ def _plain(value: Any) -> Any:
     return value
 
 
-def _source_sha256(run: _Run, tests: Sequence[Mapping[str, Any]]) -> str:
+def _read_fields(source: Any, tree: Mapping[str, Any], label: str) -> Any:
+    """Return the fields of `source` that `tree` names, which canonical JSON must be able to write.
+
+    A value that it cannot write, alone or where it sits, raises `DbtNodeError`, which starts with
+    `label` and names the field.
+    """
+    read = _select(source, tree, label, "")
+    _canonical(read, label, "")
+    return read
+
+
+def _read(run: _Run, tests: Sequence[Mapping[str, Any]]) -> tuple[Any, list[Any]]:
+    """Return the fields `generate` reads of the node and of each of its tests.
+
+    They are read before anything is built from them, so a value canonical JSON cannot write is
+    a `DbtNodeError` that names its field, as `<node id>: test <test id>: <field> ...` for a test.
+    """
+    read_tests = []
+    for test in tests:
+        label = f"{run.label}: test {_label(test)}"
+        read_tests.append(_read_fields(test, _test_tree(test, label), label))
+    return _read_fields(run.node, read_tree("node"), run.label), read_tests
+
+
+def _source_sha256(run: _Run, node: Any, tests: Sequence[Any]) -> str:
     """Return the SHA-256 of the fields `generate` reads.
 
-    They are the fields of the node, of its tests and of their relationship targets.
+    They are the fields of the node and of its tests, as `_read` returns them, and of their
+    relationship targets.
     """
-    read_tests = [
-        _select(
-            test,
-            read_tree("test", test=test),
-            f"{run.label}: test {_label(test)}",
-            "",
-        )
-        for test in tests
-    ]
     inputs = {
-        "node": _select(run.node, read_tree("node"), run.label, ""),
-        "tests": sorted(read_tests, key=canonical_json),
-        "targets": {
-            key: _select(target, read_tree(kind), f"{label}: {key}", "")
-            for key, (kind, target, label) in run.targets.items()
-        },
+        "node": node,
+        "tests": sorted(
+            tests, key=lambda read: _canonical(read, run.label, "tests")
+        ),
+        "targets": run.targets,
     }
-    return sha256_hex(canonical_json(inputs))
+    return sha256_hex(_canonical(inputs, run.label, "source"))
 
 
 def generate(
@@ -1465,13 +1505,18 @@ def generate(
     never move it.
 
     A field in a shape the generator cannot read, or that it reads and canonical JSON cannot write
-    (such as an integer outside -(2**53 - 1) to 2**53 - 1), raises `DbtNodeError`, whose message
-    starts with the node's id and names the field. A field of a test also names the test, as
-    `<node id>: test <test id>: <field> ...`.
+    (such as an integer outside -(2**53 - 1) to 2**53 - 1, or a lone surrogate in a string or in
+    a mapping key), raises `DbtNodeError`, whose message starts with the node's id and names the
+    field. A field of a test also names the test, as `<node id>: test <test id>: <field> ...`, and
+    a field of a relationship's target also names the target. A value nested so deep that the
+    contract, or its rule, is deeper than canonical JSON allows raises `DbtNodeError` too, naming
+    its path in the contract, so a contract `generate` returns can always be hashed.
     """
     for index, test in enumerate(tests):
         if not isinstance(test, Mapping):
             raise _refusal(node, f"tests[{index}]", "a mapping", test)
+    run = _Run(node, manifest, _label(node), set(), {})
+    node_read, tests_read = _read(run, tests)
     config = _mapping(node, "config", node.get("config"))
     meta = _mapping(node, "config.meta", config.get("meta"))
     continuo = _mapping(node, "config.meta.continuo", meta.get("continuo"))
@@ -1481,7 +1526,6 @@ def generate(
     alias = _optional_text(node, "alias")
     description = normalise_text(_optional_text(node, "description"))
     reads = _strings(node, "config.meta.continuo.reads", continuo.get("reads"))
-    run = _Run(node, manifest, _label(node), set(), {})
     properties, quality = _schema_parts(run, tests, config, continuo)
     schema_object: dict[str, Any] = {
         "name": table,
@@ -1510,10 +1554,12 @@ def generate(
         "customProperties": _root_properties(node, config, meta, materialized),
         "schema": [_without_empty(schema_object)],
     }
+    written = _without_empty(document)
+    _canonical(written, run.label, "contract")
     return Generated(
-        document=_without_empty(document),
+        document=written,
         flags=tuple(flag for flag in FLAGS if flag in run.flags),
-        source_sha256=_source_sha256(run, tests),
+        source_sha256=_source_sha256(run, node_read, tests_read),
     )
 
 

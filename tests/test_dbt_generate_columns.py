@@ -1958,6 +1958,238 @@ def test_a_test_field_of_the_wrong_shape_names_the_node_then_the_test(
     assert str(raised.value) == f"{_test_label(name)}: {message}"
 
 
+# A value the JSON reader accepts but canonical JSON cannot write: a lone surrogate, as text or as
+# a mapping key, or a value nested so deep that its rule or the contract is too deep.
+_LONE = "\ud800"
+_UNIQUE = "unique_generic_tests_id"
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "name",
+        "description",
+        "column_name",
+        "test_metadata.name",
+        "test_metadata.namespace",
+        "config.where",
+        "config.warn_if",
+        "config.error_if",
+        "config.fail_calc",
+    ],
+)
+def test_a_test_text_with_a_lone_surrogate_is_a_node_error_naming_the_field(path):
+    manifest = _edited("cases", _UNIQUE, lambda test: _set(test, path, _LONE))
+    with pytest.raises(DbtNodeError) as raised:
+        _run(manifest, GENERIC)
+    assert str(raised.value) == (
+        f"{_test_label(_UNIQUE)}: {path}: string holds a lone surrogate"
+    )
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        (
+            lambda test: test.update(tags=["fine", _LONE]),
+            "tags[1]: string holds a lone surrogate",
+        ),
+        (
+            lambda test: test["test_metadata"]["kwargs"].update({_LONE: 1}),
+            "test_metadata.kwargs: object key holds a lone surrogate",
+        ),
+        (
+            lambda test: test["refs"].append({"name": _LONE}),
+            "refs[2].name: string holds a lone surrogate",
+        ),
+        (
+            lambda test: test["depends_on"].update(macros=[_LONE]),
+            "depends_on.macros[0]: string holds a lone surrogate",
+        ),
+    ],
+    ids=["a tag", "a kwarg name", "a ref", "the resolved macro"],
+)
+def test_a_lone_surrogate_in_a_test_is_a_node_error_naming_the_item(
+    change, message
+):
+    name = _TO_CUSTOMER if "refs" in message else _UNIQUE
+    manifest = _edited("cases", name, change)
+    with pytest.raises(DbtNodeError) as raised:
+        _run(manifest, GENERIC)
+    assert str(raised.value) == f"{_test_label(name)}: {message}"
+
+
+def test_a_column_key_with_a_lone_surrogate_is_a_node_error_naming_the_columns():
+    manifest = _manifest("cases")
+    node = manifest["nodes"][GENERIC]
+    node["columns"] = {
+        (_LONE if key == "id" else key): value
+        for key, value in node["columns"].items()
+    }
+    with pytest.raises(DbtNodeError) as raised:
+        _run(manifest, GENERIC)
+    assert (
+        str(raised.value)
+        == f"{GENERIC}: columns: object key holds a lone surrogate"
+    )
+
+
+@pytest.mark.parametrize(
+    ("kind", "key", "field", "test"),
+    [
+        ("nodes", "model.cases.customer.v2", "schema", _TO_CUSTOMER),
+        ("nodes", "model.cases.customer.v2", "name", _TO_CUSTOMER),
+        (
+            "sources",
+            "source.cases.raw.events",
+            "identifier",
+            "relationships_generic_tests_event_id__id__source_raw_events_",
+        ),
+    ],
+)
+def test_a_relationship_target_with_a_lone_surrogate_is_a_node_error(
+    kind, key, field, test
+):
+    manifest = _manifest("cases")
+    manifest[kind][key][field] = _LONE
+    with pytest.raises(DbtNodeError) as raised:
+        _run(manifest, GENERIC)
+    assert str(raised.value) == (
+        f"{_test_label(test)}: {key}: {field}: string holds a lone surrogate"
+    )
+
+
+def _nested(depth):
+    value = 1
+    for _ in range(depth):
+        value = [value]
+    return value
+
+
+@pytest.mark.parametrize(
+    ("depth", "where"),
+    [
+        (93, f"{GENERIC}: contract.schema[0].properties[2].quality[0].arguments"),
+        (
+            98,
+            f"{_test_label('accepted_values_generic_tests_kind__a__b')}: "
+            "test_metadata.kwargs.values[0]",
+        ),
+    ],
+    ids=["too deep for the contract", "too deep for the fields read"],
+)
+def test_a_test_argument_nested_too_deep_is_a_node_error(depth, where):
+    def deep(test):
+        test["test_metadata"]["kwargs"]["values"] = _nested(depth)
+
+    manifest = _edited("cases", "accepted_values_generic_tests_kind__a__b", deep)
+    with pytest.raises(DbtNodeError) as raised:
+        _run(manifest, GENERIC)
+    message = str(raised.value)
+    assert message.startswith(where)
+    assert message.endswith(
+        ": nesting is too deep, a container may be at most 100 levels down"
+    )
+
+
+@pytest.mark.parametrize(
+    ("depth", "where"),
+    [
+        (97, f"{GENERIC}: contract.customProperties[5].value.uniqueKey[0]"),
+        (99, f"{GENERIC}: config.unique_key[0]"),
+    ],
+    ids=["too deep for the contract", "too deep for the fields read"],
+)
+def test_a_node_value_nested_too_deep_is_a_node_error(depth, where):
+    manifest = _manifest("cases")
+    manifest["nodes"][GENERIC]["config"]["unique_key"] = _nested(depth)
+    with pytest.raises(DbtNodeError) as raised:
+        _run(manifest, GENERIC)
+    assert str(raised.value).startswith(where)
+
+
+def _leaves(value, tree, path=()):
+    """Return the path of each value of `value` that a leaf of the read tree `tree` names."""
+    if isinstance(value, dict) and tree:
+        steps = (
+            [(key, tree["*"]) for key in value]
+            if "*" in tree
+            else [(key, tree[key]) for key in tree if key in value]
+        )
+        return [
+            leaf
+            for key, branch in steps
+            for leaf in _leaves(value[key], branch, (*path, key))
+        ]
+    if isinstance(value, list) and ("*" in tree or "0" in tree):
+        each = tree.get("*", tree.get("0"))
+        items = value if "*" in tree else value[:1]
+        return [
+            leaf
+            for index, item in enumerate(items)
+            for leaf in _leaves(item, each, (*path, index))
+        ]
+    return [path]
+
+
+def _set_at(target, path, value):
+    *parents, last = path
+    for key in parents:
+        target = target[key]
+    target[last] = value
+
+
+def _poisoned():
+    """Yield the node's manifest with one field it reads, of the node or of a test, made a lone
+    surrogate, for every such field."""
+    manifest = load_manifest("cases")
+    node = manifest["nodes"][GENERIC]
+    for path in _leaves(node, dbt.read_tree("node")):
+        yield ("node", path)
+    for test in dbt.tests_by_node(manifest)[GENERIC]:
+        for path in _leaves(test, dbt.read_tree("test", test=test)):
+            yield (test["unique_id"], path)
+
+
+@pytest.mark.parametrize(("where", "path"), list(_poisoned()))
+def test_every_field_generate_reads_with_a_lone_surrogate_is_a_node_error(
+    where, path
+):
+    # The tests are joined before the change, so a changed `attached_node` still reaches the node.
+    manifest = _manifest("cases")
+    node = manifest["nodes"][GENERIC]
+    tests = dbt.tests_by_node(manifest)[GENERIC]
+    _set_at(manifest["nodes"][GENERIC if where == "node" else where], path, _LONE)
+    with pytest.raises(DbtNodeError) as raised:
+        dbt.generate(node, tests, manifest=manifest)
+    assert str(raised.value).startswith(f"{GENERIC}: ")
+
+
+@pytest.mark.parametrize(
+    ("change", "field", "got"),
+    [
+        (
+            lambda test: test.update(test_metadata="not_null"),
+            "test_metadata",
+            "str",
+        ),
+        (
+            lambda test: test["test_metadata"].update(kwargs=["column_name"]),
+            "test_metadata.kwargs",
+            "list",
+        ),
+    ],
+)
+def test_read_tree_refuses_a_test_metadata_of_the_wrong_shape(change, field, got):
+    test = copy.deepcopy(_test(load_manifest("cases"), _UNIQUE))
+    change(test)
+    with pytest.raises(DbtNodeError) as raised:
+        dbt.read_tree("test", test=test)
+    assert str(raised.value) == (
+        f"{test['unique_id']}: {field} must be a mapping, got {got}"
+    )
+
+
 def test_a_test_with_no_unique_id_is_named_by_its_name():
     manifest = _edited(
         "cases",

@@ -682,8 +682,12 @@ list, so a helper macro that a dbt upgrade adds never moves it), and the `name`,
 node's `schema`, `name` and `version` or a source's `schema`, `identifier` and `name`. Any other
 `config` or `meta` key, a column's `quote` or `constraints`, a test's `limit` or `store_failures`,
 `created_at`, `raw_code` and the compiled SQL never move it. A field it reads whose value canonical
-JSON cannot write, such as an integer outside -(2**53 - 1) to 2**53 - 1, raises `DbtNodeError`
-naming the field; such a value in a field it does not read changes nothing.
+JSON cannot write, such as an integer outside -(2**53 - 1) to 2**53 - 1 or a string or a mapping
+key with a lone surrogate, raises `DbtNodeError` naming the field; such a value in a field it does
+not read changes nothing. The fields are read before the contract is built from them, and a value
+nested so deep that the fields read, a rule or the contract itself is deeper than canonical JSON
+allows raises `DbtNodeError` too, naming its path, so `generate` never returns a contract that
+`contract_hash` cannot hash, and it raises no `CanonicalJsonError`.
 
 `read_tree` gives these fields as trees, and `source_sha256` is the lowercase hex SHA-256 of the
 canonical JSON (`canonical.canonical_json`) of an object with three keys:
@@ -796,10 +800,11 @@ facts == run_facts(normalise_dbt(generated.document, reads=[]))  # True
   mapping, a manifest `nodes` or `sources` that a `relationships` test reads and that is not a
   mapping, a field of the node, of a test or of a target in a shape it cannot read, such as a
   `config.meta` that is not a mapping, a `config.meta.owner` that is not a non-empty string or a
-  test `severity` other than `warn` or `error`, or a field it reads whose value canonical JSON
-  cannot write, raises `DbtNodeError`. The message starts with the node's id; for a test it then
-  names the test, as in `model.shop.orders: test test.shop.not_null_orders_id.1a2b: config.where
-  must be a string, got int`.
+  test `severity` other than `warn` or `error`, or a field it reads whose value or key canonical
+  JSON cannot write, or that makes the contract deeper than canonical JSON allows, raises
+  `DbtNodeError`. The message starts with the node's id; for a test it then names the test, as in
+  `model.shop.orders: test test.shop.not_null_orders_id.1a2b: config.where must be a string, got
+  int`, and for a relationship's target, the target after the test.
 - `logical_type`: `logical_type(data_type) -> dict[str, Any] | None` returns the ODCS logical type
   of a declared column type. The type is a name, then at most one `(...)` with no parenthesis inside
   it, then nothing but whitespace: text after the closing `)`, as in `varchar(10) not null`,
@@ -833,7 +838,8 @@ facts == run_facts(normalise_dbt(generated.document, reads=[]))  # True
   and the `name`, `package` and `version` of each of its `refs` when it is a `relationships` test
   with no namespace or the namespace `dbt`. The result is a new dict
   on every call. It raises `ValueError` for another `part`, for `test` with no test node, and for a
-  test node given with another part.
+  test node given with another part, and `DbtNodeError`, whose message starts with the test's id,
+  for a test whose `test_metadata` or `test_metadata.kwargs` is not a mapping.
 - `RunFacts`: what `run_facts` returns, a frozen dataclass with the fields `unique_id`, `schema`,
   `table`, `physical_name`, `service`, `kind`, `schedule`, `criticality`, `timeout_minutes` (an
   `int`, or `None` when the contract sets none), `file_path`, `owner` and `materialized`.

@@ -790,8 +790,10 @@ def _unread(seen, declared):
 
 def _document_reads(monkeypatch):
     """Return what generating every guarded node reads of nodes, tests and manifests, with the
-    hash stubbed out, so only the reads that build the document count."""
+    hash and the reading of its input stubbed out, so only the reads that build the document
+    count."""
     monkeypatch.setattr(dbt, "_source_sha256", lambda *args: "")
+    monkeypatch.setattr(dbt, "_read", lambda *args: (None, []))
     seen = {"node": set(), "test": set(), "manifest": set()}
     for project, node_id in GUARDED_NODES:
         for place, paths in zip(seen, _reads_of(project, node_id), strict=True):

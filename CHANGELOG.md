@@ -225,6 +225,14 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   macro gives a `custom` rule and no `required`. That first entry is in `source_sha256`, which
   moves for every node with one of these tests; no `contract_hash` moves. A dispatch override
   (`default__test_not_null`) is not visible in the test node and is not detected.
+- `dbt.generate` raises `DbtNodeError`, starting with the node's id and naming the field, where it
+  raised `CanonicalJsonError`: for a lone surrogate in a test's text, in a mapping key (a column,
+  a kwarg) or in a field of a relationship's target, and for a value nested so deep that the
+  fields read, a rule or the contract is deeper than canonical JSON allows. It never returns a
+  contract that `contract.contract_hash` cannot hash, so `continuo-contracts dbt check` reports
+  such a node as an error line (exit 1) instead of stopping with a traceback. `dbt.read_tree`
+  raises `DbtNodeError` for a test whose `test_metadata` is not a mapping, where it raised
+  `AttributeError`.
 
 ## [0.2.0] - 2026-11-15
 

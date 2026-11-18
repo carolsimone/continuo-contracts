@@ -1313,6 +1313,29 @@ def test_a_device_file_gives_the_unreadable_line_at_once(tmp_path, capsys):
     assert _fx_lines(project, manifest, capsys) == [UNREADABLE]
 
 
+def test_a_lone_surrogate_in_a_test_of_the_manifest_is_an_error_line(
+    tmp_path, capsys
+):
+    manifest = copy.deepcopy(load_manifest("finance"))
+    (test,) = (
+        node
+        for node in manifest["nodes"].values()
+        if node["resource_type"] == "test"
+        and node["name"] == "unique_fx_transactions_eur_transaction_id"
+    )
+    test["description"] = "\ud800"
+    path = _write_json(tmp_path / "manifest.json", manifest)
+
+    assert _check(FINANCE, "--manifest", path, "--json") == 1
+
+    document = json.loads(capsys.readouterr().out)
+    assert document["ok"] is False
+    assert _lines(document, "model.finance.fx_transactions_eur") == [
+        f"test {test['unique_id']}: description: string holds a lone surrogate"
+    ]
+    assert "analytics.fx_transactions_eur" not in document["contracts"]
+
+
 # A manifest whose fields are not the shape a dbt manifest has.
 
 
