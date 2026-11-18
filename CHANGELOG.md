@@ -40,7 +40,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   columns), then a snapshot's history columns under the names `snapshot_meta_column_names` gives
   them. Each dbt test becomes a rule: `not_null`, `unique` and `accepted_values` are the library
   metrics `nullValues`, `duplicateValues` and `invalidValues`, and make a column `required` or
-  `unique` only with severity `error`, no `where` and dbt's default thresholds; `relationships` is
+  `unique` only with severity `error`, no `where` and dbt's default thresholds, and an
+  `accepted_values` rule's arguments are its `values` as `validValues` and its other kwargs as
+  written (such as `quote`); `relationships` is
   a relationship to `<target id>.<field>`; any other generic test is a `custom` rule with
   `implementation: {test, arguments}`; a singular test is a `custom` rule on the schema object, as
   is each table test of `config.meta.continuo.tests` (`engine: data-quality`). A rule carries
@@ -52,8 +54,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   field in a shape it cannot read raises `DbtNodeError`, whose message names the node, then the
   test.
 - `continuo_contracts.dbt.logical_type` gives the ODCS logical type of a declared column type, by
-  its name before `(` in lower case, with `maxLength` for a string type that gives a length, or
-  `None` for a type it does not know.
+  its name before `(` in lower case, with `maxLength` for a string type that gives a length in
+  ASCII digits, or `None` for a type it does not know, an array type (with `[`) or a type with a
+  character outside ASCII.
 - Test fixtures for dbt nodes: `tests/fixtures/dbt/projects` holds the dbt projects `core`,
   `finance`, `marketing` and `service_1`, copied from continuo-demo at commit
   `d92d371223107e77f5ca9291bfff5f6bb25e1703`, and a `cases` project with a local package `cases_pkg`

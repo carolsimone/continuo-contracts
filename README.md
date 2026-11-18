@@ -589,7 +589,9 @@ Each dbt test the node has becomes a quality rule, or a relationship:
 
 - `not_null` is `{id: <test name>, metric: nullValues, mustBe: 0}`, `unique` the same with
   `duplicateValues`, and `accepted_values` `{id, metric: invalidValues, mustBe: 0, arguments:
-  {validValues: <values>}}`. A `not_null` test makes its column `required: true`, and a `unique`
+  {validValues: <values>, ...}}`, whose arguments also keep its other kwargs as written (but
+  `model` and `column_name`), such as `quote: false`, which changes what the test compares. A
+  `not_null` test makes its column `required: true`, and a `unique`
   test makes it `unique: true`, only when the test has severity `error`, no `where`, and dbt's
   default `warn_if`, `error_if` and `fail_calc`.
 - `relationships` adds `{to: "<target id>.<field>"}` to the column's `relationships`. The target is
@@ -710,8 +712,10 @@ logical_type("varchar(64)")
   `varchar`, `character varying`, `char` and `character` are `string`, with
   `logicalTypeOptions: {maxLength: n}` when the type gives a length from 1 to 2**53 - 1; `date` is
   `date`; `timestamp`, `timestamptz`, `timestamp with time zone`, `timestamp without time zone`
-  and `datetime` are `timestamp`; `boolean` and `bool` are `boolean`. Any other type gives `None`.
-  The result is a new dict, such as `{"logicalType": "integer"}`.
+  and `datetime` are `timestamp`; `boolean` and `bool` are `boolean`. Any other type gives `None`,
+  and so does an array type (one with `[`, such as `integer[]` or `varchar(10)[]`) and a type with
+  a character outside ASCII; a length is read in ASCII digits only. The result is a new dict, such
+  as `{"logicalType": "integer"}`.
 
 ## vocabulary
 

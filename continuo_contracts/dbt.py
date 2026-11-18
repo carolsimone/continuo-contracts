@@ -247,8 +247,9 @@ _LOGICAL_TYPES: Final = MappingProxyType(
         **dict.fromkeys(("boolean", "bool"), "boolean"),
     }
 )
-# The length after a string type's `(`: at most 16 digits, so `int` never reads a huge number.
-_LENGTH: Final = re.compile(r"\s*(\d{1,16})\s*\)")
+# The length after a string type's `(`: at most 16 ASCII digits, so `int` never reads a huge
+# number.
+_LENGTH: Final = re.compile(r"\s*([0-9]{1,16})\s*\)")
 _MAX_LENGTH: Final = 2**53 - 1
 
 # dbt's default of `config.on_schema_change` and of a model's `config.access`, which a contract
@@ -652,9 +653,12 @@ def logical_type(data_type: str) -> dict[str, Any] | None:
     `logicalTypeOptions` `{"maxLength": n}` when the type gives a length `n` from 1 to
     2**53 - 1; `date` is `date`; `timestamp`, `timestamptz`, `timestamp with time zone`,
     `timestamp without time zone` and `datetime` are `timestamp`; `boolean` and `bool` are
-    `boolean`. Any other type has none. The result is a new dict, such as
+    `boolean`. Any other type has none, and so has an array type (one with `[`, such as
+    `integer[]`) and a type with a character outside ASCII. The result is a new dict, such as
     `{"logicalType": "integer"}`.
     """
+    if "[" in data_type or not data_type.isascii():
+        return None
     name, _, rest = " ".join(data_type.lower().split()).partition("(")
     logical = _LOGICAL_TYPES.get(name.strip())
     if logical is None:
@@ -925,7 +929,8 @@ def _add_test(
 
     A singular test, and a test on no declared column, gives a rule on the schema object; the
     latter keeps its `column_name` in its arguments and flags the contract. dbt's `not_null`,
-    `unique` and `accepted_values` give library rules, a `relationships` test on a declared
+    `unique` and `accepted_values` give library rules, the last with its `values` as
+    `validValues` beside its other kwargs, a `relationships` test on a declared
     column gives a relationship, and any other generic test gives a `custom` rule with the
     generic test and its arguments as its `implementation`.
     """
@@ -967,19 +972,21 @@ def _add_test(
         column["relationships"].append({"to": f"{target}.{field}"})
         return
     if built_in in _METRICS:
-        written = {
-            "validValues": arguments.get("values")
-            if built_in == _ACCEPTED_VALUES
-            else None,
-            "column_name": arguments.get("column_name")
-            if column is None
-            else None,
-        }
+        if built_in == _ACCEPTED_VALUES:
+            others = {key: arguments[key] for key in arguments if key != "values"}
+            written = {
+                **_without_empty({"validValues": arguments.get("values")}),
+                **others,
+            }
+        else:
+            written = _without_empty(
+                {"column_name": arguments.get("column_name")}
+            )
         rule = {
             "id": name,
             "metric": _METRICS[built_in],
             "mustBe": 0,
-            "arguments": _without_empty(written),
+            "arguments": written,
         }
         if strict and column is not None and built_in in _COLUMN_FACTS:
             column[_COLUMN_FACTS[built_in]] = True

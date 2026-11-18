@@ -276,6 +276,35 @@ def test_accepted_values_in_both_syntaxes():
     )
 
 
+@pytest.mark.parametrize(
+    ("name", "values"),
+    [
+        (
+            "accepted_values_generic_tests_status__active__closed",
+            ["active", "closed"],
+        ),
+        ("accepted_values_generic_tests_kind__a__b", ["a", "b"]),
+    ],
+)
+def test_accepted_values_keeps_its_other_arguments(name, values):
+    # `status` puts the values beside the test and `kind` nests them under `arguments`; a copy of
+    # each gets `quote: false`, which changes what the test compares.
+    manifest = _manifest("cases")
+    unquoted = copy.deepcopy(_test(manifest, name))
+    unquoted["test_metadata"]["kwargs"]["quote"] = False
+    unquoted.update(
+        name=f"{name}_unquoted", unique_id=f"test.cases.{name}_unquoted.0"
+    )
+    manifest["nodes"][unquoted["unique_id"]] = unquoted
+    column = _props(_run(manifest, GENERIC).document)[unquoted["column_name"]]
+    rules = {rule["id"]: rule for rule in column["quality"]}
+    assert rules[name]["arguments"] == {"validValues": values}
+    assert rules[f"{name}_unquoted"]["arguments"] == {
+        "validValues": values,
+        "quote": False,
+    }
+
+
 def test_relationships_to_a_model_and_to_a_source():
     props = _props(_doc("cases", GENERIC))
     assert props["customer_id"] == {
@@ -880,6 +909,10 @@ def test_a_generic_test_with_no_column_sits_on_the_schema_object_unflagged():
         ("boolean", {"logicalType": "boolean"}),
         ("BOOL", {"logicalType": "boolean"}),
         ("text[]", None),
+        ("integer[]", None),
+        ("varchar(10)[]", None),
+        ("timestamp(3)[]", None),
+        ("varchar(\u0663)", None),
         ("time", None),
     ],
 )

@@ -580,9 +580,9 @@ class _Recording(Mapping):
     """A read-only view of a mapping that records the path of every key read from it.
 
     A path is the tuple of the keys from the top, so a key with a dot in it, such as a node id, is
-    one step. A value that is a mapping comes back as a `_Recording` too, so reads at any depth
-    count. A list comes back as it is: the generator checks that a list is a `list`, so the reads
-    inside one are not recorded.
+    one step. A value that is a mapping comes back as a `_Recording` too, and a list comes back as
+    a new `list` whose mappings (at any depth) are recording views, so reads at any depth count.
+    The key of a list item in a path is `*`, as the declared fields write it.
     """
 
     def __init__(self, data, seen, path=()):
@@ -593,16 +593,22 @@ class _Recording(Mapping):
     def __getitem__(self, key):
         path = (*self._path, key)
         self._seen.add(path)
-        value = self._data[key]
-        if isinstance(value, Mapping):
-            return _Recording(value, self._seen, path)
-        return value
+        return _recorded(self._data[key], self._seen, path)
 
     def __iter__(self):
         return iter(self._data)
 
     def __len__(self):
         return len(self._data)
+
+
+def _recorded(value, seen, path):
+    """Return `value`, read at `path`, as a view that records the reads inside it."""
+    if isinstance(value, Mapping):
+        return _Recording(value, seen, path)
+    if isinstance(value, list):
+        return [_recorded(item, seen, (*path, "*")) for item in value]
+    return value
 
 
 def _pattern(field):
@@ -629,20 +635,6 @@ def _undeclared(seen, declared):
         )
 
     return sorted(".".join(path) for path in seen if not inside(path))
-
-
-# The declared fields that sit inside a list, which `_Recording` cannot see into: the reverse
-# check looks for a read of the list itself.
-LISTS = (("config", "meta", "continuo", "tests"),)
-
-
-def _visible(field):
-    """Return the part of the declared `field` that a recording view can see read."""
-    pattern = _pattern(field)
-    for prefix in LISTS:
-        if pattern[: len(prefix)] == prefix:
-            return prefix
-    return pattern
 
 
 def _reads_of(project, node_id):
@@ -694,25 +686,67 @@ def test_the_generator_reads_only_the_fields_it_declares(project, node_id):
     assert test_seen & unread_kwargs == set()
 
 
-def test_every_declared_field_is_read_for_some_fixture_node(monkeypatch):
-    # With the hash stubbed out, only the reads that build the document are recorded, so a
-    # declared field that nothing reads any more shows up here.
+def _unread(seen, declared):
+    """Return the declared fields that no path of `seen` reads."""
+    return [
+        field
+        for field in declared
+        if not any(_matches(path, _pattern(field)) for path in seen)
+    ]
+
+
+def _document_reads(monkeypatch):
+    """Return what generating every guarded node reads of nodes, tests and manifests, with the
+    hash stubbed out, so only the reads that build the document count."""
     monkeypatch.setattr(dbt, "_source_sha256", lambda *args: "")
     seen = {"node": set(), "test": set(), "manifest": set()}
     for project, node_id in GUARDED_NODES:
         for place, paths in zip(seen, _reads_of(project, node_id), strict=True):
             seen[place] |= paths
-    for place, declared in (
-        ("node", dbt._READ_PATHS),
-        ("test", dbt._TEST_FIELDS),
-        ("manifest", dbt._MANIFEST_PATHS),
-    ):
-        unread = [
-            field
-            for field in declared
-            if not any(_matches(path, _visible(field)) for path in seen[place])
+    return seen
+
+
+def test_every_declared_field_is_read_for_some_fixture_node(monkeypatch):
+    # A declared field that nothing reads any more shows up here.
+    seen = _document_reads(monkeypatch)
+    assert _unread(seen["node"], dbt._READ_PATHS) == []
+    assert _unread(seen["test"], dbt._TEST_FIELDS) == []
+    assert _unread(seen["manifest"], dbt._MANIFEST_PATHS) == []
+
+
+def test_the_read_guard_sees_a_table_test_key_read_but_not_declared(monkeypatch):
+    table_tests = dbt._table_tests
+
+    def reading_owner(node, continuo):
+        for item in continuo["tests"]:
+            item.get("owner")
+        return table_tests(node, continuo)
+
+    monkeypatch.setattr(dbt, "_table_tests", reading_owner)
+    node_seen, _, _ = _reads_of("cases", "model.cases.governed")
+    assert _undeclared(node_seen, dbt._READ_PATHS) == [
+        "config.meta.continuo.tests.*.owner"
+    ]
+
+
+def test_the_read_guard_sees_a_declared_table_test_key_no_longer_read(
+    monkeypatch,
+):
+    table_tests = dbt._table_tests
+
+    def without_granularity(node, continuo):
+        kept = ("name", "enabled", "params")
+        items = [
+            {key: item[key] for key in kept if key in item}
+            for item in continuo.get("tests") or []
         ]
-        assert unread == [], place
+        return table_tests(node, {"tests": items})
+
+    monkeypatch.setattr(dbt, "_table_tests", without_granularity)
+    seen = _document_reads(monkeypatch)
+    assert _unread(seen["node"], dbt._READ_PATHS) == [
+        "config.meta.continuo.tests.*.granularity"
+    ]
 
 
 def test_the_read_guard_finds_a_field_that_is_not_declared():
