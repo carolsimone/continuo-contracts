@@ -29,8 +29,8 @@ schedule: it is a dormant node that runs only by hand.
 the identity, the owner, the tags, the roles, continuo's root properties and the schema object,
 with the declared columns, their types, and the quality rules and relationships the tests give.
 It also gives the SHA-256 of the fields of the node, of its tests and of the nodes its
-relationships point to that it reads, and of nothing else of them. `logical_type` gives the ODCS
-logical type of a declared column type. `run_facts` reads back from a contract what continuo
+relationships point to that it reads, and of nothing else of them; `read_tree` names those
+fields. `logical_type` gives the ODCS logical type of a declared column type. `run_facts` reads back from a contract what continuo
 runs the node with.
 
 `seed_header_issues` compares the columns a seed declares with the header of its CSV file.
@@ -42,7 +42,7 @@ import re
 
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date
 from types import MappingProxyType
 from typing import Any, Final
 
@@ -229,6 +229,7 @@ _LOGICAL_TYPES: Final = MappingProxyType(
                 "decimal",
                 "double precision",
                 "float",
+                "float4",
                 "float8",
                 "real",
                 "double",
@@ -250,10 +251,21 @@ _LOGICAL_TYPES: Final = MappingProxyType(
         **dict.fromkeys(("boolean", "bool"), "boolean"),
     }
 )
-# The length after a string type's `(`: at most 16 ASCII digits, so `int` never reads a huge
+# A declared type: its name, then at most one `(...)` with no parenthesis inside, then only
+# whitespace, which is a space or a tab.
+_DECLARED_TYPE: Final = re.compile(r"([^()]*)(?:\(([^()]*)\)[ \t]*)?")
+_WHITESPACE: Final = re.compile(r"[ \t]+")
+# The length of a string type, ASCII digits between optional whitespace, and the most digits a
+# length from 1 to 2**53 - 1 has once its leading zeros are left out, so `int` never reads a huge
 # number.
-_LENGTH: Final = re.compile(r"\s*([0-9]{1,16})\s*\)")
+_LENGTH: Final = re.compile(r"[ \t]*([0-9]+)[ \t]*")
+_LENGTH_DIGITS: Final = 16
 _MAX_LENGTH: Final = 2**53 - 1
+
+# A model's `deprecation_date`: a date in ASCII digits, alone or before `T` or a space and a time.
+_DATE: Final = re.compile(
+    r"([0-9]{4})-([0-9]{2})-([0-9]{2})(?:[T ].+)?", re.ASCII | re.DOTALL
+)
 
 # dbt's default of `config.on_schema_change` and of a model's `config.access`, which a contract
 # leaves out.
@@ -533,20 +545,29 @@ def _materialization(
 
 
 def _deprecation_date(node: Mapping[str, Any]) -> str | None:
-    """Return the date of the node's `deprecation_date`, in the offset the value carries.
+    """Return the date part of the node's `deprecation_date`, `YYYY-MM-DD`, as it is written.
 
     dbt writes the date a team declares as midnight in the zone of the machine that parsed the
-    project, with that zone's offset, so the date part is the declared date in every zone.
+    project, with that zone's offset, so the date part is the declared date in every zone. The
+    value is a calendar date written `YYYY-MM-DD` in ASCII digits, alone or followed by `T` or a
+    space and a time, which is not read, so `2026-11-18T24:00:00` is 2026-11-18.
     """
     value = node.get("deprecation_date")
     if value is None:
         return None
-    try:
-        return datetime.fromisoformat(value).date().isoformat()
-    except TypeError, ValueError:
-        raise _refusal(
-            node, "deprecation_date", "an ISO 8601 date and time", value
-        ) from None
+    match = _DATE.fullmatch(value) if isinstance(value, str) else None
+    if match is not None:
+        year, month, day = (int(part) for part in match.groups())
+        try:
+            return date(year, month, day).isoformat()
+        except ValueError:
+            pass
+    raise _refusal(
+        node,
+        "deprecation_date",
+        "a date written YYYY-MM-DD, alone or before a time",
+        value,
+    )
 
 
 def _freshness_build_after(
@@ -613,8 +634,10 @@ def _root_properties(
         if resource_type == "seed"
         else None,
     }
+    # A value is copied, so a change to the contract never reaches the node: a `unique_key` or
+    # `check_cols` list is the node's own.
     return [
-        {"vendor": VENDOR, "property": name, "value": value}
+        {"vendor": VENDOR, "property": name, "value": _plain(value)}
         for name, value in values.items()
         if not _is_empty(value)
     ]
@@ -625,52 +648,95 @@ def _roles(
     config: Mapping[str, Any],
     continuo: Mapping[str, Any],
 ) -> list[dict[str, str]]:
-    """Return the readers, then the grantees of each privilege of `config.grants` in name order."""
-    readers = _strings(
-        node, "config.meta.continuo.readers", continuo.get("readers")
-    )
-    roles = [{"role": reader, "access": "read"} for reader in readers]
+    """Return the readers, then the grantees of each privilege of `config.grants` in name order.
+
+    A reader or a grantee that is empty or blank raises `DbtNodeError`: the stored form drops an
+    empty role, which ODCS requires.
+    """
+    field = "config.meta.continuo.readers"
+    readers = _strings(node, field, continuo.get("readers"))
+    roles = [
+        {"role": _role(node, f"{field}[{index}]", reader), "access": "read"}
+        for index, reader in enumerate(readers)
+    ]
     grants = _mapping(node, "config.grants", config.get("grants"))
     for privilege in sorted(grants):
         field = f"config.grants.{privilege}"
         grantees = grants[privilege]
         if isinstance(grantees, str):
-            grantees = [grantees]
-        elif not isinstance(grantees, list):
+            roles.append(
+                {"role": _role(node, field, grantees), "access": privilege}
+            )
+            continue
+        if not isinstance(grantees, list):
             raise _refusal(node, field, "a string or a list of strings", grantees)
         roles += [
-            {"role": grantee, "access": privilege}
-            for grantee in _strings(node, field, grantees)
+            {
+                "role": _role(node, f"{field}[{index}]", grantee),
+                "access": privilege,
+            }
+            for index, grantee in enumerate(_strings(node, field, grantees))
         ]
     return roles
+
+
+def _role(node: Mapping[str, Any], field: str, value: str) -> str:
+    """Return `value`, the role at `field`, which must not be empty or blank."""
+    if not value.strip():
+        raise _refusal(node, field, "a string that is not blank", value)
+    return value
 
 
 def logical_type(data_type: str) -> dict[str, Any] | None:
     """Return the ODCS logical type of the declared column type `data_type`, or `None`.
 
-    The type is read by its name before `(`, in lower case and with each run of whitespace read
-    as one space, so `Character  Varying(10)` is `character varying`. `int`, `integer`, `int4`,
-    `bigint`, `int8`, `smallint` and `int2` are `integer`; `numeric`, `decimal`,
-    `double precision`, `float`, `float8`, `real` and `double` are `number`; `text`, `string`,
-    `varchar`, `character varying`, `char` and `character` are `string`, with the
-    `logicalTypeOptions` `{"maxLength": n}` when the type gives a length `n` from 1 to
-    2**53 - 1; `date` is `date`; `timestamp`, `timestamptz`, `timestamp with time zone`,
-    `timestamp without time zone` and `datetime` are `timestamp`; `boolean` and `bool` are
-    `boolean`. Any other type has none, and so has an array type (one with `[`, such as
-    `integer[]`) and a type with a character outside ASCII. The result is a new dict, such as
-    `{"logicalType": "integer"}`.
+    The type is a name, then at most one `(...)` with no parenthesis inside it, then nothing but
+    whitespace; any other type has none. Whitespace is a space or a tab and nothing else, so
+    a newline or U+001C is a character of the name. The name is read in lower case, without the
+    whitespace at its ends and with each run of whitespace inside it read as one space, so
+    `Character  Varying (10)` is `character varying`. `int`, `integer`, `int4`, `bigint`, `int8`,
+    `smallint` and `int2` are `integer`; `numeric`, `decimal`, `double precision`, `float`,
+    `float4`, `float8`, `real` and `double` are `number`; `text`, `string`, `varchar`,
+    `character varying`, `char` and `character` are `string`; `date` is `date`; `timestamp`,
+    `timestamptz`, `timestamp with time zone`, `timestamp without time zone` and `datetime` are
+    `timestamp`; `boolean` and `bool` are `boolean`. Any other name has none, and so has an array
+    type (one with `[`, such as `integer[]`) and a type with a character outside ASCII.
+
+    A string type whose `(...)` holds a length, ASCII digits with optional whitespace around
+    them, has the `logicalTypeOptions` `{"maxLength": n}` when the length is from 1 to
+    2**53 - 1, read with its leading zeros left out, so `varchar(010)` has 10; another length, or
+    other text in the parentheses, keeps the type and gives no `maxLength`. The result is a new
+    dict, such as `{"logicalType": "integer"}`.
     """
     if "[" in data_type or not data_type.isascii():
         return None
-    name, _, rest = " ".join(data_type.lower().split()).partition("(")
-    logical = _LOGICAL_TYPES.get(name.strip())
+    parts = _DECLARED_TYPE.fullmatch(data_type)
+    if parts is None:
+        return None
+    name, inside = parts.groups()
+    logical = _LOGICAL_TYPES.get(_WHITESPACE.sub(" ", name).strip(" ").lower())
     if logical is None:
         return None
     written: dict[str, Any] = {"logicalType": logical}
-    match = _LENGTH.match(rest) if logical == "string" else None
-    if match is not None and 1 <= (length := int(match.group(1))) <= _MAX_LENGTH:
+    length = _length(inside) if logical == "string" else None
+    if length is not None:
         written["logicalTypeOptions"] = {"maxLength": length}
     return written
+
+
+def _length(inside: str | None) -> int | None:
+    """Return the length in `inside`, the text between a string type's parentheses, or `None`.
+
+    It is a length from 1 to 2**53 - 1, read with its leading zeros left out.
+    """
+    match = _LENGTH.fullmatch(inside) if inside is not None else None
+    if match is None:
+        return None
+    digits = match.group(1).lstrip("0")
+    if not digits or len(digits) > _LENGTH_DIGITS:
+        return None
+    length = int(digits)
+    return length if length <= _MAX_LENGTH else None
 
 
 @dataclass(frozen=True)
@@ -898,7 +964,8 @@ def _rule_settings(
     """Return whether the test `test` is strict, and the fields every rule from it carries.
 
     A strict test has severity `error`, no `where` and dbt's default thresholds, so a `not_null`
-    or `unique` one makes its column `required` or `unique`. The fields are the `severity`
+    or `unique` one makes its column `required` or `unique`, and a `relationships` one gives a
+    relationship. The fields are the `severity`
     (`warning` for `warn`, none for `error`), the `description`, the `tags`, and `where`,
     `warnIf`, `errorIf` and `failCalc` as quality properties when they are not dbt's defaults.
     """
@@ -933,9 +1000,10 @@ def _add_test(
     A singular test, and a test on no declared column, gives a rule on the schema object; the
     latter keeps its `column_name` in its arguments and flags the contract. dbt's `not_null`,
     `unique` and `accepted_values` give library rules, the last with its `values` as
-    `validValues` beside its other kwargs, a `relationships` test on a declared
-    column gives a relationship, and any other generic test gives a `custom` rule with the
-    generic test and its arguments as its `implementation`.
+    `validValues` beside its other kwargs, a strict `relationships` test on a declared column
+    gives a relationship, and any other generic test, a `relationships` test that is not strict
+    among them, gives a `custom` rule with the generic test and its arguments as its
+    `implementation`.
     """
     label = f"{run.label}: test {_label(test)}"
     name = _required_string(label, "name", test.get("name"))
@@ -967,7 +1035,7 @@ def _add_test(
         run.flags.add("test_column_not_declared")
         arguments["column_name"] = column_name
     built_in = "" if namespace else generic
-    if built_in == _RELATIONSHIPS and column is not None:
+    if built_in == _RELATIONSHIPS and column is not None and strict:
         field = _required_string(
             label, "test_metadata.kwargs.field", arguments.get("field")
         )
@@ -1079,6 +1147,36 @@ def _test_tree(test: Mapping[str, Any]) -> dict[str, Any]:
     return _tree(paths)
 
 
+def read_tree(
+    part: str, *, test: Mapping[str, Any] | None = None
+) -> dict[str, Any]:
+    """Return the fields that `generate` reads of one part of its input, as a tree.
+
+    `part` is `node` for the model, seed or snapshot, `test` for the test node `test`, and
+    `nodes` or `sources` for the manifest node or source that a `relationships` test points to.
+    The tree is a dict whose keys are the field names, each holding the tree of the fields read
+    inside it, and `{}` for a field read whole; the key `*` stands for every key of a mapping or
+    every item of a list, in order. The tree of a test names each of its own kwargs but `model`
+    and `column_name`. `source_sha256` covers exactly these fields. The result is a new dict.
+
+    Raises `ValueError` for another `part`, for `test` with no test node, and for a test node
+    given with another part.
+    """
+    if (part == "test") != (test is not None):
+        raise ValueError(
+            "read_tree takes a test node with the part test and with no other part"
+        )
+    if test is not None:
+        return _test_tree(test)
+    trees = {"node": _NODE_TREE, **_TARGET_TREES}
+    if part in trees:
+        tree: dict[str, Any] = _plain(trees[part])
+        return tree
+    raise ValueError(
+        f"read_tree reads the part node, test, nodes or sources, not {part!r}"
+    )
+
+
 def _select(source: Any, tree: Mapping[str, Any], label: str, name: str) -> Any:
     """Return the fields of `source` that `tree` names, nested as `source` holds them.
 
@@ -1144,14 +1242,19 @@ def _source_sha256(run: _Run, tests: Sequence[Mapping[str, Any]]) -> str:
     They are the fields of the node, of its tests and of their relationship targets.
     """
     read_tests = [
-        _select(test, _test_tree(test), f"{run.label}: test {_label(test)}", "")
+        _select(
+            test,
+            read_tree("test", test=test),
+            f"{run.label}: test {_label(test)}",
+            "",
+        )
         for test in tests
     ]
     inputs = {
-        "node": _select(run.node, _NODE_TREE, run.label, ""),
+        "node": _select(run.node, read_tree("node"), run.label, ""),
         "tests": sorted(read_tests, key=canonical_json),
         "targets": {
-            key: _select(target, _TARGET_TREES[kind], f"{label}: {key}", "")
+            key: _select(target, read_tree(kind), f"{label}: {key}", "")
             for key, (kind, target, label) in run.targets.items()
         },
     }
@@ -1224,7 +1327,7 @@ def generate(
         "status": "active",
         "description": {"purpose": description} if description else {},
         "team": {"name": owner},
-        "tags": _tags(node),
+        "tags": list(_tags(node)),
         "roles": _roles(node, config, continuo),
         "customProperties": _root_properties(node, config, meta, materialized),
         "schema": [_without_empty(schema_object)],
@@ -1240,9 +1343,9 @@ def generate(
 class RunFacts:
     """What continuo runs a dbt node with, as its contract says it.
 
-    `unique_id` is the contract's `id`, `schema` that id without `.<table>`, so it is lower
-    case, `table` the schema object's `name` and `physical_name` its `physicalName` (else the
-    table). `service`, `kind`, `schedule`, `criticality`, `timeout_minutes` and `file_path` are
+    `unique_id` is the contract's `id`, `schema` the part of that id before its first dot (a
+    schema name has no dot, so it is the id without `.<table>`, in lower case), `table` the
+    schema object's `name` and `physical_name` its `physicalName` (else the table). `service`, `kind`, `schedule`, `criticality`, `timeout_minutes` and `file_path` are
     the root `continuo` properties `service`, `kind`, `schedule` (`""` for a dormant node, which
     has none), `criticality` (`DEFAULT_CRITICALITY` when absent), `timeoutMinutes` (`None` when
     absent) and `filePath`. `owner` is `team.name`, and `materialized` the `materialized` of the
@@ -1276,7 +1379,7 @@ def run_facts(document: Mapping[str, Any]) -> RunFacts:
     contract_id = document["id"]
     return RunFacts(
         unique_id=contract_id,
-        schema=contract_id.removesuffix(f".{table.lower()}"),
+        schema=contract_id.partition(".")[0],
         table=table,
         physical_name=table_object.get("physicalName") or table,
         service=values["service"],

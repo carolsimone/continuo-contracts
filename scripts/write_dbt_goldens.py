@@ -5,17 +5,19 @@ the fixture manifests, and read the difference before committing it.
 
 For every model, seed and snapshot of every fixture manifest under `tests/fixtures/dbt/manifests`
 that `dbt.skip_reason` keeps, it writes `tests/fixtures/dbt/golden/<project>/<id>.json`: the
-document `dbt.generate` writes (`generated`), its `flags`, its stored form
+document `dbt.generate` writes (`generated`), its `flags`, its `source_sha256`, its stored form
 `contract.normalise_dbt(generated, reads=[])` (`stored`) and the `contract_hash` of that form. It
 removes a golden file that belongs to no kept node.
 
 It also writes `continuo_contracts/vectors/dbt_contracts.json`, one case for each rule in
-`CONTRACT_CASES` and then one for each node in `ISSUES_CASES`. A case holds the node, its tests and
-the part of its manifest that `generate` reads, each pruned to the fields `generate` reads
-(`pruned_node`, `pruned_test`, `pruned_manifest`), the `reads` passed to `normalise_dbt`, and what
-the library gives for them. A contract case holds `generated`, `flags`, `stored` and
-`contract_hash`. An issues case is a node whose generated contract is not valid, and holds `issues`,
-the `{path, reason}` of each issue that `validate.validate_dbt_contract` finds in it, in order.
+`CONTRACT_CASES`, then one for each node in `ISSUES_CASES`, then one for each case of
+`EDITED_CASES`, whose node and tests are fixture nodes changed by the edit the case names. A case
+holds the node, its tests and the part of its manifest that `generate` reads, each pruned to the
+fields `generate` reads (`pruned_node`, `pruned_test`, `pruned_manifest`, which read them from
+`dbt.read_tree`), the `reads` passed to `normalise_dbt`, and what the library gives for them: every
+case holds `source_sha256`, a contract case `generated`, `flags`, `stored` and `contract_hash`, and
+an issues case, a node whose generated contract is not valid, `issues`, the `{path, reason}` of
+each issue that `validate.validate_dbt_contract` finds in it, in order.
 
 Each file is JSON with one space of indent and ASCII only, and ends with a newline. The keys of
 every object are sorted, except a node's `columns` in the vector, which keep the order in which
@@ -25,12 +27,13 @@ same bytes.
 
 from __future__ import annotations
 
+import copy
 import gzip
 import json
 import logging
 import sys
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, Final
 
@@ -47,6 +50,10 @@ VECTOR: Final = ROOT / "continuo_contracts" / "vectors" / "dbt_contracts.json"
 
 # The mapping under this key of a node lists its columns in the order the node declares them.
 DECLARED_ORDER_KEY: Final = "columns"
+
+# The parts of a manifest that hold the targets of a `relationships` test, as `dbt.read_tree`
+# names them.
+TARGET_KINDS: Final = ("nodes", "sources")
 
 # The cases of the vector whose contract the library writes: the name of the case, the fixture
 # project, the manifest key of the node and the tables its compiled SQL names.
@@ -71,6 +78,79 @@ CONTRACT_CASES: Final[tuple[tuple[str, str, str, tuple[str, ...]], ...]] = (
 # case, the fixture project, the manifest key of the node and the tables its compiled SQL names.
 ISSUES_CASES: Final[tuple[tuple[str, str, str, tuple[str, ...]], ...]] = (
     ("bad_criticality", "cases", "model.cases.bad_criticality", ()),
+)
+
+# The tested node of the edited cases, and its tests that the edits change.
+EDITED_NODE: Final = "model.cases.generic_tests"
+_TEST_KEYS: Final = {
+    "amount": "test.cases.is_positive_generic_tests_amount__0.b4bf29aa76",
+    "warned": "test.cases.not_null_generic_tests_warned.0c31e50172",
+    "kind": "test.cases.accepted_values_generic_tests_kind__a__b.56ac4e8409",
+    "customer": (
+        "test.cases.relationships_generic_tests_customer_id__id__ref_customer_."
+        "04ebaabb0a"
+    ),
+    "lenient": "test.cases.unique_generic_tests_lenient.408a2824ab",
+}
+
+
+def edit_tests(manifest: dict[str, Any]) -> None:
+    """Change four tests of the node of `EDITED_NODE` in `manifest`.
+
+    The test of `amount` becomes the generic test `accepted_range` of the package `dbt_utils`,
+    the warned `not_null` test gets the `warn_if` `> 5` and the `fail_calc` `sum(n)`, the
+    `accepted_values` test of `kind` gets the extra kwarg `quote: false`, and the `relationships`
+    test of `customer_id` gets the severity `warn`, so it is not strict.
+    """
+    nodes = manifest["nodes"]
+    amount = nodes[_TEST_KEYS["amount"]]["test_metadata"]
+    amount.update(name="accepted_range", namespace="dbt_utils")
+    nodes[_TEST_KEYS["warned"]]["config"].update(
+        warn_if="> 5", fail_calc="sum(n)"
+    )
+    nodes[_TEST_KEYS["kind"]]["test_metadata"]["kwargs"]["quote"] = False
+    nodes[_TEST_KEYS["customer"]]["config"]["severity"] = "warn"
+
+
+def edit_columns(manifest: dict[str, Any]) -> None:
+    """Change the key, two column types and a test of the node of `EDITED_NODE` in `manifest`.
+
+    The node's `primary_key` becomes `id`, `status` and `ghost`, a column it does not declare;
+    `id` gets the type `varchar(36)` and `status` the type `character varying(00020)`; and the
+    lenient `unique` test moves to the column `ghost`.
+    """
+    node = manifest["nodes"][EDITED_NODE]
+    node["primary_key"] = ["id", "status", "ghost"]
+    node["columns"]["id"]["data_type"] = "varchar(36)"
+    node["columns"]["status"]["data_type"] = "character varying(00020)"
+    lenient = manifest["nodes"][_TEST_KEYS["lenient"]]
+    lenient["column_name"] = "ghost"
+    lenient["test_metadata"]["kwargs"]["column_name"] = "ghost"
+
+
+# The cases of the vector whose node and tests are fixture nodes changed by an edit, which the name
+# of the case states: the name, the fixture project, the manifest key of the node, the tables its
+# compiled SQL names and the edit.
+EDITED_CASES: Final[
+    tuple[
+        tuple[str, str, str, tuple[str, ...], Callable[[dict[str, Any]], None]],
+        ...,
+    ]
+] = (
+    (
+        "namespaced_test_thresholds_extra_kwarg_and_loose_relationship",
+        "cases",
+        EDITED_NODE,
+        (),
+        edit_tests,
+    ),
+    (
+        "composite_key_lengths_and_undeclared_columns",
+        "cases",
+        EDITED_NODE,
+        (),
+        edit_columns,
+    ),
 )
 
 
@@ -110,6 +190,7 @@ def golden(manifest: Mapping[str, Any], key: str) -> dict[str, Any]:
     return {
         "generated": generated.document,
         "flags": list(generated.flags),
+        "source_sha256": generated.source_sha256,
         "stored": stored,
         "contract_hash": contract_hash(stored),
     }
@@ -129,7 +210,7 @@ def golden_texts() -> dict[Path, str]:
 
 
 def _prune(value: Any, tree: Mapping[str, Any]) -> Any:
-    """Return the fields of `value` that `tree` names, as `dbt` declares its reads.
+    """Return the fields of `value` that `tree`, a tree of `dbt.read_tree`, names.
 
     A `*` step keeps every key of a mapping, in its order, or every item of a list. A value that
     is not a mapping, or a list where the tree names keys, is kept whole, since `generate` reads
@@ -150,13 +231,13 @@ def _prune(value: Any, tree: Mapping[str, Any]) -> Any:
 
 def pruned_node(node: Mapping[str, Any]) -> dict[str, Any]:
     """Return the fields of the manifest node `node` that `generate` reads, and its `unique_id`."""
-    pruned: dict[str, Any] = _prune(node, dbt._NODE_TREE)
+    pruned: dict[str, Any] = _prune(node, dbt.read_tree("node"))
     return {"unique_id": node["unique_id"], **pruned}
 
 
 def pruned_test(test: Mapping[str, Any]) -> dict[str, Any]:
     """Return the fields of the test node `test` that `generate` reads, and its `unique_id`."""
-    pruned: dict[str, Any] = _prune(test, dbt._test_tree(test))
+    pruned: dict[str, Any] = _prune(test, dbt.read_tree("test", test=test))
     return {"unique_id": test["unique_id"], **pruned}
 
 
@@ -168,24 +249,42 @@ def pruned_manifest(
     It holds, under `nodes` and `sources`, each entry of a test's `depends_on.nodes` other than
     the test's `attached_node` and the node itself, with the fields that name it.
     """
-    pruned: dict[str, dict[str, Any]] = {kind: {} for kind in dbt._TARGET_TREES}
+    pruned: dict[str, dict[str, Any]] = {kind: {} for kind in TARGET_KINDS}
     for test in tests:
         attached = test.get("attached_node")
         for target in (test.get("depends_on") or {}).get("nodes") or []:
             if target in (attached, key):
                 continue
-            for kind, tree in dbt._TARGET_TREES.items():
+            for kind in TARGET_KINDS:
                 entry = (manifest.get(kind) or {}).get(target)
                 if entry is not None:
-                    pruned[kind][target] = _prune(entry, tree)
+                    pruned[kind][target] = _prune(entry, dbt.read_tree(kind))
     return pruned
 
 
-def case_inputs(
-    name: str, project: str, key: str, reads: Sequence[str]
+def edited_manifest(
+    project: str, edit: Callable[[dict[str, Any]], None] | None
 ) -> dict[str, Any]:
-    """Return the inputs of the vector case `name`: the node `key` of `project`, pruned."""
+    """Return the manifest of `project`, changed by `edit` when there is one."""
     manifest = load_manifest(project)
+    if edit is not None:
+        manifest = copy.deepcopy(manifest)
+        edit(manifest)
+    return manifest
+
+
+def case_inputs(
+    name: str,
+    project: str,
+    key: str,
+    reads: Sequence[str],
+    edit: Callable[[dict[str, Any]], None] | None = None,
+) -> dict[str, Any]:
+    """Return the inputs of the vector case `name`: the node `key` of `project`, pruned.
+
+    `edit` changes the manifest before the node and its tests are read from it.
+    """
+    manifest = edited_manifest(project, edit)
     tests = dbt.tests_by_node(manifest).get(key, [])
     return {
         "name": name,
@@ -197,10 +296,14 @@ def case_inputs(
 
 
 def contract_case(
-    name: str, project: str, key: str, reads: Sequence[str]
+    name: str,
+    project: str,
+    key: str,
+    reads: Sequence[str],
+    edit: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """Return the vector case `name`, whose contract the library writes from its inputs."""
-    case = case_inputs(name, project, key, reads)
+    case = case_inputs(name, project, key, reads, edit)
     generated = dbt.generate(
         case["node"], case["tests"], manifest=case["manifest"]
     )
@@ -209,6 +312,7 @@ def contract_case(
         **case,
         "generated": generated.document,
         "flags": list(generated.flags),
+        "source_sha256": generated.source_sha256,
         "stored": stored,
         "contract_hash": contract_hash(stored),
     }
@@ -224,6 +328,7 @@ def issues_case(
     )
     return {
         **case,
+        "source_sha256": generated.source_sha256,
         "issues": [
             {"path": issue.path, "reason": issue.reason}
             for issue in validate_dbt_contract(generated.document)
@@ -232,10 +337,11 @@ def issues_case(
 
 
 def vector_cases() -> list[dict[str, Any]]:
-    """Return the cases of the vector: those of `CONTRACT_CASES`, then those of `ISSUES_CASES`."""
+    """Return the cases of the vector: those of `CONTRACT_CASES`, `ISSUES_CASES`, `EDITED_CASES`."""
     return [
         *(contract_case(*case) for case in CONTRACT_CASES),
         *(issues_case(*case) for case in ISSUES_CASES),
+        *(contract_case(*case) for case in EDITED_CASES),
     ]
 
 
@@ -280,7 +386,7 @@ def main() -> int:
     logger.info(
         "wrote %d golden contracts and %d vector cases",
         len(texts),
-        len(CONTRACT_CASES) + len(ISSUES_CASES),
+        len(CONTRACT_CASES) + len(ISSUES_CASES) + len(EDITED_CASES),
     )
     return 0
 

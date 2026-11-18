@@ -297,10 +297,12 @@ def _contract_failures(cases: list[dict[str, Any]]) -> list[str]:
 
 
 def _dbt_contract_failures(cases: list[dict[str, Any]]) -> list[str]:
-    """Return the dbt contract vector cases whose contract, flags, stored form, hash or issues differ.
+    """Return the dbt contract vector cases whose contract, flags, hashes or issues differ.
 
-    A case with `issues` is a node whose generated contract is not valid, and `issues` lists what
-    `validate_dbt_contract` finds in it. The generated contract of any other case is valid.
+    Every case pins the `source_sha256` of its inputs. A case with `issues` is a node whose
+    generated contract is not valid, and `issues` lists what `validate_dbt_contract` finds in it.
+    The generated contract of any other case is valid, and the case pins its flags, its stored
+    form and its `contract_hash`.
     """
     failures: list[str] = []
     for case in cases:
@@ -313,6 +315,11 @@ def _dbt_contract_failures(cases: list[dict[str, Any]]) -> list[str]:
                 {"path": issue.path, "reason": issue.reason}
                 for issue in validate_dbt_contract(generated.document)
             ]
+            if generated.source_sha256 != case["source_sha256"]:
+                failures.append(
+                    f"dbt contract vector {name!r}: the source_sha256 is "
+                    f"{generated.source_sha256}"
+                )
             if "issues" in case:
                 if issues != case["issues"]:
                     failures.append(

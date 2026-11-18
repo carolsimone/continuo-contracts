@@ -504,6 +504,7 @@ from continuo_contracts.dbt import (
     logical_type,
     node_service,
     project_service,
+    read_tree,
     run_facts,
     schedule,
     seed_header_issues,
@@ -533,7 +534,9 @@ The gates run in this order and the first one that applies names the reason:
 
 A node's service is the first entry of its `fqn` with `_` written `-`, and a node with no `fqn`
 has no service (`""`). The project is `metadata.project_name` written the same way, else the
-declared service, else `""`.
+declared service, else `""`. A node's id is `<schema>.<table>` lowered as one string with
+`str.lower`, so a final capital sigma at the end of the table takes its final form, while the
+`reads` of a contract lower only their ASCII letters.
 
 ```python
 manifest = json.loads(text)
@@ -556,7 +559,8 @@ the database or the compiled SQL:
   dbt lists them, so a project's tags come before the ones a model adds;
 - `roles`: each of `config.meta.continuo.readers` as `{role: <reader>, access: read}`, then each
   grantee of each privilege of `config.grants`, in privilege name order, as
-  `{role: <grantee>, access: <privilege>}`;
+  `{role: <grantee>, access: <privilege>}`; a reader or a grantee that is empty or blank raises
+  `DbtNodeError`, since the stored form would drop it and ODCS requires a role;
 - the root `customProperties`, each a `{vendor: continuo, property, value}` item, in this order and
   only when it has a value: `service` (`node_service`), `kind` (`dbt-model`, `dbt-seed` or
   `dbt-snapshot`), `schedule` (`schedule`, left out for a dormant node), `criticality`
@@ -565,8 +569,10 @@ the database or the compiled SQL:
   `incrementalStrategy` when set and `onSchemaChange` when it is not `ignore`),
   `contractEnforced` (`true` when `config.contract.enforced` is), `access` (a model's
   `config.access` when it is not `protected`), `group` (`config.group`), `deprecationDate` (the
-  date of a model's `deprecation_date` in the offset it carries, so it is the date the team wrote
-  in every time zone), `freshnessBuildAfter` (`{count, period}` of a model's
+  date part of a model's `deprecation_date` as written: a calendar date `YYYY-MM-DD` in ASCII
+  digits, alone or followed by `T` or a space and a time, which is not read, so it is the date the
+  team wrote in every time zone and `2026-11-18T24:00:00` is 2026-11-18; any other form, such as
+  `2026-W47-3`, `20261118` or `2026-02-30`, raises `DbtNodeError`), `freshnessBuildAfter` (`{count, period}` of a model's
   `config.freshness.build_after`), `snapshot` (a snapshot's `strategy`, `uniqueKey`, `updatedAt`,
   `checkCols`, `hardDeletes`, `metaColumnNames` and `validToCurrent`, each when set) and
   `quoteColumns` (a seed's `config.quote_columns` when set);
@@ -599,10 +605,13 @@ Each dbt test the node has becomes a quality rule, or a relationship:
   `not_null` test makes its column `required: true`, and a `unique`
   test makes it `unique: true`, only when the test has severity `error`, no `where`, and dbt's
   default `warn_if`, `error_if` and `fail_calc`.
-- `relationships` adds `{to: "<target id>.<field>"}` to the column's `relationships`. The target is
-  the entry of the test's `depends_on.nodes` other than its `attached_node`: a manifest node is
-  named by `unique_id`, a source by `<schema>.<identifier or name>` in lower case, and with no
-  other entry the target is the node itself.
+- A strict `relationships` test (severity `error`, no `where`, dbt's default `warn_if`, `error_if`
+  and `fail_calc`, the same rule as for `required` and `unique`) adds `{to: "<target id>.<field>"}`
+  to the column's `relationships`. The target is the entry of the test's `depends_on.nodes` other
+  than its `attached_node`: a manifest node is named by `unique_id`, a source by
+  `<schema>.<identifier or name>` in lower case, and with no other entry the target is the node
+  itself. A `relationships` test that is not strict is a `custom` rule like any other generic
+  test, below, with its severity and its `where`, and adds no relationship.
 - Any other generic test is `{id, name: <test name>, type: custom, engine: dbt, implementation:
   {test, arguments}}`, where `test` is the generic test's name, written `<namespace>.<name>` for a
   test from a package (so `not_null` from a package is not dbt's), and `arguments` are its kwargs
@@ -612,7 +621,7 @@ Each dbt test the node has becomes a quality rule, or a relationship:
 - Every rule from a test carries `severity` when it is not `error` (`warn` is written `warning`),
   the test's `description` and `tags`, and `where`, `warnIf`, `errorIf` and `failCalc` as
   `continuo` properties when they are set and are not dbt's defaults. A relationship has no field
-  for them.
+  for them, so only a strict test gives one.
 - A test on a column the node does not declare goes on the schema object, as the same rule with
   `column_name` in its arguments (inside `implementation` for a `custom` rule); a `relationships`
   test there is a `custom` rule.
@@ -648,6 +657,27 @@ node's `schema`, `name` and `version` or a source's `schema`, `identifier` and `
 JSON cannot write, such as an integer outside -(2**53 - 1) to 2**53 - 1, raises `DbtNodeError`
 naming the field; such a value in a field it does not read changes nothing.
 
+`read_tree` gives these fields as trees, and `source_sha256` is the lowercase hex SHA-256 of the
+canonical JSON (`canonical.canonical_json`) of an object with three keys:
+
+- `node`: the fields of the node that `read_tree("node")` names;
+- `tests`: for each test, the fields that `read_tree("test", test=test)` names, the list sorted by
+  the canonical JSON of each item, so the order of the tests does not count;
+- `targets`: for each manifest node or source that a strict `relationships` test on a declared
+  column points to, other than the tested node, its manifest key, such as
+  `model.shop.customer.v2`, mapped to the fields that `read_tree("nodes")` or
+  `read_tree("sources")` names. A mapping with no such target is `{}`.
+
+A tree picks the fields of a value: each key of the tree that the value holds keeps its value,
+picked by the tree under that key, a key the value does not hold is left out (nothing is written
+for it), and a leaf `{}` keeps the value whole. A `*` step turns a mapping into a list of
+`[key, value]` pairs in the mapping's own order and keeps the items of a list in their order, so
+the columns are an ordered list of `[name, column]` pairs, whose order counts although canonical
+JSON sorts object keys. A value that is not a mapping where the tree names keys, or neither a
+mapping nor a list at a `*`, is kept whole. Left out are the `unique_id` of the node and of each
+test, every field no tree names, and the target of a `relationships` test that is not strict or
+is on a column the node does not declare.
+
 ```python
 generated = generate(
     node, tests_by_node(manifest).get(node["unique_id"], []), manifest=manifest
@@ -667,7 +697,8 @@ logical_type("varchar(64)")
 that the contract and the node it parsed agree. It reads a contract that
 `validate.validate_dbt_contract` accepted, as `generate` wrote it or in its stored form, and both
 give the same facts. Each value is read as the contract holds it, and none is checked: `unique_id`
-is the `id`, `schema` the `id` without `.<table>` (so it is lower case), `table` the schema
+is the `id`, `schema` the part of the `id` before its first dot, which is the `id` without
+`.<table>` (so it is lower case), `table` the schema
 object's `name`, `physical_name` its `physicalName` (else the table), `owner` the `team.name`,
 `materialized` the `materialized` of the `materialization` property, and `service`, `kind`,
 `schedule`, `criticality`, `timeout_minutes` and `file_path` the root properties `service`, `kind`,
@@ -732,16 +763,32 @@ facts == run_facts(normalise_dbt(generated.document, reads=[]))  # True
   `model.shop.orders: test test.shop.not_null_orders_id.1a2b: config.where must be a string, got
   int`.
 - `logical_type`: `logical_type(data_type) -> dict[str, Any] | None` returns the ODCS logical type
-  of a declared column type, read by its name before `(` in lower case: `int`, `integer`, `int4`,
-  `bigint`, `int8`, `smallint` and `int2` are `integer`; `numeric`, `decimal`,
-  `double precision`, `float`, `float8`, `real` and `double` are `number`; `text`, `string`,
-  `varchar`, `character varying`, `char` and `character` are `string`, with
-  `logicalTypeOptions: {maxLength: n}` when the type gives a length from 1 to 2**53 - 1; `date` is
+  of a declared column type. The type is a name, then at most one `(...)` with no parenthesis
+  inside it, then nothing but whitespace: text after the closing `)`, as in `varchar(10) not
+  null`, `varchar(10)x` or `timestamp(6) with time zone`, gives `None`. Whitespace is a space or a
+  tab and no other character, so a newline or U+001C is part of the name. The name is read in
+  lower case, without the whitespace at its ends and with each run of whitespace inside it read
+  as one space, so `varchar (10)` is `varchar` and `Character  Varying` is `character varying`:
+  `int`, `integer`, `int4`, `bigint`, `int8`, `smallint` and `int2` are `integer`; `numeric`,
+  `decimal`, `double precision`, `float`, `float4`, `float8`, `real` and `double` are `number`;
+  `text`, `string`, `varchar`, `character varying`, `char` and `character` are `string`; `date` is
   `date`; `timestamp`, `timestamptz`, `timestamp with time zone`, `timestamp without time zone`
-  and `datetime` are `timestamp`; `boolean` and `bool` are `boolean`. Any other type gives `None`,
+  and `datetime` are `timestamp`; `boolean` and `bool` are `boolean`. Any other name gives `None`,
   and so does an array type (one with `[`, such as `integer[]` or `varchar(10)[]`) and a type with
-  a character outside ASCII; a length is read in ASCII digits only. The result is a new dict, such
-  as `{"logicalType": "integer"}`.
+  a character outside ASCII. A string type whose parentheses hold a length, ASCII digits with
+  optional whitespace around them, has `logicalTypeOptions: {maxLength: n}` when the length, read
+  with its leading zeros left out (so `varchar(00000000000000010)` has 10), is from 1 to
+  2**53 - 1; another length, such as `0`, or other text, such as `max`, keeps the type with no
+  `maxLength`. The result is a new dict, such as `{"logicalType": "integer"}`.
+- `read_tree`: `read_tree(part, *, test=None) -> dict[str, Any]` returns the fields that `generate`
+  reads, and `source_sha256` covers, of one part of its input, as a tree: `part` is `node` for
+  the model, seed or snapshot, `test` with the test node as `test`, and `nodes` or `sources` for
+  the manifest node or source that a `relationships` test points to. The tree is a dict whose keys
+  are field names, each holding the tree of the fields read inside it and `{}` for a field read
+  whole; the key `*` stands for every key of a mapping or every item of a list, in order. A
+  test's tree names each of its own kwargs but `model` and `column_name`. The result is a new dict
+  on every call. It raises `ValueError` for another `part`, for `test` with no test node, and for a
+  test node given with another part.
 - `RunFacts`: what `run_facts` returns, a frozen dataclass with the fields `unique_id`, `schema`,
   `table`, `physical_name`, `service`, `kind`, `schedule`, `criticality`, `timeout_minutes` (an
   `int`, or `None` when the contract sets none), `file_path`, `owner` and `materialized`.
@@ -866,13 +913,14 @@ dbt node, with `dbt_rule_issues` as its second stage. The module logs nothing.
   | `value` | a `continuo` property is written twice in one list, or has a value outside what it allows (a `service` that is not a string with text among them), the `kind` is not a Python kind, the name of a column is not a name or is the name of an earlier column, or a custom quality rule has an empty `implementation` |
 
   `strict_yaml` is for a caller that reports a `yaml_strict.StrictYamlError` as an issue, and this
-  module never gives it. A dbt contract gets only `odcs_schema`, `api_version`, `identity`,
-  `missing_field`, `unknown_property`, `refused_property` and `value` issues, which
-  `dbt_rule_issues` below describes.
+  module never gives it. A dbt contract gets only `odcs_schema`, `refused_field` (a nested column,
+  which `schema_issues` finds), `api_version`, `identity`, `missing_field`, `unknown_property`,
+  `refused_property` and `value` issues, which `schema_issues` and `dbt_rule_issues` below
+  describe.
 - `schema_issues(doc: object) -> list[Issue]` first scans the columns of every schema object of
   `doc`. When a column carries `items`, a `map` or `properties`, it returns a `refused_field` issue
   at `schema[<n>].properties[<i>].<field>` for each such field, the issue `rule_issues` gives for
-  it, and does not run the JSON schema. The column of a Python contract nests nothing, and the JSON
+  it, and does not run the JSON schema. The column of a contract, Python or dbt, nests nothing, and the JSON
   schema check of a nested column takes time that grows exponentially with the depth of the
   nesting, while the scan takes time in proportion to the number of columns. The other problems of
   such a document show once the nesting is gone. Otherwise it gives one `odcs_schema` issue for
@@ -976,11 +1024,17 @@ dbt node, with `dbt_rule_issues` as its second stage. The module logs nothing.
   file name and no service of a release, because a dbt node has no contract file to name and its
   `service` is not compared with anything. The rules are these:
   - `apiVersion` is `v3.2.0` (`api_version`).
-  - The contract holds exactly one schema object (`identity` at `schema`). Its `name` is a name, as
-    above, and may hold a dot, which a versioned model's does (`identity` at `schema[0].name`). The
-    `id` is in ASCII lower case, and is a schema part, a dot and that name in lower case, so
-    `analytics.customer.v2` is the id of the table `customer.v2` and the alias is not part of it
-    (`identity` at `id`). The `physicalName` and the root `name` are not compared with the table.
+  - The contract holds exactly one schema object (`identity` at `schema`). Its `name`, the table,
+    is a name, as above, with no slash or backslash, and may hold a dot, which a versioned model's
+    does, with no empty, `.` or `..` part between its dots; whitespace inside it is accepted
+    (`identity` at `schema[0].name`). The `id` is in ASCII lower case, and is a schema part, a dot
+    and the table in lower case (`identity` at `id`). The schema part ends at the first dot of the
+    id and is a name with no whitespace, dot or slash anywhere, as the schema part of a Python
+    contract's id is. The table part is the table lowered with `str.lower` in the id's own string:
+    `<schema part>.<table>` lowered as one string, as `dbt.unique_id` lowers it, so a final capital
+    sigma takes its final form (`analytics.\u03c2` is the id of the table `\u03a3`). So
+    `analytics.customer.v2` is the id of the table `customer.v2`, and the alias is not part of it.
+    The `physicalName` and the root `name` are not compared with the table.
   - `team.name` is a string with text in it (`missing_field` at `team.name`).
   - A custom property of the `continuo` vendor is looked up in `vocabulary.PROPERTIES`, in every
     `customProperties` list of the contract. A name the vocabulary does not know is
@@ -1510,34 +1564,46 @@ every case of every file.
   name with outer whitespace, a `schedule` with outer whitespace or longer than 50 characters, a
   `script` with outer whitespace or that is not a normalised path, six `assets` that are not
   normalised paths, a `VARCHAR(0)` column and a blank `service` property. The file is ASCII.
-- `dbt_contracts.json` is a list of `{"name", "node", "tests", "manifest", "reads", "generated",
-  "flags", "stored", "contract_hash"}`. `node` is a manifest node, `tests` its test nodes in the
-  order `dbt.tests_by_node` joins them, and `manifest` the part of the manifest that `generate`
-  reads for them. Pass them to `dbt.generate(node, tests, manifest=manifest)`: its `document` is
-  `generated` and its `flags` are `flags`. `contract.normalise_dbt(generated, reads=reads)` is
-  `stored`, and `contract.contract_hash(stored)` is `contract_hash`; the `generated` contract of
-  such a case passes `validate.validate_dbt_contract`. `reads` are the tables the node's compiled
-  SQL names. A case `{"name", "node", "tests", "manifest", "reads", "issues"}` is a node whose
+- `dbt_contracts.json` is a list of `{"name", "node", "tests", "manifest", "reads",
+  "source_sha256", "generated", "flags", "stored", "contract_hash"}`. `node` is a manifest node,
+  `tests` its test nodes in the order `dbt.tests_by_node` joins them, and `manifest` the part of the
+  manifest that `generate` reads for them. Pass them to `dbt.generate(node, tests,
+  manifest=manifest)`: its `document` is `generated`, its `flags` are `flags` and its
+  `source_sha256` is `source_sha256`, the hash of the fields it read that the [dbt](#dbt) section
+  describes. `contract.normalise_dbt(generated, reads=reads)` is `stored`, and
+  `contract.contract_hash(stored)` is `contract_hash`; the `generated` contract of such a case
+  passes `validate.validate_dbt_contract`. `reads` are the tables the node's compiled SQL names. A
+  case `{"name", "node", "tests", "manifest", "reads", "source_sha256", "issues"}` is a node whose
   generated contract is not valid: `validate.validate_dbt_contract` gives, for the `document` of
   `dbt.generate(node, tests, manifest=manifest)`, the `{"path", "reason"}` of each issue in
-  `issues`, in order. The nine cases with a contract come first, and the one case with `issues`,
-  `bad_criticality`, comes last. The cases come from the `cases` fixture project, one for each
-  rule: a model with tests (every kind of test, relationships to a versioned model and to a
-  source, and Jinja in a kwarg, which flags it), a seed with `column_types`, a dormant model, a
-  versioned model, an ephemeral model, a snapshot (its unique key in both `materialization` and
-  `snapshot`, and its history columns), an enforced contract, a governed model (readers, grants,
-  access, group, freshness, a timeout, declared reads and a table test), the governed model again
-  with the reads `["Analytics.Orders", "analytics.orders", "raw.events"]`, which store joined with
-  its declared read, once and in lower case, and a model with the criticality `high`, which is the
-  case with `issues`. Each input is pruned to the fields `generate` reads, which the [dbt](#dbt)
-  section lists for `source_sha256`: `node` keeps its `unique_id` and those fields, `tests` keep
-  their `unique_id` and those fields (each kwarg but `model` and `column_name`), and `manifest`
-  holds under `nodes` and `sources` each entry of a test's `depends_on.nodes` other than its
-  `attached_node` and the tested node, with a node's `schema`, `name` and `version` or a source's
-  `schema`, `identifier` and `name`. A field the node does not hold is left out, and a value is
-  kept whole. The file is ASCII and the keys of every object are sorted, except the keys of a
-  node's `columns`, which keep the order in which the node declares its columns: the contract's
-  columns follow it, so read that object with its key order kept.
+  `issues`, in order, and `source_sha256` is the hash of that call. The nine cases with a contract
+  come first, then the one case with `issues`, `bad_criticality`, then two cases with a contract
+  whose inputs are fixture nodes the writer edits. The first ten come from the `cases` fixture
+  project as it is, one for each rule: a model with tests (every kind of test, relationships to a
+  versioned model and to a source, and Jinja in a kwarg, which flags it), a seed with
+  `column_types`, a dormant model, a versioned model, an ephemeral model, a snapshot (its unique
+  key in both `materialization` and `snapshot`, and its history columns), an enforced contract, a
+  governed model (readers, grants, access, group, freshness, a timeout, declared reads and a table
+  test), the governed model again with the reads `["Analytics.Orders", "analytics.orders",
+  "raw.events"]`, which store joined with its declared read, once and in lower case, and a model
+  with the criticality `high`, which is the case with `issues`. The two edited cases start from the
+  model with tests, and their names state the edit:
+  `namespaced_test_thresholds_extra_kwarg_and_loose_relationship` makes the test of `amount` the
+  generic test `accepted_range` of the package `dbt_utils`, gives the warned `not_null` test the
+  `warn_if` `> 5` and the `fail_calc` `sum(n)`, gives the `accepted_values` test of `kind` the extra
+  kwarg `quote: false`, and gives the `relationships` test of `customer_id` the severity `warn`, so
+  it is a `custom` rule and not a relationship; `composite_key_lengths_and_undeclared_columns`
+  makes the node's `primary_key` `id`, `status` and `ghost` (a column it does not declare, which
+  flags it), gives `id` the type `varchar(36)` and `status` the type `character varying(00020)`,
+  and moves the lenient `unique` test to the column `ghost`, which flags it too. Each input is
+  pruned to the fields `generate` reads, which `dbt.read_tree` gives: `node` keeps its `unique_id`
+  and those fields, `tests` keep their `unique_id` and those fields (each kwarg but `model` and
+  `column_name`), and `manifest` holds under `nodes` and `sources` each entry of a test's
+  `depends_on.nodes` other than its `attached_node` and the tested node, with a node's `schema`,
+  `name` and `version` or a source's `schema`, `identifier` and `name`. A field the node does not
+  hold is left out, and a value is kept whole. The file is ASCII and the keys of every object are
+  sorted, except the keys of a node's `columns`, which keep the order in which the node declares
+  its columns: the contract's columns follow it, so read that object with its key order kept.
 
 ## Pinning
 

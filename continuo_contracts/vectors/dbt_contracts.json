@@ -338,6 +338,7 @@
    "version": null
   },
   "reads": [],
+  "source_sha256": "3d5f4c74214807fd5c77316d01cc109b09421f04d50b470b3e94f4cffafe0525",
   "stored": {
    "apiVersion": "v3.2.0",
    "customProperties": [
@@ -976,6 +977,7 @@
    "unique_id": "seed.cases.typed_seed"
   },
   "reads": [],
+  "source_sha256": "0c20ca60868fc6432bf96cf88e64041524b0ba0f16520c38bf4a484fef55fb40",
   "stored": {
    "apiVersion": "v3.2.0",
    "customProperties": [
@@ -1149,6 +1151,7 @@
    "version": null
   },
   "reads": [],
+  "source_sha256": "dfcd4674d72af8acdc251df8697f1ec38679af7399ec8e6d544333c9ddff2399",
   "stored": {
    "apiVersion": "v3.2.0",
    "customProperties": [
@@ -1330,6 +1333,7 @@
    "version": 2
   },
   "reads": [],
+  "source_sha256": "40cfd25832017bca48e86421ed49aca940dfe115ec689d38a2aa5b0e55dd0cf1",
   "stored": {
    "apiVersion": "v3.2.0",
    "customProperties": [
@@ -1529,6 +1533,7 @@
    "version": null
   },
   "reads": [],
+  "source_sha256": "8e77c9c230c17b6ccea8c24963d7ba813b994958c38f009f530a607abb60178a",
   "stored": {
    "apiVersion": "v3.2.0",
    "customProperties": [
@@ -1716,6 +1721,7 @@
    "unique_id": "snapshot.cases.orders_snapshot"
   },
   "reads": [],
+  "source_sha256": "a4e7a56d56849c3e7905474adb3cc5949637416525d0bac31e110824d7848ae7",
   "stored": {
    "apiVersion": "v3.2.0",
    "customProperties": [
@@ -1946,6 +1952,7 @@
    "version": null
   },
   "reads": [],
+  "source_sha256": "1d43480aba2ed219b9e59d8c164f4b74ce7e2db319abe3dd020e7ea76434f355",
   "stored": {
    "apiVersion": "v3.2.0",
    "customProperties": [
@@ -2256,6 +2263,7 @@
    "version": null
   },
   "reads": [],
+  "source_sha256": "796a45953330a1b3c5970d80348d73c61e9f741913ee7191f24af099b6c03c37",
   "stored": {
    "apiVersion": "v3.2.0",
    "customProperties": [
@@ -2624,6 +2632,7 @@
    "analytics.orders",
    "raw.events"
   ],
+  "source_sha256": "796a45953330a1b3c5970d80348d73c61e9f741913ee7191f24af099b6c03c37",
   "stored": {
    "apiVersion": "v3.2.0",
    "customProperties": [
@@ -2812,6 +2821,1770 @@
    "version": null
   },
   "reads": [],
+  "source_sha256": "03feec9b27ff22dbb8ecbc4cb857a2b4d3326babd9380507b97e86e93b7fd5eb",
   "tests": []
+ },
+ {
+  "contract_hash": "sha256:fea1f2410357b35f19e2c2cda6cdcb8d651543e34546846904f2d7fcb78bd6d4",
+  "flags": [
+   "jinja_in_test_arguments"
+  ],
+  "generated": {
+   "apiVersion": "v3.2.0",
+   "customProperties": [
+    {
+     "property": "service",
+     "value": "cases",
+     "vendor": "continuo"
+    },
+    {
+     "property": "kind",
+     "value": "dbt-model",
+     "vendor": "continuo"
+    },
+    {
+     "property": "schedule",
+     "value": "project_tag",
+     "vendor": "continuo"
+    },
+    {
+     "property": "criticality",
+     "value": "CORE",
+     "vendor": "continuo"
+    },
+    {
+     "property": "filePath",
+     "value": "models/tagged/generic_tests.sql",
+     "vendor": "continuo"
+    },
+    {
+     "property": "materialization",
+     "value": {
+      "materialized": "table"
+     },
+     "vendor": "continuo"
+    }
+   ],
+   "description": {
+    "purpose": "Every generic test the contract maps, one column each."
+   },
+   "id": "analytics.generic_tests",
+   "kind": "DataContract",
+   "name": "generic_tests",
+   "schema": [
+    {
+     "description": "Every generic test the contract maps, one column each.",
+     "name": "generic_tests",
+     "physicalName": "generic_tests",
+     "physicalType": "table",
+     "properties": [
+      {
+       "name": "id",
+       "primaryKey": true,
+       "quality": [
+        {
+         "id": "not_null_generic_tests_id",
+         "metric": "nullValues",
+         "mustBe": 0
+        },
+        {
+         "id": "unique_generic_tests_id",
+         "metric": "duplicateValues",
+         "mustBe": 0
+        }
+       ],
+       "required": true,
+       "unique": true
+      },
+      {
+       "description": "accepted_values in the syntax that puts the values beside the test.",
+       "name": "status",
+       "quality": [
+        {
+         "arguments": {
+          "validValues": [
+           "active",
+           "closed"
+          ]
+         },
+         "id": "accepted_values_generic_tests_status__active__closed",
+         "metric": "invalidValues",
+         "mustBe": 0
+        }
+       ]
+      },
+      {
+       "description": "accepted_values in the syntax that nests the values under arguments.",
+       "name": "kind",
+       "quality": [
+        {
+         "arguments": {
+          "quote": false,
+          "validValues": [
+           "a",
+           "b"
+          ]
+         },
+         "id": "accepted_values_generic_tests_kind__a__b",
+         "metric": "invalidValues",
+         "mustBe": 0
+        }
+       ]
+      },
+      {
+       "name": "allowed_status",
+       "quality": [
+        {
+         "arguments": {
+          "validValues": "{{ var('allowed') }}"
+         },
+         "id": "accepted_values_generic_tests_allowed_status___var_allowed_",
+         "metric": "invalidValues",
+         "mustBe": 0
+        }
+       ]
+      },
+      {
+       "name": "customer_id",
+       "quality": [
+        {
+         "engine": "dbt",
+         "id": "relationships_generic_tests_customer_id__id__ref_customer_",
+         "implementation": {
+          "arguments": {
+           "field": "id",
+           "to": "ref('customer')"
+          },
+          "test": "relationships"
+         },
+         "name": "relationships_generic_tests_customer_id__id__ref_customer_",
+         "severity": "warning",
+         "type": "custom"
+        }
+       ]
+      },
+      {
+       "name": "event_id",
+       "relationships": [
+        {
+         "to": "raw.events.id"
+        }
+       ]
+      },
+      {
+       "name": "amount",
+       "quality": [
+        {
+         "engine": "dbt",
+         "id": "is_positive_generic_tests_amount__0",
+         "implementation": {
+          "arguments": {
+           "min_value": 0
+          },
+          "test": "dbt_utils.accepted_range"
+         },
+         "name": "is_positive_generic_tests_amount__0",
+         "type": "custom"
+        }
+       ]
+      },
+      {
+       "name": "warned",
+       "quality": [
+        {
+         "customProperties": [
+          {
+           "property": "warnIf",
+           "value": "> 5",
+           "vendor": "continuo"
+          },
+          {
+           "property": "failCalc",
+           "value": "sum(n)",
+           "vendor": "continuo"
+          }
+         ],
+         "id": "not_null_generic_tests_warned",
+         "metric": "nullValues",
+         "mustBe": 0,
+         "severity": "warning"
+        }
+       ]
+      },
+      {
+       "name": "filtered",
+       "quality": [
+        {
+         "customProperties": [
+          {
+           "property": "where",
+           "value": "id > 0",
+           "vendor": "continuo"
+          }
+         ],
+         "id": "not_null_generic_tests_filtered",
+         "metric": "nullValues",
+         "mustBe": 0
+        }
+       ]
+      },
+      {
+       "name": "lenient",
+       "quality": [
+        {
+         "customProperties": [
+          {
+           "property": "errorIf",
+           "value": ">10",
+           "vendor": "continuo"
+          }
+         ],
+         "id": "unique_generic_tests_lenient",
+         "metric": "duplicateValues",
+         "mustBe": 0
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "status": "active",
+   "tags": [
+    "project_tag"
+   ],
+   "team": {
+    "name": "cases"
+   },
+   "version": "0"
+  },
+  "manifest": {
+   "nodes": {
+    "model.cases.customer.v2": {
+     "name": "customer",
+     "schema": "analytics",
+     "version": 2
+    }
+   },
+   "sources": {
+    "source.cases.raw.events": {
+     "identifier": "events",
+     "name": "events",
+     "schema": "raw"
+    }
+   }
+  },
+  "name": "namespaced_test_thresholds_extra_kwarg_and_loose_relationship",
+  "node": {
+   "alias": "generic_tests",
+   "columns": {
+    "id": {
+     "data_type": null,
+     "description": "",
+     "meta": {},
+     "name": "id",
+     "tags": []
+    },
+    "status": {
+     "data_type": null,
+     "description": "accepted_values in the syntax that puts the values beside the test.",
+     "meta": {},
+     "name": "status",
+     "tags": []
+    },
+    "kind": {
+     "data_type": null,
+     "description": "accepted_values in the syntax that nests the values under arguments.",
+     "meta": {},
+     "name": "kind",
+     "tags": []
+    },
+    "allowed_status": {
+     "data_type": null,
+     "description": "",
+     "meta": {},
+     "name": "allowed_status",
+     "tags": []
+    },
+    "customer_id": {
+     "data_type": null,
+     "description": "",
+     "meta": {},
+     "name": "customer_id",
+     "tags": []
+    },
+    "event_id": {
+     "data_type": null,
+     "description": "",
+     "meta": {},
+     "name": "event_id",
+     "tags": []
+    },
+    "amount": {
+     "data_type": null,
+     "description": "",
+     "meta": {},
+     "name": "amount",
+     "tags": []
+    },
+    "warned": {
+     "data_type": null,
+     "description": "",
+     "meta": {},
+     "name": "warned",
+     "tags": []
+    },
+    "filtered": {
+     "data_type": null,
+     "description": "",
+     "meta": {},
+     "name": "filtered",
+     "tags": []
+    },
+    "lenient": {
+     "data_type": null,
+     "description": "",
+     "meta": {},
+     "name": "lenient",
+     "tags": []
+    }
+   },
+   "config": {
+    "access": "protected",
+    "column_types": {},
+    "contract": {
+     "enforced": false
+    },
+    "freshness": null,
+    "grants": {},
+    "group": null,
+    "incremental_strategy": null,
+    "materialized": "table",
+    "meta": {
+     "criticality": "CORE",
+     "owner": "cases"
+    },
+    "on_schema_change": "ignore",
+    "unique_key": null
+   },
+   "deprecation_date": null,
+   "description": "Every generic test the contract maps, one column each.",
+   "fqn": [
+    "cases",
+    "tagged",
+    "generic_tests"
+   ],
+   "name": "generic_tests",
+   "original_file_path": "models/tagged/generic_tests.sql",
+   "primary_key": [
+    "id"
+   ],
+   "resource_type": "model",
+   "schema": "analytics",
+   "tags": [
+    "project_tag"
+   ],
+   "unique_id": "model.cases.generic_tests",
+   "version": null
+  },
+  "reads": [],
+  "source_sha256": "7057a21d2fa5b1e802a1b44550682b25d82c10a3573ac78a323bcef0455bf01d",
+  "stored": {
+   "apiVersion": "v3.2.0",
+   "customProperties": [
+    {
+     "property": "criticality",
+     "value": "CORE",
+     "vendor": "continuo"
+    },
+    {
+     "property": "filePath",
+     "value": "models/tagged/generic_tests.sql",
+     "vendor": "continuo"
+    },
+    {
+     "property": "kind",
+     "value": "dbt-model",
+     "vendor": "continuo"
+    },
+    {
+     "property": "materialization",
+     "value": {
+      "materialized": "table"
+     },
+     "vendor": "continuo"
+    },
+    {
+     "property": "schedule",
+     "value": "project_tag",
+     "vendor": "continuo"
+    },
+    {
+     "property": "service",
+     "value": "cases",
+     "vendor": "continuo"
+    }
+   ],
+   "description": {
+    "purpose": "Every generic test the contract maps, one column each."
+   },
+   "id": "analytics.generic_tests",
+   "kind": "DataContract",
+   "name": "generic_tests",
+   "schema": [
+    {
+     "description": "Every generic test the contract maps, one column each.",
+     "name": "generic_tests",
+     "physicalName": "generic_tests",
+     "physicalType": "table",
+     "properties": [
+      {
+       "name": "id",
+       "primaryKey": true,
+       "quality": [
+        {
+         "id": "not_null_generic_tests_id",
+         "metric": "nullValues",
+         "mustBe": 0
+        },
+        {
+         "id": "unique_generic_tests_id",
+         "metric": "duplicateValues",
+         "mustBe": 0
+        }
+       ],
+       "required": true,
+       "unique": true
+      },
+      {
+       "description": "accepted_values in the syntax that puts the values beside the test.",
+       "name": "status",
+       "quality": [
+        {
+         "arguments": {
+          "validValues": [
+           "active",
+           "closed"
+          ]
+         },
+         "id": "accepted_values_generic_tests_status__active__closed",
+         "metric": "invalidValues",
+         "mustBe": 0
+        }
+       ]
+      },
+      {
+       "description": "accepted_values in the syntax that nests the values under arguments.",
+       "name": "kind",
+       "quality": [
+        {
+         "arguments": {
+          "quote": false,
+          "validValues": [
+           "a",
+           "b"
+          ]
+         },
+         "id": "accepted_values_generic_tests_kind__a__b",
+         "metric": "invalidValues",
+         "mustBe": 0
+        }
+       ]
+      },
+      {
+       "name": "allowed_status",
+       "quality": [
+        {
+         "arguments": {
+          "validValues": "{{ var('allowed') }}"
+         },
+         "id": "accepted_values_generic_tests_allowed_status___var_allowed_",
+         "metric": "invalidValues",
+         "mustBe": 0
+        }
+       ]
+      },
+      {
+       "name": "customer_id",
+       "quality": [
+        {
+         "engine": "dbt",
+         "id": "relationships_generic_tests_customer_id__id__ref_customer_",
+         "implementation": {
+          "arguments": {
+           "field": "id",
+           "to": "ref('customer')"
+          },
+          "test": "relationships"
+         },
+         "name": "relationships_generic_tests_customer_id__id__ref_customer_",
+         "severity": "warning",
+         "type": "custom"
+        }
+       ]
+      },
+      {
+       "name": "event_id",
+       "relationships": [
+        {
+         "to": "raw.events.id"
+        }
+       ]
+      },
+      {
+       "name": "amount",
+       "quality": [
+        {
+         "engine": "dbt",
+         "id": "is_positive_generic_tests_amount__0",
+         "implementation": {
+          "arguments": {
+           "min_value": 0
+          },
+          "test": "dbt_utils.accepted_range"
+         },
+         "name": "is_positive_generic_tests_amount__0",
+         "type": "custom"
+        }
+       ]
+      },
+      {
+       "name": "warned",
+       "quality": [
+        {
+         "customProperties": [
+          {
+           "property": "failCalc",
+           "value": "sum(n)",
+           "vendor": "continuo"
+          },
+          {
+           "property": "warnIf",
+           "value": "> 5",
+           "vendor": "continuo"
+          }
+         ],
+         "id": "not_null_generic_tests_warned",
+         "metric": "nullValues",
+         "mustBe": 0,
+         "severity": "warning"
+        }
+       ]
+      },
+      {
+       "name": "filtered",
+       "quality": [
+        {
+         "customProperties": [
+          {
+           "property": "where",
+           "value": "id > 0",
+           "vendor": "continuo"
+          }
+         ],
+         "id": "not_null_generic_tests_filtered",
+         "metric": "nullValues",
+         "mustBe": 0
+        }
+       ]
+      },
+      {
+       "name": "lenient",
+       "quality": [
+        {
+         "customProperties": [
+          {
+           "property": "errorIf",
+           "value": ">10",
+           "vendor": "continuo"
+          }
+         ],
+         "id": "unique_generic_tests_lenient",
+         "metric": "duplicateValues",
+         "mustBe": 0
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "status": "active",
+   "tags": [
+    "project_tag"
+   ],
+   "team": {
+    "name": "cases"
+   },
+   "version": "0"
+  },
+  "tests": [
+   {
+    "attached_node": "model.cases.generic_tests",
+    "column_name": "allowed_status",
+    "config": {
+     "error_if": "!= 0",
+     "fail_calc": "count(*)",
+     "severity": "ERROR",
+     "warn_if": "!= 0",
+     "where": null
+    },
+    "depends_on": {
+     "nodes": [
+      "model.cases.generic_tests"
+     ]
+    },
+    "description": "",
+    "name": "accepted_values_generic_tests_allowed_status___var_allowed_",
+    "tags": [],
+    "test_metadata": {
+     "kwargs": {
+      "values": "{{ var('allowed') }}"
+     },
+     "name": "accepted_values",
+     "namespace": null
+    },
+    "unique_id": "test.cases.accepted_values_generic_tests_allowed_status___var_allowed_.803cd60992"
+   },
+   {
+    "attached_node": "model.cases.generic_tests",
+    "column_name": "kind",
+    "config": {
+     "error_if": "!= 0",
+     "fail_calc": "count(*)",
+     "severity": "ERROR",
+     "warn_if": "!= 0",
+     "where": null
+    },
+    "depends_on": {
+     "nodes": [
+      "model.cases.generic_tests"
+     ]
+    },
+    "description": "",
+    "name": "accepted_values_generic_tests_kind__a__b",
+    "tags": [],
+    "test_metadata": {
+     "kwargs": {
+      "quote": false,
+      "values": [
+       "a",
+       "b"
+      ]
+     },
+     "name": "accepted_values",
+     "namespace": null
+    },
+    "unique_id": "test.cases.accepted_values_generic_tests_kind__a__b.56ac4e8409"
+   },
+   {
+    "attached_node": "model.cases.generic_tests",
+    "column_name": "status",
+    "config": {
+     "error_if": "!= 0",
+     "fail_calc": "count(*)",
+     "severity": "ERROR",
+     "warn_if": "!= 0",
+     "where": null
+    },
+    "depends_on": {
+     "nodes": [
+      "model.cases.generic_tests"
+     ]
+    },
+    "description": "",
+    "name": "accepted_values_generic_tests_status__active__closed",
+    "tags": [],
+    "test_metadata": {
+     "kwargs": {
+      "values": [
+       "active",
+       "closed"
+      ]
+     },
+     "name": "accepted_values",
+     "namespace": null
+    },
+    "unique_id": "test.cases.accepted_values_generic_tests_status__active__closed.d036573f3d"
+   },
+   {
+    "attached_node": "model.cases.generic_tests",
+    "column_name": "amount",
+    "config": {
+     "error_if": "!= 0",
+     "fail_calc": "count(*)",
+     "severity": "ERROR",
+     "warn_if": "!= 0",
+     "where": null
+    },
+    "depends_on": {
+     "nodes": [
+      "model.cases.generic_tests"
+     ]
+    },
+    "description": "",
+    "name": "is_positive_generic_tests_amount__0",
+    "tags": [],
+    "test_metadata": {
+     "kwargs": {
+      "min_value": 0
+     },
+     "name": "accepted_range",
+     "namespace": "dbt_utils"
+    },
+    "unique_id": "test.cases.is_positive_generic_tests_amount__0.b4bf29aa76"
+   },
+   {
+    "attached_node": "model.cases.generic_tests",
+    "column_name": "filtered",
+    "config": {
+     "error_if": "!= 0",
+     "fail_calc": "count(*)",
+     "severity": "ERROR",
+     "warn_if": "!= 0",
+     "where": "id > 0"
+    },
+    "depends_on": {
+     "nodes": [
+      "model.cases.generic_tests"
+     ]
+    },
+    "description": "",
+    "name": "not_null_generic_tests_filtered",
+    "tags": [],
+    "test_metadata": {
+     "name": "not_null",
+     "namespace": null
+    },
+    "unique_id": "test.cases.not_null_generic_tests_filtered.e25f2e0848"
+   },
+   {
+    "attached_node": "model.cases.generic_tests",
+    "column_name": "id",
+    "config": {
+     "error_if": "!= 0",
+     "fail_calc": "count(*)",
+     "severity": "ERROR",
+     "warn_if": "!= 0",
+     "where": null
+    },
+    "depends_on": {
+     "nodes": [
+      "model.cases.generic_tests"
+     ]
+    },
+    "description": "",
+    "name": "not_null_generic_tests_id",
+    "tags": [],
+    "test_metadata": {
+     "name": "not_null",
+     "namespace": null
+    },
+    "unique_id": "test.cases.not_null_generic_tests_id.3e9e0d509b"
+   },
+   {
+    "attached_node": "model.cases.generic_tests",
+    "column_name": "warned",
+    "config": {
+     "error_if": "!= 0",
+     "fail_calc": "sum(n)",
+     "severity": "warn",
+     "warn_if": "> 5",
+     "where": null
+    },
+    "depends_on": {
+     "nodes": [
+      "model.cases.generic_tests"
+     ]
+    },
+    "description": "",
+    "name": "not_null_generic_tests_warned",
+    "tags": [],
+    "test_metadata": {
+     "name": "not_null",
+     "namespace": null
+    },
+    "unique_id": "test.cases.not_null_generic_tests_warned.0c31e50172"
+   },
+   {
+    "attached_node": "model.cases.generic_tests",
+    "column_name": "customer_id",
+    "config": {
+     "error_if": "!= 0",
+     "fail_calc": "count(*)",
+     "severity": "warn",
+     "warn_if": "!= 0",
+     "where": null
+    },
+    "depends_on": {
+     "nodes": [
+      "model.cases.customer.v2",
+      "model.cases.generic_tests"
+     ]
+    },
+    "description": "",
+    "name": "relationships_generic_tests_customer_id__id__ref_customer_",
+    "tags": [],
+    "test_metadata": {
+     "kwargs": {
+      "field": "id",
+      "to": "ref('customer')"
+     },
+     "name": "relationships",
+     "namespace": null
+    },
+    "unique_id": "test.cases.relationships_generic_tests_customer_id__id__ref_customer_.04ebaabb0a"
+   },
+   {
+    "attached_node": "model.cases.generic_tests",
+    "column_name": "event_id",
+    "config": {
+     "error_if": "!= 0",
+     "fail_calc": "count(*)",
+     "severity": "ERROR",
+     "warn_if": "!= 0",
+     "where": null
+    },
+    "depends_on": {
+     "nodes": [
+      "source.cases.raw.events",
+      "model.cases.generic_tests"
+     ]
+    },
+    "description": "",
+    "name": "relationships_generic_tests_event_id__id__source_raw_events_",
+    "tags": [],
+    "test_metadata": {
+     "kwargs": {
+      "field": "id",
+      "to": "source('raw', 'events')"
+     },
+     "name": "relationships",
+     "namespace": null
+    },
+    "unique_id": "test.cases.relationships_generic_tests_event_id__id__source_raw_events_.482e748f08"
+   },
+   {
+    "attached_node": "model.cases.generic_tests",
+    "column_name": "id",
+    "config": {
+     "error_if": "!= 0",
+     "fail_calc": "count(*)",
+     "severity": "ERROR",
+     "warn_if": "!= 0",
+     "where": null
+    },
+    "depends_on": {
+     "nodes": [
+      "model.cases.generic_tests"
+     ]
+    },
+    "description": "",
+    "name": "unique_generic_tests_id",
+    "tags": [],
+    "test_metadata": {
+     "name": "unique",
+     "namespace": null
+    },
+    "unique_id": "test.cases.unique_generic_tests_id.ade3165569"
+   },
+   {
+    "attached_node": "model.cases.generic_tests",
+    "column_name": "lenient",
+    "config": {
+     "error_if": ">10",
+     "fail_calc": "count(*)",
+     "severity": "ERROR",
+     "warn_if": "!= 0",
+     "where": null
+    },
+    "depends_on": {
+     "nodes": [
+      "model.cases.generic_tests"
+     ]
+    },
+    "description": "",
+    "name": "unique_generic_tests_lenient",
+    "tags": [],
+    "test_metadata": {
+     "name": "unique",
+     "namespace": null
+    },
+    "unique_id": "test.cases.unique_generic_tests_lenient.408a2824ab"
+   }
+  ]
+ },
+ {
+  "contract_hash": "sha256:a054121701e398204d21f72abb9ad77c94609b96b7c0c3421038a495cfadd4eb",
+  "flags": [
+   "jinja_in_test_arguments",
+   "test_column_not_declared",
+   "primary_key_column_not_declared"
+  ],
+  "generated": {
+   "apiVersion": "v3.2.0",
+   "customProperties": [
+    {
+     "property": "service",
+     "value": "cases",
+     "vendor": "continuo"
+    },
+    {
+     "property": "kind",
+     "value": "dbt-model",
+     "vendor": "continuo"
+    },
+    {
+     "property": "schedule",
+     "value": "project_tag",
+     "vendor": "continuo"
+    },
+    {
+     "property": "criticality",
+     "value": "CORE",
+     "vendor": "continuo"
+    },
+    {
+     "property": "filePath",
+     "value": "models/tagged/generic_tests.sql",
+     "vendor": "continuo"
+    },
+    {
+     "property": "materialization",
+     "value": {
+      "materialized": "table"
+     },
+     "vendor": "continuo"
+    }
+   ],
+   "description": {
+    "purpose": "Every generic test the contract maps, one column each."
+   },
+   "id": "analytics.generic_tests",
+   "kind": "DataContract",
+   "name": "generic_tests",
+   "schema": [
+    {
+     "description": "Every generic test the contract maps, one column each.",
+     "name": "generic_tests",
+     "physicalName": "generic_tests",
+     "physicalType": "table",
+     "properties": [
+      {
+       "logicalType": "string",
+       "logicalTypeOptions": {
+        "maxLength": 36
+       },
+       "name": "id",
+       "physicalType": "varchar(36)",
+       "primaryKey": true,
+       "primaryKeyPosition": 1,
+       "quality": [
+        {
+         "id": "not_null_generic_tests_id",
+         "metric": "nullValues",
+         "mustBe": 0
+        },
+        {
+         "id": "unique_generic_tests_id",
+         "metric": "duplicateValues",
+         "mustBe": 0
+        }
+       ],
+       "required": true,
+       "unique": true
+      },
+      {
+       "description": "accepted_values in the syntax that puts the values beside the test.",
+       "logicalType": "string",
+       "logicalTypeOptions": {
+        "maxLength": 20
+       },
+       "name": "status",
+       "physicalType": "character varying(00020)",
+       "primaryKey": true,
+       "primaryKeyPosition": 2,
+       "quality": [
+        {
+         "arguments": {
+          "validValues": [
+           "active",
+           "closed"
+          ]
+         },
+         "id": "accepted_values_generic_tests_status__active__closed",
+         "metric": "invalidValues",
+         "mustBe": 0
+        }
+       ]
+      },
+      {
+       "description": "accepted_values in the syntax that nests the values under arguments.",
+       "name": "kind",
+       "quality": [
+        {
+         "arguments": {
+          "validValues": [
+           "a",
+           "b"
+          ]
+         },
+         "id": "accepted_values_generic_tests_kind__a__b",
+         "metric": "invalidValues",
+         "mustBe": 0
+        }
+       ]
+      },
+      {
+       "name": "allowed_status",
+       "quality": [
+        {
+         "arguments": {
+          "validValues": "{{ var('allowed') }}"
+         },
+         "id": "accepted_values_generic_tests_allowed_status___var_allowed_",
+         "metric": "invalidValues",
+         "mustBe": 0
+        }
+       ]
+      },
+      {
+       "name": "customer_id",
+       "relationships": [
+        {
+         "to": "analytics.customer.v2.id"
+        }
+       ]
+      },
+      {
+       "name": "event_id",
+       "relationships": [
+        {
+         "to": "raw.events.id"
+        }
+       ]
+      },
+      {
+       "name": "amount",
+       "quality": [
+        {
+         "engine": "dbt",
+         "id": "is_positive_generic_tests_amount__0",
+         "implementation": {
+          "arguments": {
+           "min_value": 0
+          },
+          "test": "is_positive"
+         },
+         "name": "is_positive_generic_tests_amount__0",
+         "type": "custom"
+        }
+       ]
+      },
+      {
+       "name": "warned",
+       "quality": [
+        {
+         "id": "not_null_generic_tests_warned",
+         "metric": "nullValues",
+         "mustBe": 0,
+         "severity": "warning"
+        }
+       ]
+      },
+      {
+       "name": "filtered",
+       "quality": [
+        {
+         "customProperties": [
+          {
+           "property": "where",
+           "value": "id > 0",
+           "vendor": "continuo"
+          }
+         ],
+         "id": "not_null_generic_tests_filtered",
+         "metric": "nullValues",
+         "mustBe": 0
+        }
+       ]
+      },
+      {
+       "name": "lenient"
+      }
+     ],
+     "quality": [
+      {
+       "arguments": {
+        "column_name": "ghost"
+       },
+       "customProperties": [
+        {
+         "property": "errorIf",
+         "value": ">10",
+         "vendor": "continuo"
+        }
+       ],
+       "id": "unique_generic_tests_lenient",
+       "metric": "duplicateValues",
+       "mustBe": 0
+      }
+     ]
+    }
+   ],
+   "status": "active",
+   "tags": [
+    "project_tag"
+   ],
+   "team": {
+    "name": "cases"
+   },
+   "version": "0"
+  },
+  "manifest": {
+   "nodes": {
+    "model.cases.customer.v2": {
+     "name": "customer",
+     "schema": "analytics",
+     "version": 2
+    }
+   },
+   "sources": {
+    "source.cases.raw.events": {
+     "identifier": "events",
+     "name": "events",
+     "schema": "raw"
+    }
+   }
+  },
+  "name": "composite_key_lengths_and_undeclared_columns",
+  "node": {
+   "alias": "generic_tests",
+   "columns": {
+    "id": {
+     "data_type": "varchar(36)",
+     "description": "",
+     "meta": {},
+     "name": "id",
+     "tags": []
+    },
+    "status": {
+     "data_type": "character varying(00020)",
+     "description": "accepted_values in the syntax that puts the values beside the test.",
+     "meta": {},
+     "name": "status",
+     "tags": []
+    },
+    "kind": {
+     "data_type": null,
+     "description": "accepted_values in the syntax that nests the values under arguments.",
+     "meta": {},
+     "name": "kind",
+     "tags": []
+    },
+    "allowed_status": {
+     "data_type": null,
+     "description": "",
+     "meta": {},
+     "name": "allowed_status",
+     "tags": []
+    },
+    "customer_id": {
+     "data_type": null,
+     "description": "",
+     "meta": {},
+     "name": "customer_id",
+     "tags": []
+    },
+    "event_id": {
+     "data_type": null,
+     "description": "",
+     "meta": {},
+     "name": "event_id",
+     "tags": []
+    },
+    "amount": {
+     "data_type": null,
+     "description": "",
+     "meta": {},
+     "name": "amount",
+     "tags": []
+    },
+    "warned": {
+     "data_type": null,
+     "description": "",
+     "meta": {},
+     "name": "warned",
+     "tags": []
+    },
+    "filtered": {
+     "data_type": null,
+     "description": "",
+     "meta": {},
+     "name": "filtered",
+     "tags": []
+    },
+    "lenient": {
+     "data_type": null,
+     "description": "",
+     "meta": {},
+     "name": "lenient",
+     "tags": []
+    }
+   },
+   "config": {
+    "access": "protected",
+    "column_types": {},
+    "contract": {
+     "enforced": false
+    },
+    "freshness": null,
+    "grants": {},
+    "group": null,
+    "incremental_strategy": null,
+    "materialized": "table",
+    "meta": {
+     "criticality": "CORE",
+     "owner": "cases"
+    },
+    "on_schema_change": "ignore",
+    "unique_key": null
+   },
+   "deprecation_date": null,
+   "description": "Every generic test the contract maps, one column each.",
+   "fqn": [
+    "cases",
+    "tagged",
+    "generic_tests"
+   ],
+   "name": "generic_tests",
+   "original_file_path": "models/tagged/generic_tests.sql",
+   "primary_key": [
+    "id",
+    "status",
+    "ghost"
+   ],
+   "resource_type": "model",
+   "schema": "analytics",
+   "tags": [
+    "project_tag"
+   ],
+   "unique_id": "model.cases.generic_tests",
+   "version": null
+  },
+  "reads": [],
+  "source_sha256": "b3e0f88e5db9f42d298b29c28452e8455d68db0d2d4e77d4e8244b6b462bdb49",
+  "stored": {
+   "apiVersion": "v3.2.0",
+   "customProperties": [
+    {
+     "property": "criticality",
+     "value": "CORE",
+     "vendor": "continuo"
+    },
+    {
+     "property": "filePath",
+     "value": "models/tagged/generic_tests.sql",
+     "vendor": "continuo"
+    },
+    {
+     "property": "kind",
+     "value": "dbt-model",
+     "vendor": "continuo"
+    },
+    {
+     "property": "materialization",
+     "value": {
+      "materialized": "table"
+     },
+     "vendor": "continuo"
+    },
+    {
+     "property": "schedule",
+     "value": "project_tag",
+     "vendor": "continuo"
+    },
+    {
+     "property": "service",
+     "value": "cases",
+     "vendor": "continuo"
+    }
+   ],
+   "description": {
+    "purpose": "Every generic test the contract maps, one column each."
+   },
+   "id": "analytics.generic_tests",
+   "kind": "DataContract",
+   "name": "generic_tests",
+   "schema": [
+    {
+     "description": "Every generic test the contract maps, one column each.",
+     "name": "generic_tests",
+     "physicalName": "generic_tests",
+     "physicalType": "table",
+     "properties": [
+      {
+       "logicalType": "string",
+       "logicalTypeOptions": {
+        "maxLength": 36
+       },
+       "name": "id",
+       "physicalType": "varchar(36)",
+       "primaryKey": true,
+       "primaryKeyPosition": 1,
+       "quality": [
+        {
+         "id": "not_null_generic_tests_id",
+         "metric": "nullValues",
+         "mustBe": 0
+        },
+        {
+         "id": "unique_generic_tests_id",
+         "metric": "duplicateValues",
+         "mustBe": 0
+        }
+       ],
+       "required": true,
+       "unique": true
+      },
+      {
+       "description": "accepted_values in the syntax that puts the values beside the test.",
+       "logicalType": "string",
+       "logicalTypeOptions": {
+        "maxLength": 20
+       },
+       "name": "status",
+       "physicalType": "character varying(00020)",
+       "primaryKey": true,
+       "primaryKeyPosition": 2,
+       "quality": [
+        {
+         "arguments": {
+          "validValues": [
+           "active",
+           "closed"
+          ]
+         },
+         "id": "accepted_values_generic_tests_status__active__closed",
+         "metric": "invalidValues",
+         "mustBe": 0
+        }
+       ]
+      },
+      {
+       "description": "accepted_values in the syntax that nests the values under arguments.",
+       "name": "kind",
+       "quality": [
+        {
+         "arguments": {
+          "validValues": [
+           "a",
+           "b"
+          ]
+         },
+         "id": "accepted_values_generic_tests_kind__a__b",
+         "metric": "invalidValues",
+         "mustBe": 0
+        }
+       ]
+      },
+      {
+       "name": "allowed_status",
+       "quality": [
+        {
+         "arguments": {
+          "validValues": "{{ var('allowed') }}"
+         },
+         "id": "accepted_values_generic_tests_allowed_status___var_allowed_",
+         "metric": "invalidValues",
+         "mustBe": 0
+        }
+       ]
+      },
+      {
+       "name": "customer_id",
+       "relationships": [
+        {
+         "to": "analytics.customer.v2.id"
+        }
+       ]
+      },
+      {
+       "name": "event_id",
+       "relationships": [
+        {
+         "to": "raw.events.id"
+        }
+       ]
+      },
+      {
+       "name": "amount",
+       "quality": [
+        {
+         "engine": "dbt",
+         "id": "is_positive_generic_tests_amount__0",
+         "implementation": {
+          "arguments": {
+           "min_value": 0
+          },
+          "test": "is_positive"
+         },
+         "name": "is_positive_generic_tests_amount__0",
+         "type": "custom"
+        }
+       ]
+      },
+      {
+       "name": "warned",
+       "quality": [
+        {
+         "id": "not_null_generic_tests_warned",
+         "metric": "nullValues",
+         "mustBe": 0,
+         "severity": "warning"
+        }
+       ]
+      },
+      {
+       "name": "filtered",
+       "quality": [
+        {
+         "customProperties": [
+          {
+           "property": "where",
+           "value": "id > 0",
+           "vendor": "continuo"
+          }
+         ],
+         "id": "not_null_generic_tests_filtered",
+         "metric": "nullValues",
+         "mustBe": 0
+        }
+       ]
+      },
+      {
+       "name": "lenient"
+      }
+     ],
+     "quality": [
+      {
+       "arguments": {
+        "column_name": "ghost"
+       },
+       "customProperties": [
+        {
+         "property": "errorIf",
+         "value": ">10",
+         "vendor": "continuo"
+        }
+       ],
+       "id": "unique_generic_tests_lenient",
+       "metric": "duplicateValues",
+       "mustBe": 0
+      }
+     ]
+    }
+   ],
+   "status": "active",
+   "tags": [
+    "project_tag"
+   ],
+   "team": {
+    "name": "cases"
+   },
+   "version": "0"
+  },
+  "tests": [
+   {
+    "attached_node": "model.cases.generic_tests",
+    "column_name": "allowed_status",
+    "config": {
+     "error_if": "!= 0",
+     "fail_calc": "count(*)",
+     "severity": "ERROR",
+     "warn_if": "!= 0",
+     "where": null
+    },
+    "depends_on": {
+     "nodes": [
+      "model.cases.generic_tests"
+     ]
+    },
+    "description": "",
+    "name": "accepted_values_generic_tests_allowed_status___var_allowed_",
+    "tags": [],
+    "test_metadata": {
+     "kwargs": {
+      "values": "{{ var('allowed') }}"
+     },
+     "name": "accepted_values",
+     "namespace": null
+    },
+    "unique_id": "test.cases.accepted_values_generic_tests_allowed_status___var_allowed_.803cd60992"
+   },
+   {
+    "attached_node": "model.cases.generic_tests",
+    "column_name": "kind",
+    "config": {
+     "error_if": "!= 0",
+     "fail_calc": "count(*)",
+     "severity": "ERROR",
+     "warn_if": "!= 0",
+     "where": null
+    },
+    "depends_on": {
+     "nodes": [
+      "model.cases.generic_tests"
+     ]
+    },
+    "description": "",
+    "name": "accepted_values_generic_tests_kind__a__b",
+    "tags": [],
+    "test_metadata": {
+     "kwargs": {
+      "values": [
+       "a",
+       "b"
+      ]
+     },
+     "name": "accepted_values",
+     "namespace": null
+    },
+    "unique_id": "test.cases.accepted_values_generic_tests_kind__a__b.56ac4e8409"
+   },
+   {
+    "attached_node": "model.cases.generic_tests",
+    "column_name": "status",
+    "config": {
+     "error_if": "!= 0",
+     "fail_calc": "count(*)",
+     "severity": "ERROR",
+     "warn_if": "!= 0",
+     "where": null
+    },
+    "depends_on": {
+     "nodes": [
+      "model.cases.generic_tests"
+     ]
+    },
+    "description": "",
+    "name": "accepted_values_generic_tests_status__active__closed",
+    "tags": [],
+    "test_metadata": {
+     "kwargs": {
+      "values": [
+       "active",
+       "closed"
+      ]
+     },
+     "name": "accepted_values",
+     "namespace": null
+    },
+    "unique_id": "test.cases.accepted_values_generic_tests_status__active__closed.d036573f3d"
+   },
+   {
+    "attached_node": "model.cases.generic_tests",
+    "column_name": "amount",
+    "config": {
+     "error_if": "!= 0",
+     "fail_calc": "count(*)",
+     "severity": "ERROR",
+     "warn_if": "!= 0",
+     "where": null
+    },
+    "depends_on": {
+     "nodes": [
+      "model.cases.generic_tests"
+     ]
+    },
+    "description": "",
+    "name": "is_positive_generic_tests_amount__0",
+    "tags": [],
+    "test_metadata": {
+     "kwargs": {
+      "min_value": 0
+     },
+     "name": "is_positive",
+     "namespace": null
+    },
+    "unique_id": "test.cases.is_positive_generic_tests_amount__0.b4bf29aa76"
+   },
+   {
+    "attached_node": "model.cases.generic_tests",
+    "column_name": "filtered",
+    "config": {
+     "error_if": "!= 0",
+     "fail_calc": "count(*)",
+     "severity": "ERROR",
+     "warn_if": "!= 0",
+     "where": "id > 0"
+    },
+    "depends_on": {
+     "nodes": [
+      "model.cases.generic_tests"
+     ]
+    },
+    "description": "",
+    "name": "not_null_generic_tests_filtered",
+    "tags": [],
+    "test_metadata": {
+     "name": "not_null",
+     "namespace": null
+    },
+    "unique_id": "test.cases.not_null_generic_tests_filtered.e25f2e0848"
+   },
+   {
+    "attached_node": "model.cases.generic_tests",
+    "column_name": "id",
+    "config": {
+     "error_if": "!= 0",
+     "fail_calc": "count(*)",
+     "severity": "ERROR",
+     "warn_if": "!= 0",
+     "where": null
+    },
+    "depends_on": {
+     "nodes": [
+      "model.cases.generic_tests"
+     ]
+    },
+    "description": "",
+    "name": "not_null_generic_tests_id",
+    "tags": [],
+    "test_metadata": {
+     "name": "not_null",
+     "namespace": null
+    },
+    "unique_id": "test.cases.not_null_generic_tests_id.3e9e0d509b"
+   },
+   {
+    "attached_node": "model.cases.generic_tests",
+    "column_name": "warned",
+    "config": {
+     "error_if": "!= 0",
+     "fail_calc": "count(*)",
+     "severity": "warn",
+     "warn_if": "!= 0",
+     "where": null
+    },
+    "depends_on": {
+     "nodes": [
+      "model.cases.generic_tests"
+     ]
+    },
+    "description": "",
+    "name": "not_null_generic_tests_warned",
+    "tags": [],
+    "test_metadata": {
+     "name": "not_null",
+     "namespace": null
+    },
+    "unique_id": "test.cases.not_null_generic_tests_warned.0c31e50172"
+   },
+   {
+    "attached_node": "model.cases.generic_tests",
+    "column_name": "customer_id",
+    "config": {
+     "error_if": "!= 0",
+     "fail_calc": "count(*)",
+     "severity": "ERROR",
+     "warn_if": "!= 0",
+     "where": null
+    },
+    "depends_on": {
+     "nodes": [
+      "model.cases.customer.v2",
+      "model.cases.generic_tests"
+     ]
+    },
+    "description": "",
+    "name": "relationships_generic_tests_customer_id__id__ref_customer_",
+    "tags": [],
+    "test_metadata": {
+     "kwargs": {
+      "field": "id",
+      "to": "ref('customer')"
+     },
+     "name": "relationships",
+     "namespace": null
+    },
+    "unique_id": "test.cases.relationships_generic_tests_customer_id__id__ref_customer_.04ebaabb0a"
+   },
+   {
+    "attached_node": "model.cases.generic_tests",
+    "column_name": "event_id",
+    "config": {
+     "error_if": "!= 0",
+     "fail_calc": "count(*)",
+     "severity": "ERROR",
+     "warn_if": "!= 0",
+     "where": null
+    },
+    "depends_on": {
+     "nodes": [
+      "source.cases.raw.events",
+      "model.cases.generic_tests"
+     ]
+    },
+    "description": "",
+    "name": "relationships_generic_tests_event_id__id__source_raw_events_",
+    "tags": [],
+    "test_metadata": {
+     "kwargs": {
+      "field": "id",
+      "to": "source('raw', 'events')"
+     },
+     "name": "relationships",
+     "namespace": null
+    },
+    "unique_id": "test.cases.relationships_generic_tests_event_id__id__source_raw_events_.482e748f08"
+   },
+   {
+    "attached_node": "model.cases.generic_tests",
+    "column_name": "id",
+    "config": {
+     "error_if": "!= 0",
+     "fail_calc": "count(*)",
+     "severity": "ERROR",
+     "warn_if": "!= 0",
+     "where": null
+    },
+    "depends_on": {
+     "nodes": [
+      "model.cases.generic_tests"
+     ]
+    },
+    "description": "",
+    "name": "unique_generic_tests_id",
+    "tags": [],
+    "test_metadata": {
+     "name": "unique",
+     "namespace": null
+    },
+    "unique_id": "test.cases.unique_generic_tests_id.ade3165569"
+   },
+   {
+    "attached_node": "model.cases.generic_tests",
+    "column_name": "ghost",
+    "config": {
+     "error_if": ">10",
+     "fail_calc": "count(*)",
+     "severity": "ERROR",
+     "warn_if": "!= 0",
+     "where": null
+    },
+    "depends_on": {
+     "nodes": [
+      "model.cases.generic_tests"
+     ]
+    },
+    "description": "",
+    "name": "unique_generic_tests_lenient",
+    "tags": [],
+    "test_metadata": {
+     "name": "unique",
+     "namespace": null
+    },
+    "unique_id": "test.cases.unique_generic_tests_lenient.408a2824ab"
+   }
+  ]
  }
 ]

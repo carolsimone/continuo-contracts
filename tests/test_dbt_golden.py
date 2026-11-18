@@ -9,12 +9,13 @@ from pathlib import Path
 
 import pytest
 
-from dbt_fixtures import load_manifest
+from dbt_fixtures import load_manifest, source_sha256_of
 
 from continuo_contracts import dbt
 from continuo_contracts.canonical import canonical_json
 from continuo_contracts.contract import contract_hash, normalise_dbt
 from continuo_contracts.errors import HashInputError
+from continuo_contracts.validate import validate_dbt_contract
 from continuo_contracts.vocabulary import VENDOR, continuo_values
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -109,9 +110,25 @@ def test_every_golden_file_is_ascii_sorted_json(path):
     data = path.read_bytes()
     assert all(b == 10 or 32 <= b < 127 for b in data)
     value = json.loads(data)
-    assert set(value) == {"generated", "flags", "stored", "contract_hash"}
+    assert set(value) == {
+        "generated",
+        "flags",
+        "source_sha256",
+        "stored",
+        "contract_hash",
+    }
     assert data.decode("ascii") == (
         json.dumps(value, sort_keys=True, indent=1, ensure_ascii=True) + "\n"
+    )
+
+
+@pytest.mark.parametrize("path", GOLDEN_FILES, ids=str)
+def test_the_source_sha256_of_every_golden_is_the_hash_of_its_read_fields(path):
+    golden = json.loads(path.read_text("ascii"))
+    manifest, key = _node_of(path)
+    tests = dbt.tests_by_node(manifest).get(key, [])
+    assert golden["source_sha256"] == source_sha256_of(
+        manifest["nodes"][key], tests, manifest
     )
 
 
@@ -365,6 +382,27 @@ def test_the_schema_of_the_run_facts_is_the_id_without_the_table():
     doc["id"] = "mart_eu.enforced"
     facts = dbt.run_facts(doc)
     assert (facts.schema, facts.table) == ("mart_eu", "enforced")
+
+
+def test_a_table_whose_lower_case_depends_on_its_place_in_the_id():
+    # `unique_id` lowers `<schema>.<table>` as one string, so a final capital sigma becomes the
+    # final form, and the check and the run facts read the id the same way.
+    manifest = copy.deepcopy(load_manifest("cases"))
+    node = manifest["nodes"]["model.cases.enforced"]
+    node["name"] = "\u03a3"
+    node["alias"] = None
+    generated = dbt.generate(node, [], manifest=manifest)
+    assert generated.document["id"] == "analytics.\u03c2"
+    assert validate_dbt_contract(generated.document) == []
+    stored = _stored(generated.document)
+    assert validate_dbt_contract(stored) == []
+    facts = dbt.run_facts(generated.document)
+    assert dbt.run_facts(stored) == facts
+    assert (facts.unique_id, facts.schema, facts.table) == (
+        "analytics.\u03c2",
+        "analytics",
+        "\u03a3",
+    )
 
 
 def test_a_schema_object_with_no_physical_name_runs_on_its_table():

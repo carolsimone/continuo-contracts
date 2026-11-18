@@ -400,6 +400,53 @@ def test_a_deprecation_date_with_no_zone_keeps_its_date(local_zone):
     assert root["deprecationDate"] == "2026-12-01"
 
 
+@pytest.mark.parametrize(
+    ("written", "date"),
+    [
+        ("2026-12-01T00:00:00+09:00", "2026-12-01"),
+        ("2026-12-01", "2026-12-01"),
+        ("2026-12-01T23:30:00", "2026-12-01"),
+        ("2026-12-01 23:30:00-08:00", "2026-12-01"),
+        ("2026-11-18T24:00:00", "2026-11-18"),
+        ("2024-02-29T00:00:00Z", "2024-02-29"),
+    ],
+)
+def test_deprecation_date_is_the_date_part_as_written(written, date, local_zone):
+    node = _node("cases", "model.cases.governed")
+    node["deprecation_date"] = written
+    root = continuo_values(_generate(node, "cases").document["customProperties"])
+    assert root["deprecationDate"] == date
+
+
+@pytest.mark.parametrize(
+    "written",
+    [
+        "2026-W47-3",
+        "20261118",
+        "2026-322",
+        "2026-02-30",
+        "2025-02-29T00:00:00",
+        "2026-13-01",
+        "0000-01-01",
+        "2026-1-18",
+        "2026-11-18x",
+        "2026-11-18T",
+        " 2026-11-18",
+        "\u0662026-11-18",
+        "",
+    ],
+    ids=repr,
+)
+def test_a_deprecation_date_in_another_form_raises_dbt_node_error(written):
+    node = _node("cases", "model.cases.governed")
+    node["deprecation_date"] = written
+    with pytest.raises(DbtNodeError) as raised:
+        _generate(node, "cases")
+    assert str(raised.value).startswith(
+        "model.cases.governed: deprecation_date must be"
+    )
+
+
 def test_model_only_properties_are_left_out_of_a_seed_and_a_snapshot():
     for resource_type in ("seed", "snapshot"):
         node = _node("cases", "model.cases.governed")
@@ -857,6 +904,29 @@ def _set(path, value):
             "config.meta.continuo.reads must be a list of strings, got dict",
         ),
         (
+            _set(("config", "meta", "continuo", "readers"), ["core", ""]),
+            "config.meta.continuo.readers[1] must be a string that is not blank, "
+            "got an empty string",
+        ),
+        (
+            _set(("config", "meta", "continuo", "readers"), [" \t"]),
+            "config.meta.continuo.readers[0] must be a string that is not blank, "
+            "got str",
+        ),
+        (
+            _set(("config", "grants", "select"), ""),
+            "config.grants.select must be a string that is not blank, got an empty "
+            "string",
+        ),
+        (
+            _set(("config", "grants", "select"), "  "),
+            "config.grants.select must be a string that is not blank, got str",
+        ),
+        (
+            _set(("config", "grants", "select"), ["reporter", "\n"]),
+            "config.grants.select[1] must be a string that is not blank, got str",
+        ),
+        (
             _set(("config", "grants"), ["select"]),
             "config.grants must be a mapping, got list",
         ),
@@ -886,11 +956,13 @@ def _set(path, value):
         ),
         (
             _set(("deprecation_date",), 20261201),
-            "deprecation_date must be an ISO 8601 date and time, got int",
+            "deprecation_date must be a date written YYYY-MM-DD, alone or before a "
+            "time, got int",
         ),
         (
             _set(("deprecation_date",), "next year"),
-            "deprecation_date must be an ISO 8601 date and time, got str",
+            "deprecation_date must be a date written YYYY-MM-DD, alone or before a "
+            "time, got str",
         ),
     ],
 )
@@ -932,3 +1004,80 @@ def test_snapshot_meta_column_names_that_are_not_a_mapping_raise_dbt_node_error(
         "snapshot.cases.orders_snapshot: config.snapshot_meta_column_names must be "
         "a mapping, got list"
     )
+
+
+# The public read set.
+
+
+def test_the_read_tree_of_a_node_holds_every_declared_path():
+    tree = dbt.read_tree("node")
+    for path in dbt._READ_PATHS:
+        branch = tree
+        for key in path.split("."):
+            branch = branch[key]
+        assert branch == {} or "*" in branch or set(branch), path
+    assert tree["columns"]["*"]["meta"] == {"continuo": {"classification": {}}}
+    assert tree["config"]["contract"] == {"enforced": {}}
+    assert "unique_id" not in tree
+
+
+def test_the_read_tree_of_a_test_names_its_own_kwargs_but_model_and_column_name():
+    manifest = load_manifest("cases")
+    (test,) = (
+        node
+        for node in manifest["nodes"].values()
+        if node.get("name") == "is_positive_generic_tests_amount__0"
+    )
+    tree = dbt.read_tree("test", test=test)
+    assert tree["test_metadata"] == {
+        "name": {},
+        "namespace": {},
+        "kwargs": {"min_value": {}},
+    }
+    assert tree["config"] == {
+        "severity": {},
+        "where": {},
+        "warn_if": {},
+        "error_if": {},
+        "fail_calc": {},
+    }
+    assert tree["depends_on"] == {"nodes": {}}
+    assert set(tree) == {
+        "name",
+        "column_name",
+        "attached_node",
+        "depends_on",
+        "test_metadata",
+        "description",
+        "tags",
+        "config",
+    }
+
+
+def test_the_read_tree_of_a_target():
+    assert dbt.read_tree("nodes") == {"schema": {}, "name": {}, "version": {}}
+    assert dbt.read_tree("sources") == {
+        "schema": {},
+        "identifier": {},
+        "name": {},
+    }
+
+
+def test_the_read_tree_is_a_new_dict_on_every_call():
+    tree = dbt.read_tree("node")
+    tree["config"]["meta"].clear()
+    tree.pop("name")
+    assert dbt.read_tree("node")["config"]["meta"]["owner"] == {}
+    assert "name" in dbt.read_tree("node")
+    target = dbt.read_tree("nodes")
+    target["alias"] = {}
+    assert "alias" not in dbt.read_tree("nodes")
+
+
+@pytest.mark.parametrize(
+    ("part", "test"),
+    [("test", None), ("column", None), ("node", {"name": "t"}), ("NODE", None)],
+)
+def test_the_read_tree_of_anything_else_raises_value_error(part, test):
+    with pytest.raises(ValueError, match="read_tree"):
+        dbt.read_tree(part, test=test)

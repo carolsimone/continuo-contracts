@@ -87,8 +87,7 @@ _REFUSED_FIELDS: Final = {
 # `contract` walks: the contract, its schema object, a quality rule, or any other object.
 _LEVELS: Final = {"root": "root", "schema_object": "schema", "quality": "quality"}
 
-# The fields a column may not carry: the column of a Python node has a name, a type and a
-# nullability, and nothing nested.
+# The fields a column may not carry: the column of a contract, Python or dbt, nests nothing.
 _NESTED_COLUMN_FIELDS: Final = ("items", "map", "properties")
 
 # Why continuo fills a property or a Python contract does not carry it, for the message that
@@ -299,8 +298,8 @@ def _nested_field_issues(
 ) -> Iterator[Issue]:
     """Yield a `refused_field` issue for each nested field of `column`.
 
-    `column` is at `where`. A nested field is `items`, `map` or `properties`,
-    since the column of a Python node nests nothing.
+    `column` is at `where`. A nested field is `items`, `map` or `properties`, since the column
+    of a contract, Python or dbt, nests nothing.
     """
     shown = _shown(column.get("name"))
     for field in _NESTED_COLUMN_FIELDS:
@@ -308,8 +307,8 @@ def _nested_field_issues(
             yield _issue(
                 f"{where}.{field}",
                 "refused_field",
-                f"column {shown} must not carry `{field}`, the column of a Python node has "
-                "a name, type and nullability and nothing nested",
+                f"column {shown} must not carry `{field}`, the column of a contract has a "
+                "name, type and nullability and nothing nested",
             )
 
 
@@ -351,8 +350,8 @@ def schema_issues(doc: object) -> list[Issue]:
 
     The check starts with a scan of the columns of every schema object. When a column carries
     `items`, a `map` or `properties`, the result is a `refused_field` issue for each such field,
-    the issue the rules give for it, and the JSON schema is not run: the column of a Python
-    contract nests nothing, and the JSON schema check of a nested column takes time that grows
+    the issue the rules give for it, and the JSON schema is not run: the column of a contract,
+    Python or dbt, nests nothing, and the JSON schema check of a nested column takes time that grows
     exponentially with the depth of the nesting. The other errors of such a document show once the
     nesting is gone.
 
@@ -1381,6 +1380,23 @@ def _dbt_envelope(contract: _Contract) -> Iterator[Issue]:
     yield from _api_version_issues(contract, "a dbt contract")
 
 
+def _dbt_table_fault(value: object) -> str | None:
+    """Return what is wrong with `value` as the table of a dbt node, or `None` when it is fine.
+
+    A table is a name (`_name_fault`) with no slash or backslash and no empty, `.` or `..` part
+    between its dots, so the table of a versioned model, `customer.v2`, is one. Whitespace inside
+    it is accepted.
+    """
+    fault = _name_fault(value)
+    if fault is not None or not isinstance(value, str):
+        return fault
+    if "/" in value or "\\" in value:
+        return "must not contain a slash or a backslash"
+    if any(part in ("", ".", "..") for part in value.split(".")):
+        return "must not have an empty, . or .. part between its dots"
+    return None
+
+
 def _dbt_identity(contract: _Contract) -> Iterator[Issue]:
     identifier = contract.doc.get("id")
     yield from _id_case_issues(identifier)
@@ -1394,22 +1410,32 @@ def _dbt_identity(contract: _Contract) -> Iterator[Issue]:
         )
         return
     name = obj.get("name")
-    fault = _name_fault(name)
+    fault = _dbt_table_fault(name)
     if fault is not None or not isinstance(name, str):
         yield _issue(
             "schema[0].name", "identity", f"the name of the table {fault}"
         )
         return
-    # The table of a versioned model holds a dot, so the id is compared with it as a whole.
-    suffix = f".{name.lower()}"
-    if isinstance(identifier, str) and not (
-        identifier.endswith(suffix) and identifier != suffix
-    ):
+    if not isinstance(identifier, str):
+        return
+    # A schema name has no dot, so the schema part ends at the first dot, and the table of a
+    # versioned model holds a dot. The table part is the table lowered in the id's own string,
+    # as `dbt.unique_id` lowers `<schema>.<table>` as one string, so a final capital sigma takes
+    # its final form. The case of the schema part is the case rule's.
+    schema, dot, _ = identifier.partition(".")
+    schema_fault = _identifier_fault(schema)
+    table = f"{schema}.{name}".lower().partition(".")[2]
+    if not dot or schema_fault is not None or f"{schema}.{table}" != identifier:
+        why = (
+            f": its schema part {_shown(schema)} {schema_fault}"
+            if dot and schema_fault is not None
+            else ""
+        )
         yield _issue(
             "id",
             "identity",
             f"the id must be a schema name, a dot and the table, in lower case, as in "
-            f"'analytics{suffix}'",
+            f"{f'analytics.{name}'.lower()!r}{why}",
         )
 
 
@@ -1492,9 +1518,11 @@ def dbt_rule_issues(doc: Mapping[str, Any]) -> list[Issue]:
     stored form. The issues come in path order, then in message order.
 
     The rules are the envelope (`apiVersion` is `v3.2.0`), the identity (one schema object, a
-    table name that is a name, and an `id` in ASCII lower case that is a schema part, a dot and
-    the table of the schema object in lower case, so `analytics.customer.v2` ends with the table
-    `customer.v2` of a versioned model), `team.name`, and the custom properties of the `continuo`
+    table name that is a name with no slash or backslash and no empty, `.` or `..` part between
+    its dots, and an `id` in ASCII lower case that is a schema part with no whitespace, dot or
+    slash, a dot and the table of the schema object lowered in the id's own string, as
+    `dbt.unique_id` lowers `<schema>.<table>` as one string, so `analytics.customer.v2` ends with
+    the table `customer.v2` of a versioned model), `team.name`, and the custom properties of the `continuo`
     vendor: each must be a property that the vocabulary knows (`unknown_property`) and that a dbt
     contract uses, where it sits (`refused_property`, as `<name> is not a dbt contract property`
     for a Python-only one), and it may be written once in a list (`value`). The contract writes

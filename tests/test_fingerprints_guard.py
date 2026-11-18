@@ -643,6 +643,7 @@ def _full_dbt_stored(case_name):
             "relationships",
             {"to": "ref('customer')", "field": "id"},
             [target],
+            strict=True,
         ),
         _dbt_test(node_id, "not_null_ghost", "ghost", "not_null"),
         _dbt_test(

@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from continuo_contracts import dbt, yaml_strict
+from continuo_contracts.contract import normalise_dbt
 from continuo_contracts.validate import (
     REASONS,
     dbt_rule_issues,
@@ -516,6 +517,83 @@ def test_a_table_name_that_is_not_a_name_is_an_identity_issue_at_the_name():
     assert _found(validate_dbt_contract(doc)) == [("schema[0].name", "identity")]
 
 
+@pytest.mark.parametrize(
+    "identifier",
+    [
+        "analytics.../x",
+        "analytics.a/b",
+        "analytics.a\\b",
+        "../...governed",
+        "a\tb.governed",
+        "a\x00b.governed",
+        " .governed",
+        "a b.governed",
+        "a/b.governed",
+        "analytics.governed.v../1",
+        "analytics.governed..v1",
+        "analytics.governed.",
+        "analytics.governed.v.",
+    ],
+    ids=repr,
+)
+def test_an_id_that_is_not_a_schema_name_and_a_table_is_an_identity_issue(
+    identifier,
+):
+    # The table is the part of the id after its first dot, so only the id's own rule can fail.
+    doc = _doc()
+    doc["id"] = identifier
+    doc["schema"][0]["name"] = identifier.partition(".")[2]
+    issues = validate_dbt_contract(doc)
+    assert issues, identifier
+    assert {issue.reason for issue in issues} == {"identity"}, identifier
+
+
+def test_a_table_name_with_inner_whitespace_is_accepted():
+    doc = _doc()
+    doc["id"] = "analytics.generic tests"
+    doc["schema"][0]["name"] = "generic tests"
+    assert validate_dbt_contract(doc) == []
+
+
+def test_an_id_with_a_schema_part_that_is_not_a_name_says_why():
+    doc = _doc()
+    doc["id"] = "ana lytics.generic_tests"
+    issue = _only(validate_dbt_contract(doc))
+    assert (issue.path, issue.reason) == ("id", "identity")
+    assert "its schema part 'ana lytics' must not contain whitespace" in (
+        issue.message
+    )
+
+
+@pytest.mark.parametrize(
+    ("name", "fault"),
+    [
+        ("a/b", "must not contain a slash or a backslash"),
+        ("a\\b", "must not contain a slash or a backslash"),
+        ("customer..v2", "must not have an empty, . or .. part between its dots"),
+        ("customer.v2.", "must not have an empty, . or .. part between its dots"),
+    ],
+)
+def test_a_table_name_with_a_separator_says_why(name, fault):
+    doc = _doc()
+    doc["id"] = f"analytics.{name}"
+    doc["schema"][0]["name"] = name
+    issue = _only(validate_dbt_contract(doc))
+    assert (issue.path, issue.reason) == ("schema[0].name", "identity")
+    assert issue.message == f"the name of the table {fault}"
+
+
+def test_the_id_is_lowered_as_one_string_like_the_parser():
+    # Python lowers a final capital sigma to the final form when a letter comes before it, and
+    # the dot of the id does not break the word, so the id ends with the final form.
+    doc = _doc()
+    doc["id"] = "analytics.\u03c2"
+    doc["schema"][0]["name"] = "\u03a3"
+    assert validate_dbt_contract(doc) == []
+    doc["id"] = "analytics.\u03c3"
+    assert _found(validate_dbt_contract(doc)) == [("id", "identity")]
+
+
 def test_the_physical_name_may_differ_from_the_table():
     doc = _doc("analytics.customer.v2")
     assert doc["schema"][0]["physicalName"] == "customer_v2"
@@ -730,3 +808,48 @@ def test_the_goldens_give_their_run_facts_whole():
     assert facts.kind == "dbt-model"
     assert facts.file_path.endswith("governed.sql")
     assert facts.materialized == "table"
+
+
+# A generated contract that the check accepts keeps no issue once stored.
+
+
+@pytest.mark.parametrize("project", PROJECTS)
+def test_a_generated_contract_without_issues_has_a_stored_form_without_issues(
+    project,
+):
+    checked = 0
+    for path in sorted((GOLDEN / project).glob("*.json")):
+        doc = json.loads(path.read_text("ascii"))["generated"]
+        derived = [("as generated", doc), *_derived(doc)]
+        for what, candidate in derived:
+            if validate_dbt_contract(candidate):
+                continue
+            checked += 1
+            stored = normalise_dbt(candidate, reads=[])
+            assert validate_dbt_contract(stored) == [], f"{path.stem}: {what}"
+    assert checked
+
+
+# A nested column.
+
+
+@pytest.mark.parametrize("field", ["items", "map", "properties"])
+def test_a_nested_column_is_a_refused_field_that_names_no_node_family(field):
+    doc = _doc()
+    doc["schema"][0]["properties"][0][field] = (
+        [] if field == "properties" else {"name": "x"}
+    )
+    issue = _only(validate_dbt_contract(doc))
+    assert (issue.path, issue.reason) == (
+        f"schema[0].properties[0].{field}",
+        "refused_field",
+    )
+    assert "Python" not in issue.message
+    assert issue.message.startswith(f"column 'id' must not carry `{field}`")
+
+
+def test_the_rules_leave_an_id_that_is_not_a_string_to_the_schema():
+    doc = _doc()
+    doc["id"] = 7
+    assert dbt_rule_issues(doc) == []
+    assert _found(validate_dbt_contract(doc)) == [("id", "odcs_schema")]

@@ -340,21 +340,81 @@ def test_a_source_with_no_identifier_is_named_by_its_name():
     ] == [{"to": "raw.events.id"}]
 
 
-def test_a_relationships_test_keeps_only_the_relationship():
-    def warn_where(test):
-        test["config"].update(severity="warn", where="id > 0", error_if="> 1")
+_TO_CUSTOMER = "relationships_generic_tests_customer_id__id__ref_customer_"
+
+
+def test_a_strict_relationships_test_keeps_only_the_relationship():
+    def described(test):
         test["description"] = "Customers exist."
         test["tags"] = ["fk"]
 
-    manifest = _edited(
-        "cases",
-        "relationships_generic_tests_customer_id__id__ref_customer_",
-        warn_where,
-    )
+    manifest = _edited("cases", _TO_CUSTOMER, described)
     assert _props(_run(manifest, GENERIC).document)["customer_id"] == {
         "name": "customer_id",
         "relationships": [{"to": "analytics.customer.v2.id"}],
     }
+
+
+@pytest.mark.parametrize(
+    ("config", "written"),
+    [
+        ({"severity": "warn"}, {"severity": "warning"}),
+        ({"where": "id > 0"}, {"customProperties": [_cp("where", "id > 0")]}),
+        ({"error_if": "> 1"}, {"customProperties": [_cp("errorIf", "> 1")]}),
+        ({"warn_if": "> 1"}, {"customProperties": [_cp("warnIf", "> 1")]}),
+        (
+            {"fail_calc": "sum(n)"},
+            {"customProperties": [_cp("failCalc", "sum(n)")]},
+        ),
+    ],
+    ids=["warn", "where", "error_if", "warn_if", "fail_calc"],
+)
+def test_a_relationships_test_that_is_not_strict_is_a_custom_rule(
+    config, written
+):
+    def loosened(test):
+        test["config"].update(config)
+        test["description"] = "Customers exist."
+        test["tags"] = ["fk"]
+
+    manifest = _edited("cases", _TO_CUSTOMER, loosened)
+    generated = _run(manifest, GENERIC)
+    assert _props(generated.document)["customer_id"] == {
+        "name": "customer_id",
+        "quality": [
+            {
+                "id": _TO_CUSTOMER,
+                "name": _TO_CUSTOMER,
+                "type": "custom",
+                "engine": "dbt",
+                "implementation": {
+                    "test": "relationships",
+                    "arguments": {"field": "id", "to": "ref('customer')"},
+                },
+                **written,
+                "description": "Customers exist.",
+                "tags": ["fk"],
+            }
+        ],
+    }
+    assert schema_issues(generated.document) == []
+    # The relationship's target is not read, so it is not in `source_sha256`.
+    target = manifest["nodes"]["model.cases.customer.v2"]
+    before = generated.source_sha256
+    target["schema"] = "elsewhere"
+    assert _run(manifest, GENERIC).source_sha256 == before
+
+
+def test_a_relationships_test_that_is_not_strict_keeps_its_jinja_flag():
+    def loosened(test):
+        test["config"]["severity"] = "warn"
+        test["test_metadata"]["kwargs"]["to"] = "{{ ref('customer') }}"
+
+    manifest = _edited("cases", _TO_CUSTOMER, loosened)
+    generated = _run(manifest, GENERIC)
+    assert "jinja_in_test_arguments" in generated.flags
+    (rule,) = _props(generated.document)["customer_id"]["quality"]
+    assert rule["implementation"]["arguments"]["to"] == "{{ ref('customer') }}"
 
 
 def test_a_warn_test_is_severity_warning_and_sets_no_required():
@@ -902,7 +962,6 @@ def test_a_generic_test_with_no_column_sits_on_the_schema_object_unflagged():
         ("varchar(99999999999999999)", {"logicalType": "string"}),
         ("date", {"logicalType": "date"}),
         ("timestamp", {"logicalType": "timestamp"}),
-        ("timestamp(6) with time zone", {"logicalType": "timestamp"}),
         ("timestamptz", {"logicalType": "timestamp"}),
         ("timestamp without time zone", {"logicalType": "timestamp"}),
         ("datetime", {"logicalType": "timestamp"}),
@@ -914,10 +973,78 @@ def test_a_generic_test_with_no_column_sits_on_the_schema_object_unflagged():
         ("timestamp(3)[]", None),
         ("varchar(\u0663)", None),
         ("time", None),
+        ("float4", {"logicalType": "number"}),
+        ("FLOAT4", {"logicalType": "number"}),
     ],
 )
 def test_logical_type(raw, expected):
     assert dbt.logical_type(raw) == expected
+
+
+_STRING = {"logicalType": "string"}
+
+
+def _max_length(length):
+    return {"logicalType": "string", "logicalTypeOptions": {"maxLength": length}}
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        # A length is read with its leading zeros left out, however many there are.
+        ("varchar(00000000000000010)", _max_length(10)),
+        ("varchar(0000000000000000000000000001)", _max_length(1)),
+        ("varchar(9007199254740991)", _max_length(2**53 - 1)),
+        ("varchar(0)", _STRING),
+        ("varchar(000)", _STRING),
+        ("varchar(9007199254740992)", _STRING),
+        ("varchar(99999999999999999)", _STRING),
+        # Whitespace is a space or a tab, and a run of them reads as one space.
+        ("varchar (10)", _max_length(10)),
+        ("varchar\t(\t10\t)\t", _max_length(10)),
+        ("character \t varying(10)", _max_length(10)),
+        ("varchar\n(10)", None),
+        ("var\x1cchar(10)", None),
+        ("character\x1fvarying", None),
+        ("integer\x0b", None),
+        ("double\xa0precision", None),
+        # After the closing parenthesis only whitespace may follow.
+        ("varchar(10)x", None),
+        ("varchar(10) not null", None),
+        ("timestamp(6) with time zone", None),
+        ("numeric(12,2) ", {"logicalType": "number"}),
+        ("varchar(10", None),
+        ("varchar((10))", None),
+        ("varchar(10))", None),
+    ],
+    ids=repr,
+)
+def test_logical_type_reads_a_length_whitespace_and_the_end_by_its_rules(
+    raw, expected
+):
+    assert dbt.logical_type(raw) == expected
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "varchar(00000000000000010)",
+        "VARCHAR(10)",
+        "CHAR(3)",
+        "TEXT",
+        "varchar(0)",
+    ],
+)
+def test_the_two_readers_agree_on_the_string_types_they_share(raw):
+    # The Python reader gives no logical type at all for a length outside 1 to 2**53 - 1, which
+    # the Python contract check refuses; a dbt column keeps its type and only loses the length.
+    from continuo_contracts import contract
+
+    python = contract.logical_type(raw)
+    if python is None:
+        assert dbt.logical_type(raw) == _STRING
+    else:
+        assert dbt.logical_type(raw) == python
 
 
 def test_logical_type_returns_a_new_dict():
@@ -1475,6 +1602,28 @@ def _scramble(value):
 
 def test_the_contract_shares_no_list_or_mapping_with_the_manifest():
     manifest = _manifest("cases")
-    for node_id in (GENERIC, "model.cases.governed"):
-        _scramble(_run(manifest, node_id).document["schema"])
-    assert manifest == load_manifest("cases")
+    snapshot = manifest["nodes"]["snapshot.cases.orders_snapshot"]
+    snapshot["config"].update(
+        strategy="check", unique_key=["id", "version"], check_cols=["status"]
+    )
+    manifest["nodes"]["model.cases.incr"]["config"]["unique_key"] = ["id", "day"]
+    before = copy.deepcopy(manifest)
+    for node_id in (
+        GENERIC,
+        "model.cases.governed",
+        "model.cases.incr",
+        "snapshot.cases.orders_snapshot",
+    ):
+        _scramble(_run(manifest, node_id).document)
+    assert manifest == before
+
+
+def test_a_change_to_the_contracts_tags_leaves_the_node_and_its_schedule():
+    manifest = _manifest("cases")
+    node = manifest["nodes"]["model.cases.governed"]
+    tags = list(node["tags"])
+    schedule = dbt.schedule(node)
+    document = _run(manifest, "model.cases.governed").document
+    document["tags"].insert(0, "another")
+    assert node["tags"] == tags
+    assert dbt.schedule(node) == schedule

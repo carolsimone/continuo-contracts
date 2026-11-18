@@ -30,9 +30,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   declared `reads`. It returns a `Generated` with the document, the contract's flags (`FLAGS`) and
   `source_sha256`, the SHA-256 of exactly the manifest fields it reads, down to the keys of
   `config`, `config.meta` and `config.meta.continuo`, so another `config` or `meta` key never moves
-  it. A `deprecationDate` is the date the team wrote in every time zone. A field of the node in a
-  shape it cannot read, or a field it reads whose value canonical JSON cannot write, raises
-  `DbtNodeError`.
+  it. A `deprecationDate` is the `YYYY-MM-DD` date part of `deprecation_date` as written, read by
+  a fixed pattern and checked as a calendar date, so it is the date the team wrote in every time
+  zone; a week date, a basic date or an ordinal date raises `DbtNodeError`. A reader or a grantee
+  that is empty or blank raises `DbtNodeError`. The contract shares no list with the manifest node.
+  A field of the node in a shape it cannot read, or a field it reads whose value canonical JSON
+  cannot write, raises `DbtNodeError`.
 - `continuo_contracts.dbt.generate` writes the schema object's `properties` and `quality`: the
   declared columns in the order of the node's `columns`, each with its `physicalType` (a seed's
   `config.column_types` wins over `data_type`), its `logicalType`, description, tags,
@@ -42,8 +45,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   metrics `nullValues`, `duplicateValues` and `invalidValues`, and make a column `required` or
   `unique` only with severity `error`, no `where` and dbt's default thresholds, and an
   `accepted_values` rule's arguments are its `values` as `validValues` and its other kwargs as
-  written (such as `quote`); `relationships` is
-  a relationship to `<target id>.<field>`; any other generic test is a `custom` rule with
+  written (such as `quote`); a strict `relationships` test (the same rule) is a relationship to
+  `<target id>.<field>`, and one that is not strict is a `custom` rule with its severity and
+  `where`; any other generic test is a `custom` rule with
   `implementation: {test, arguments}`; a singular test is a `custom` rule on the schema object, as
   is each table test of `config.meta.continuo.tests` (`engine: data-quality`). A rule carries
   `severity` when it is not `error`, the test's description and tags, and `where`, `warnIf`,
@@ -54,9 +58,14 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   field in a shape it cannot read raises `DbtNodeError`, whose message names the node, then the
   test.
 - `continuo_contracts.dbt.logical_type` gives the ODCS logical type of a declared column type, by
-  its name before `(` in lower case, with `maxLength` for a string type that gives a length in
-  ASCII digits, or `None` for a type it does not know, an array type (with `[`) or a type with a
-  character outside ASCII.
+  its name before `(` in lower case (`float4` among the numbers), with `maxLength` for a string
+  type that gives a length from 1 to 2**53 - 1 in ASCII digits, read with its leading zeros left
+  out, or `None` for a type it does not know, an array type (with `[`), a type with a character
+  outside ASCII or a type with text after its closing `)`. Whitespace is a space or a tab only.
+- `continuo_contracts.dbt.read_tree` names the fields `generate` reads, and `source_sha256`
+  covers, of a node, a test and a relationship's target, as trees. The README writes down the
+  structure `source_sha256` hashes, `{node, tests, targets}`, so another implementation can
+  compute it.
 - Test fixtures for dbt nodes: `tests/fixtures/dbt/projects` holds the dbt projects `core`,
   `finance`, `marketing` and `service_1`, copied from continuo-demo at commit
   `d92d371223107e77f5ca9291bfff5f6bb25e1703`, and a `cases` project with a local package `cases_pkg`
@@ -77,8 +86,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   owner and materialization.
 - `continuo_contracts.validate.validate_dbt_contract` checks a dbt contract, generated or stored,
   against the ODCS schema and then against `dbt_rule_issues`, the rules of a dbt contract: the
-  envelope, one schema object with an `id` that is a schema part, a dot and its table in lower
-  case, `team.name`, the `continuo` properties (a name the vocabulary does not know is
+  envelope, one schema object whose table has no slash, backslash or empty, `.` or `..` part
+  between its dots, with an `id` that is a schema part with no whitespace, dot or slash, a dot and
+  its table lowered in the id's own string as `unique_id` lowers it, `team.name`, the `continuo` properties (a name the vocabulary does not know is
   `unknown_property`, one that dbt does not use, such as `script`, is `refused_property`, one
   written twice is a `value` issue), `service`, `kind`, `filePath` and `materialization` written,
   `service` and `filePath` text, `kind` one of the three dbt kinds, `materialization` a mapping
@@ -86,17 +96,21 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `schedule` at most 50 characters and `timeoutMinutes` a whole number from 1 to 10080. A value
   issue is at the `value` of the property, as in `customProperties[3].value`. A contract that has
   no issue is one `dbt.run_facts` reads whole, which a test shows by deleting each piece of every
-  golden contract and replacing it with a value of the wrong type. The checks of a Python contract
-  do not change.
+  golden contract and replacing it with a value of the wrong type, and a generated contract with
+  no issue has a stored form with no issue. A nested column is a `refused_field` issue, whose
+  message names no node family. The checks of a Python contract do not change.
 - The new vector file `vectors/dbt_contracts.json` pins the generated contract, the flags, the
-  stored form and the first `contract_hash` of nine dbt nodes, one for each rule of the
-  generator, each with its node, tests and manifest pruned to the fields `generate` reads, and a
-  tenth case, `bad_criticality`, that lists the issues `validate_dbt_contract` finds in the
-  generated contract of a model whose criticality is `high`.
-  `tests/fixtures/dbt/golden/<project>/<id>.json` holds the generated contract, the flags, the
-  stored form and the hash of every kept node of the five fixture manifests, and
-  `scripts/write_dbt_goldens.py` writes both, the same bytes on every run. No 0.2.0 vector file
-  changes.
+  `source_sha256`, the stored form and the first `contract_hash` of nine dbt nodes, one for each
+  rule of the generator, each with its node, tests and manifest pruned to the fields `generate`
+  reads; a tenth case, `bad_criticality`, that pins the `source_sha256` and lists the issues
+  `validate_dbt_contract` finds in the generated contract of a model whose criticality is `high`;
+  and two cases built from fixture nodes the writer edits, which pin a namespaced generic test,
+  `warnIf` and `failCalc`, an extra `accepted_values` kwarg, a `relationships` test that is not
+  strict, a key of several columns, `maxLength` and tests and key columns the node does not
+  declare. `tests/fixtures/dbt/golden/<project>/<id>.json` holds the generated contract, the
+  flags, the `source_sha256`, the stored form and the hash of every kept node of the five fixture
+  manifests, and `scripts/write_dbt_goldens.py` writes both, the same bytes on every run, with the
+  public `dbt.read_tree` for the fields it keeps. No 0.2.0 vector file changes.
 - `fingerprints.yaml` classifies every field of a dbt contract's stored form for `dbt-model`,
   `dbt-seed` and `dbt-snapshot`, in the `odcs.<path>` inputs the Python families use: the
   identity (`odcs.id`, `odcs.name`, `odcs.schema.name`, `odcs.schema.physicalName`), the
