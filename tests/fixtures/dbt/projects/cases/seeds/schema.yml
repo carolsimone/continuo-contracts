@@ -1,0 +1,13 @@
+seeds:
+  - name: typed_seed
+    config:
+      column_types:
+        amount: numeric(12,2)
+      quote_columns: true
+    columns:
+      - name: id
+        data_type: integer
+      - name: amount
+        data_type: integer
+      - name: label
+        data_type: text

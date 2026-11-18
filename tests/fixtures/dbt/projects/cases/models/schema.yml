@@ -1,0 +1,151 @@
+models:
+  - name: generic_tests
+    description: Every generic test the contract maps, one column each.
+    columns:
+      - name: id
+        data_tests:
+          - not_null
+          - unique
+      - name: status
+        description: accepted_values in the syntax that puts the values beside the test.
+        data_tests:
+          - accepted_values:
+              values: [active, closed]
+      - name: kind
+        description: accepted_values in the syntax that nests the values under arguments.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [a, b]
+      - name: allowed_status
+        data_tests:
+          - accepted_values:
+              values: "{{ var('allowed') }}"
+      - name: customer_id
+        data_tests:
+          - relationships:
+              to: ref('customer')
+              field: id
+      - name: event_id
+        data_tests:
+          - relationships:
+              to: source('raw', 'events')
+              field: id
+      - name: amount
+        data_tests:
+          - is_positive:
+              arguments:
+                min_value: 0
+      - name: warned
+        data_tests:
+          - not_null:
+              config:
+                severity: warn
+      - name: filtered
+        data_tests:
+          - not_null:
+              config:
+                where: "id > 0"
+      - name: lenient
+        data_tests:
+          - unique:
+              config:
+                error_if: ">10"
+
+  - name: singular_target
+    description: A model that tests/assert_singular_target.sql checks.
+
+  - name: customer
+    latest_version: 2
+    columns:
+      - name: id
+        data_tests:
+          - unique
+    versions:
+      - v: 1
+      - v: 2
+
+  - name: eph
+    config:
+      materialized: ephemeral
+
+  - name: a_view
+    config:
+      materialized: view
+
+  - name: incr
+    config:
+      materialized: incremental
+      unique_key: id
+      incremental_strategy: merge
+      on_schema_change: append_new_columns
+
+  - name: enforced
+    config:
+      contract:
+        enforced: true
+    constraints:
+      - type: primary_key
+        columns: [id]
+    columns:
+      - name: id
+        data_type: integer
+      - name: name
+        data_type: text
+      - name: created_at
+        data_type: timestamp
+
+  - name: governed
+    deprecation_date: 2026-12-01
+    config:
+      access: private
+      group: finance_team
+      freshness:
+        build_after:
+          count: 4
+          period: hour
+      grants:
+        select: [reporter, analyst]
+      meta:
+        timeout_minutes: 90
+        continuo:
+          readers: [core]
+          reads: [analytics.raw_events]
+          tests:
+            - name: row_count
+              enabled: true
+              granularity: daily
+              params:
+                min: 1
+    columns:
+      - name: id
+      - name: email
+        meta:
+          continuo:
+            classification: personal
+        tags: [pii]
+
+  - name: default_access
+    config:
+      access: protected
+
+  - name: dormant
+    description: A model with an owner and no tag.
+
+  - name: no_owner
+    config:
+      meta:
+        owner: ""
+
+  - name: stub
+    config:
+      tags: [local_stub]
+
+  - name: bad_criticality
+    config:
+      meta:
+        criticality: high
+
+  - name: long_tag
+    config:
+      tags: [a_schedule_name_of_fifty_one_characters_in_total_ab]

@@ -5,6 +5,17 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Test fixtures for dbt nodes: `tests/fixtures/dbt/projects` holds the dbt projects `core`,
+  `finance`, `marketing` and `service_1`, copied from continuo-demo at commit
+  `d92d371223107e77f5ca9291bfff5f6bb25e1703`, and a `cases` project with a local package `cases_pkg`
+  that covers each mapping rule. `scripts/build_dbt_fixtures.py` parses each project with dbt
+  1.12.0b1 (Python 3.12, `TZ=Asia/Tokyo`) and writes
+  `tests/fixtures/dbt/manifests/<project>.json.gz`, the same bytes on every rebuild.
+  `tests/dbt_fixtures.py` loads them, and the `dbt` pytest marker names the test that rebuilds them
+  by hand.
+
 ## [0.2.0] - 2026-11-15
 
 **TL;DR**

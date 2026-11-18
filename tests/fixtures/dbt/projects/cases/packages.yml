@@ -1,0 +1,2 @@
+packages:
+  - local: ../cases_pkg
