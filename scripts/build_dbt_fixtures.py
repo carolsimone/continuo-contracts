@@ -4,7 +4,9 @@ Run it with `uv run python scripts/build_dbt_fixtures.py [PROJECT ...]`; with no
 builds all five. For each project under `tests/fixtures/dbt/projects` it copies the project, and
 the local packages it names, to a temporary directory, runs `dbt deps` (when the project has a
 `packages.yml`) and `dbt parse` with the pinned dbt in a `TZ=Asia/Tokyo` environment, and writes
-the manifest it parsed to `tests/fixtures/dbt/manifests/<project>.json.gz`.
+the manifest it parsed to `tests/fixtures/dbt/manifests/<project>.json.gz`. The environment is
+the caller's less every `DBT_` and `POSTGRES_` variable, so a machine's settings never reach a
+manifest.
 
 The pinned dbt runs through `uvx` on Python 3.12, so the script needs no dbt of its own. The
 copy lives under the temporary directory of the platform; set `TMPDIR` to build elsewhere. The
@@ -71,6 +73,10 @@ DECLARED_ORDER_KEY = "columns"
 # What dbt leaves in a project directory that it has run in; none of it is part of a project.
 BUILD_LEFTOVERS = ("target", "logs", "dbt_packages", "package-lock.yml")
 LOCAL_PACKAGE = re.compile(r"^\s*-\s*local:\s*(\.\./[\w.-]+)\s*$", re.MULTILINE)
+# The caller's variables a build drops: dbt's own settings, and the Postgres settings that the
+# fixture profiles read (`POSTGRES_DB` names the database every node carries), so the profiles'
+# defaults apply. The fixture macros read `DBT_TARGET_SCHEMA`, which the first prefix drops.
+DROPPED_PREFIXES = ("DBT_", "POSTGRES_")
 
 
 class BuildError(Exception):
@@ -78,8 +84,13 @@ class BuildError(Exception):
 
 
 def _environment() -> dict[str, str]:
-    """Return the environment of a build: the caller's, less its dbt settings, plus ours."""
-    env = {k: v for k, v in os.environ.items() if not k.startswith("DBT_")}
+    """Return the environment of a build: the caller's, less its dbt and Postgres settings.
+
+    It adds the settings of the build.
+    """
+    env = {
+        k: v for k, v in os.environ.items() if not k.startswith(DROPPED_PREFIXES)
+    }
     env.update(
         {
             "TZ": TIME_ZONE,

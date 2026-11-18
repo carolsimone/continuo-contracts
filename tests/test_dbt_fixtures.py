@@ -10,6 +10,7 @@ import gzip
 import importlib.util
 import json
 import logging
+import re
 import shutil
 
 from pathlib import Path
@@ -223,6 +224,50 @@ def test_the_build_environment_drops_the_callers_dbt_settings(monkeypatch):
     assert "DBT_TARGET" not in env
     assert env["TZ"] == "Asia/Tokyo"
     assert env["DBT_SEND_ANONYMOUS_USAGE_STATS"] == "false"
+
+
+ENV_VAR = re.compile(r"""env_var\(\s*['"]([^'"]+)['"]""")
+
+
+def _variables_the_fixture_projects_read() -> set[str]:
+    """Return the name of every variable an `env_var` call of a fixture project reads."""
+    names: set[str] = set()
+    for path in sorted(PROJECTS.rglob("*")):
+        leftovers = set(build_dbt_fixtures.BUILD_LEFTOVERS)
+        if path.suffix in (".yml", ".yaml", ".sql") and not leftovers & set(
+            path.relative_to(PROJECTS).parts
+        ):
+            names.update(ENV_VAR.findall(path.read_text(encoding="utf-8")))
+    return names
+
+
+def test_the_fixture_projects_read_postgres_settings_and_a_target_schema():
+    assert {
+        "POSTGRES_HOST",
+        "POSTGRES_PORT",
+        "POSTGRES_DB",
+        "POSTGRES_USER",
+        "POSTGRES_PASSWORD",
+        "DBT_TARGET_SCHEMA",
+    } <= _variables_the_fixture_projects_read()
+
+
+def test_the_build_environment_drops_every_variable_a_fixture_project_reads(
+    monkeypatch,
+):
+    names = _variables_the_fixture_projects_read()
+    for name in names:
+        monkeypatch.setenv(name, "other")
+    env = build_dbt_fixtures._environment()
+    assert sorted(name for name in names if name in env) == []
+
+
+def test_the_build_environment_drops_the_callers_postgres_database(monkeypatch):
+    monkeypatch.setenv("POSTGRES_DB", "other")
+    monkeypatch.setenv("POSTGRES_SSLMODE", "require")
+    env = build_dbt_fixtures._environment()
+    assert "POSTGRES_DB" not in env
+    assert "POSTGRES_SSLMODE" not in env
 
 
 def test_main_builds_all_five_projects_by_default(tmp_path, monkeypatch):

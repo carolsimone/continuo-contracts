@@ -181,6 +181,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `fingerprints.yaml`: `config.contract.enforced` of a seed and a snapshot moves from `content`
   (through `other_config`) to an explicit `both` entry, because the contract carries it.
 
+### Fixed
+
+- `scripts/build_dbt_fixtures.py` drops every `POSTGRES_` variable of the caller's environment, as
+  it drops every `DBT_` one, so a `POSTGRES_DB` set on the machine no longer changes the database
+  names in a rebuilt fixture manifest.
+
 ## [0.2.0] - 2026-11-15
 
 **TL;DR**
