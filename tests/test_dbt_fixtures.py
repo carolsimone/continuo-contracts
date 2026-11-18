@@ -1,4 +1,10 @@
-"""The dbt fixture manifests were built by the pinned dbt and a rebuild writes the same bytes."""
+"""The dbt fixture manifests were built by the pinned dbt and a rebuild writes the same bytes.
+
+The tests marked `dbt` rebuild the manifests through `uvx`, which needs the network, so the
+default run deselects them (`addopts` holds `-m 'not dbt'`). Run them by hand with
+`uv run pytest -m dbt tests/test_dbt_fixtures.py`; a `-m` on the command line replaces the one
+in `addopts`.
+"""
 
 import gzip
 import importlib.util

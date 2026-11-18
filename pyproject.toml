@@ -92,13 +92,13 @@ warn_unused_ignores = true
 check_untyped_defs = true
 
 [tool.pytest.ini_options]
-addopts = "--import-mode=importlib --strict-markers"
+addopts = "--import-mode=importlib --strict-markers -m 'not dbt'"
 testpaths = ["tests"]
 # The test helpers that sit beside the tests, such as `dbt_fixtures`, import by name.
 pythonpath = ["tests"]
 filterwarnings = ["error"]
 markers = [
-    "dbt: rebuilds the dbt fixture manifests with `uvx` and the pinned dbt; CI does not run it, so run it by hand",
+    "dbt: rebuilds the dbt fixture manifests with `uvx` and the pinned dbt; addopts deselects it, so run it by hand with `pytest -m dbt`, which replaces the default `-m` expression",
 ]
 
 [tool.importlinter]
