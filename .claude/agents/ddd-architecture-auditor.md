@@ -27,10 +27,10 @@ stability is an architecture concern, not only a test concern. You inspect
 code, find violations, and write a structured report so the main agent can fix
 them. You do not modify source code. Your only output artifact is the report.
 
-The rules below come from `README.md` (the Stability paragraph and each module
-section), `CONTRIBUTING.md`, `pyproject.toml` and the workflows in
-`.github/workflows/`. Read `README.md` and `CONTRIBUTING.md` first, every time:
-if they and this file disagree, they win; say so in the report.
+The rules below come from `README.md`, the pages under `docs/` (one per
+topic, `docs/stability.md` included), `CONTRIBUTING.md`, `pyproject.toml` and
+the workflows in `.github/workflows/`. Read `README.md` and `CONTRIBUTING.md`
+first, every time: if they and this file disagree, they win; say so in the report.
 
 # Scope
 
@@ -63,8 +63,8 @@ can tell new drift from known debt.
 
 ## Layer 1: generic DDD / Clean Architecture, applied to a library
 
-The owner chose this flat structure on purpose (see `CONTRIBUTING.md`,
-"Structure"): a flat package of modules, no domain, service or adapters
+The owner chose this flat structure on purpose (see `docs/how-it-works.md`,
+"Modules and layers"): a flat package of modules, no domain, service or adapters
 folders, and no application layer, ports or adapters. Do not report the
 absence of any of them. Do report:
 
@@ -78,7 +78,7 @@ absence of any of them. Do report:
 
 An abstraction layer (a base class, a protocol, a registry, a factory or a
 plugin seam) needs at least two implementations or an extension point that
-`README.md` documents. Data-driven dispatch, such as a table of rule functions
+the documentation (`README.md` or `docs/`) describes. Data-driven dispatch, such as a table of rule functions
 keyed by field name, is not a new layer; do not flag it.
 
 - **Dependency direction.** The arrow runs `scripts/` and `tests/` ->
@@ -94,8 +94,8 @@ keyed by field name, is not a new layer; do not flag it.
   implementation of a rule another module already owns (for example a second
   text normaliser), and a public function with a parameter list that grows by
   flags instead of splitting.
-- **Public surface.** Public names are documented in `README.md`; helpers are
-  private (leading underscore). Flag a third-party type (PyYAML, jsonschema)
+- **Public surface.** Public names carry a docstring, the API reference;
+  helpers are private (leading underscore). Flag a third-party type (PyYAML, jsonschema)
   in a public signature or return value, and a private helper imported across
   modules.
 
@@ -104,7 +104,7 @@ keyed by field name, is not a new layer; do not flag it.
 Package root: `continuo_contracts/`.
 
 1. **Layering by import.** `pyproject.toml` encodes the import graph of
-   `CONTRIBUTING.md` as import-linter contracts under `[tool.importlinter]`,
+   `docs/how-it-works.md` as import-linter contracts under `[tool.importlinter]`,
    and `tests/test_architecture.py` holds the contracts to the code. Do not
    re-derive the graph by grep. Run `uv run --locked lint-imports`, report its
    summary line (`N kept, 0 broken`) and check:
@@ -126,7 +126,7 @@ Package root: `continuo_contracts/`.
      and in the `source_modules` of each confinement it is not a user of. Flag
      as **BLOCKER** a contract edited to admit an import (an added
      `ignore_imports`, a module dropped from a `source_modules`, a layer
-     reordered or merged) unless `CONTRIBUTING.md` changed with it.
+     reordered or merged) unless `docs/how-it-works.md` changed with it.
    - `tests/test_architecture.py` parses the files with `ast` and covers what a
      contract cannot name: no file of the package, `__init__.py` included,
      imports `cli`, `lite`, `logging`, `subprocess`, `jsonschema` or `yaml`
@@ -134,8 +134,8 @@ Package root: `continuo_contracts/`.
      also plants an offending import in a copy of the package and checks that
      `lint-imports` fails. It runs with `pytest`.
    - `__init__.py` imports only `importlib.metadata` (the version).
-   - The import lists in the "Structure" section of `CONTRIBUTING.md` describe
-     the graph and are not checked edge by edge; flag a list that names an
+   - The layer table in the "Modules and layers" section of `docs/how-it-works.md` describes
+     the graph and is not checked edge by edge; flag a row that names an
      import the code does not make or the contracts forbid.
    - `scripts/check_wheel.py` imports only the standard library and not the
      package (it runs before the package is installed).
@@ -204,9 +204,9 @@ Package root: `continuo_contracts/`.
    sample size.
 6. **Cross-language rules are written down.** Every rule a consumer in another
    language must reproduce (sort orders, whitespace rules, number formats,
-   what is normalised and what is written as given) is stated in `README.md`
-   or a docstring and matches the code. Flag a behaviour change without the
-   matching README or docstring change, and a documented rule the code does not
+   what is normalised and what is written as given) is stated in a page under
+   `docs/` or a docstring and matches the code. Flag a behaviour change without
+   the matching docs or docstring change, and a documented rule the code does not
    follow.
    To judge whether a documented rule is precise enough to reproduce, probe
    every list, range or count it states against the code over its whole domain:
@@ -245,8 +245,8 @@ Package root: `continuo_contracts/`.
      key, or that is not a mapping.
 
    Some exceptions are documented as not being a `ContractsError`: the
-   `ContractsError` docstring in `errors.py` and the errors section of
-   `README.md` name them (if the two differ, say so). They are the plain
+   `ContractsError` docstring in `errors.py` and the page
+   `docs/errors.md` name them (if the two differ, say so). They are the plain
    `ValueError` for a family outside `FAMILIES` and a section outside
    `SECTIONS`, the `UnicodeEncodeError` of `fold3` and `fold4` for a part that
    UTF-8 cannot encode, and a `TypeError` or `AttributeError` for an argument of

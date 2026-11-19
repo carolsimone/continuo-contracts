@@ -5,6 +5,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- The documentation is a short README and one page per topic in `docs/`: glossary, walkthrough, dbt
+  mapping, lite check, Python contracts, validation, hashing (three pages), vectors, errors,
+  stability. Its examples run as tests; docstrings are the API reference, so name lists are gone.
+
 ## [0.3.1] - 2026-11-19
 
 **TL;DR**
