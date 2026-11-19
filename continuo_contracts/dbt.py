@@ -1033,11 +1033,15 @@ def _relationship_target(
     It is the entry of the test's `depends_on.nodes` other than its `attached_node`. With none,
     the test points to the tested node itself when it refs it a second time, besides its `model`
     kwarg, and otherwise to nothing the manifest holds (a literal relation, a var or a macro, or
-    a model that is disabled or absent), which gives `None`.
+    a model that is disabled or absent), which gives `None`. A test with no `attached_node`,
+    which dbt 1.12 writes for every generic test on a column, names no tested node, so no entry
+    of its `depends_on.nodes` is known to be the target, and it gives `None` whatever they are.
     """
+    attached = test.get("attached_node")
+    if not attached:
+        return None
     depends_on = _mapping(label, "depends_on", test.get("depends_on"))
     nodes = _strings(label, "depends_on.nodes", depends_on.get("nodes"))
-    attached = test.get("attached_node")
     others = list(dict.fromkeys(entry for entry in nodes if entry != attached))
     to_itself = _refs_to_itself(run, test, label) > 1
     if not others:
@@ -1142,8 +1146,8 @@ def _add_test(
     `unique` and `accepted_values`, as `_built_in` tells them, give library rules, the last with
     its `values` as `validValues` beside its other kwargs, a strict `relationships` test on a
     declared column gives a relationship to the target the manifest holds, and any other generic
-    test, a `relationships` test that is not strict or whose target the manifest does not hold
-    among them, gives a `custom` rule with the generic test and its arguments as its
+    test, a `relationships` test that is not strict, has no `attached_node` or whose target the
+    manifest does not hold among them, gives a `custom` rule with the generic test and its arguments as its
     `implementation`.
     """
     label = f"{run.label}: test {_label(test)}"

@@ -11,6 +11,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   kept node whose service is not the declared service (`--service`, which must be the service the
   team deploys under), as the release rejects such a manifest as `invalid_artifact`, so a tagged
   model of an installed package no longer passes the lite check.
+- `dbt.generate` now writes a `relationships` test that has no `attached_node` as a `custom` rule
+  that keeps its `to` and `field`, whatever its `depends_on.nodes` holds, instead of a false
+  relationship to the tested node itself or a `DbtNodeError` for two or more entries.
 
 ## [0.3.0] - 2026-11-19
 

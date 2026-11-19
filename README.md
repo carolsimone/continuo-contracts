@@ -622,7 +622,11 @@ visible in the test node and is not detected.
   of its `refs` have the node's `name`, and, when they have one, its package (the first entry of
   its `fqn`) and its `version`. Otherwise the target is not in the manifest (a literal relation,
   a var or a macro, or a ref to a model that is disabled or absent), and the test is a `custom`
-  rule like one that is not strict. A `relationships` test that is not strict is a `custom` rule
+  rule like one that is not strict. A test with no `attached_node` (dbt 1.12 writes one for every
+  generic test on a column, so such a test comes from an older dbt or a manifest written by hand)
+  names no tested node, so no entry of its `depends_on.nodes` is known to be the target: it is a
+  `custom` rule like one that is not strict, whatever those entries are, and never a relationship
+  to the node itself. A `relationships` test that is not strict is a `custom` rule
   like any other generic test, below, with its severity and its `where`, and adds no
   relationship.
 - Any other generic test is `{id, name: <test name>, type: custom, engine: dbt, implementation:
@@ -695,8 +699,8 @@ canonical JSON (`canonical.canonical_json`) of an object with three keys:
 - `node`: the fields of the node that `read_tree("node")` names;
 - `tests`: for each test, the fields that `read_tree("test", test=test)` names, the list sorted by
   the canonical JSON of each item, so the order of the tests does not count;
-- `targets`: for each manifest node or source that a strict dbt `relationships` test on a
-  declared column points to, other than the tested node, its manifest key, such as
+- `targets`: for each manifest node or source that a strict dbt `relationships` test with an
+  `attached_node` on a declared column points to, other than the tested node, its manifest key, such as
   `model.shop.customer.v2`, mapped to the fields that `read_tree("nodes")` or
   `read_tree("sources")` names. A mapping with no such target is `{}`.
 
@@ -709,7 +713,7 @@ JSON sorts object keys. A `0` step over a list keeps a list of its first item al
 list, so the first resolved macro is `"macros": ["macro.dbt.test_not_null"]`. A value that is not
 a mapping where the tree names keys, or neither a mapping nor a list at a `*`, is kept whole. Left out are the `unique_id` of the node and of each
 test, every field no tree names, and the target of a `relationships` test that is not strict,
-is not dbt's, or is on a column the node does not declare.
+is not dbt's, has no `attached_node`, or is on a column the node does not declare.
 
 ```python
 generated = generate(
