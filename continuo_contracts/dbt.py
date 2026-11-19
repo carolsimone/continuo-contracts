@@ -216,9 +216,9 @@ _TEST_SETTINGS: Final = (
 )
 _SEVERITIES: Final = MappingProxyType({"error": None, "warn": "warning"})
 _JINJA_MARKS: Final = ("{{", "{%")
-# The pairs of marks that quote an identifier in SQL, each with the doubled closing mark that
-# stands for one inside it: dbt writes a quoted column's name in a test and in an inferred
-# `primary_key` with the marks of its adapter.
+# The pairs of marks that quote an identifier in SQL, opening and closing: dbt writes a quoted
+# column's name in a test and in an inferred `primary_key` inside the marks of its adapter, and
+# escapes no mark inside the name.
 _QUOTES: Final = (('"', '"'), ("`", "`"), ("[", "]"))
 
 # The columns dbt adds to a snapshot's table, by their default names, and the one it adds when
@@ -864,16 +864,17 @@ def _declared(
     """Return the declared column that `name` names, or `None`.
 
     `name` names the column of that name. Failing that, a name in one pair of SQL quotes, `"..."`,
-    `` `...` `` or `[...]`, names the column whose name is inside them, with a doubled closing
-    mark read as one, as dbt writes the name of a column it quotes. No adapter is read, and a
-    declared name that holds quotes is found by the first lookup.
+    `` `...` `` or `[...]`, names the column whose name is what the outer pair holds, as it is:
+    dbt writes the name of a column it quotes inside its adapter's marks and escapes no mark
+    inside it, so no doubled mark is read as one. No adapter is read, and a declared name that
+    holds quotes is found by the first lookup.
     """
     column = columns.get(name)
     if column is not None or len(name) < 2:
         return column
     for opening, closing in _QUOTES:
         if name.startswith(opening) and name.endswith(closing):
-            return columns.get(name[1:-1].replace(closing * 2, closing))
+            return columns.get(name[1:-1])
     return None
 
 
@@ -1033,11 +1034,16 @@ def _relationship_target(
     It is the entry of the test's `depends_on.nodes` other than its `attached_node`. With none,
     the test points to the tested node itself when it refs it a second time, besides its `model`
     kwarg, and otherwise to nothing the manifest holds (a literal relation, a var or a macro, or
-    a model that is disabled or absent), which gives `None`.
+    a model that is disabled or absent), which gives `None`. dbt 1.12 sets `attached_node` on
+    every generic test on a column, so a test without it comes from a manifest written by hand
+    or an older dbt; it names no tested node, so no entry of its `depends_on.nodes` is known to
+    be the target, and it gives `None` whatever they are.
     """
+    attached = test.get("attached_node")
+    if not attached:
+        return None
     depends_on = _mapping(label, "depends_on", test.get("depends_on"))
     nodes = _strings(label, "depends_on.nodes", depends_on.get("nodes"))
-    attached = test.get("attached_node")
     others = list(dict.fromkeys(entry for entry in nodes if entry != attached))
     to_itself = _refs_to_itself(run, test, label) > 1
     if not others:
@@ -1142,8 +1148,8 @@ def _add_test(
     `unique` and `accepted_values`, as `_built_in` tells them, give library rules, the last with
     its `values` as `validValues` beside its other kwargs, a strict `relationships` test on a
     declared column gives a relationship to the target the manifest holds, and any other generic
-    test, a `relationships` test that is not strict or whose target the manifest does not hold
-    among them, gives a `custom` rule with the generic test and its arguments as its
+    test, a `relationships` test that is not strict, has no `attached_node` or whose target the
+    manifest does not hold among them, gives a `custom` rule with the generic test and its arguments as its
     `implementation`.
     """
     label = f"{run.label}: test {_label(test)}"

@@ -529,6 +529,109 @@ def test_a_relationships_test_to_jinja_with_no_target_is_a_flagged_custom_rule()
     assert rule["severity"] == "warning"
 
 
+# A `relationships` test with no `attached_node`, which dbt 1.12 never writes, names no tested
+# node, so which entry of its `depends_on.nodes` is the target is not known.
+
+_CUSTOMER = "model.cases.customer.v2"
+_GOVERNED = "model.cases.governed"
+
+
+def _unattached(nodes, *refs):
+    """Return a change that takes the `attached_node` of a test away and sets its
+    `depends_on.nodes` to `nodes`, with `refs` as its refs when there are any."""
+
+    def change(test):
+        test["attached_node"] = None
+        test["depends_on"]["nodes"] = list(nodes)
+        if refs:
+            test["refs"] = list(refs)
+
+    return change
+
+
+def _declaring_customer_id(manifest, nodes):
+    """Declare the column `customer_id` on each of `nodes` that does not declare it."""
+    for node_id in nodes:
+        manifest["nodes"][node_id]["columns"].setdefault(
+            "customer_id", {"name": "customer_id"}
+        )
+
+
+@pytest.mark.parametrize(
+    ("nodes", "refs"),
+    [
+        ([GENERIC], ()),
+        ([GENERIC], (_ref("generic_tests"), _ref("generic_tests"))),
+        ([GENERIC, _CUSTOMER], ()),
+        ([_CUSTOMER, GENERIC], ()),
+        ([GENERIC, _CUSTOMER, _GOVERNED], ()),
+    ],
+    ids=[
+        "one entry",
+        "one entry with refs to itself",
+        "two entries",
+        "two entries the other way",
+        "three entries",
+    ],
+)
+def test_a_relationships_test_with_no_attached_node_is_a_custom_rule(nodes, refs):
+    manifest = _edited("cases", _TO_CUSTOMER, _unattached(nodes, *refs))
+    _declaring_customer_id(manifest, nodes)
+    # The test counts for each node it depends on, the tested one and the others alike.
+    for node_id in nodes:
+        generated = _run(manifest, node_id)
+        props = _props(generated.document)
+        relationships = {
+            name: column["relationships"]
+            for name, column in props.items()
+            if "relationships" in column
+        }
+        # The tested node keeps the relationship of its other test, which has an attached_node.
+        expected = (
+            {"event_id": [{"to": "raw.events.id"}]} if node_id == GENERIC else {}
+        )
+        assert relationships == expected
+        assert props["customer_id"]["quality"] == [
+            _unresolved_rule("ref('customer')")
+        ]
+        assert schema_issues(generated.document) == []
+
+
+def test_a_strict_relationships_test_to_jinja_with_no_attached_node_is_a_flagged_custom_rule():
+    def to_a_var(test):
+        _unattached([GENERIC])(test)
+        test["test_metadata"]["kwargs"]["to"] = "{{ var('x') }}"
+
+    manifest = _edited("cases", _TO_CUSTOMER, to_a_var)
+    config = _test(manifest, _TO_CUSTOMER)["config"]
+    # Strict: severity error, no where and dbt's default thresholds.
+    assert (config["severity"].lower(), config.get("where")) == ("error", None)
+    generated = _run(manifest, GENERIC)
+    assert "jinja_in_test_arguments" in generated.flags
+    assert _props(generated.document)["customer_id"] == {
+        "name": "customer_id",
+        "quality": [_unresolved_rule("{{ var('x') }}")],
+    }
+
+
+def test_a_loose_relationships_test_with_no_attached_node_keeps_its_settings_and_flag():
+    def loosened(test):
+        _unattached([GENERIC])(test)
+        test["config"].update(severity="warn", where="id > 0")
+        test["test_metadata"]["kwargs"]["to"] = "{{ ref('customer') }}"
+
+    manifest = _edited("cases", _TO_CUSTOMER, loosened)
+    generated = _run(manifest, GENERIC)
+    assert "jinja_in_test_arguments" in generated.flags
+    assert _props(generated.document)["customer_id"]["quality"] == [
+        {
+            **_unresolved_rule("{{ ref('customer') }}"),
+            "severity": "warning",
+            "customProperties": [_cp("where", "id > 0")],
+        }
+    ]
+
+
 def test_source_sha256_moves_with_the_refs_of_a_relationships_test():
     before = _generated("cases", GENERIC).source_sha256
     manifest = _edited(
@@ -1391,7 +1494,8 @@ def test_a_column_name_kwarg_that_is_not_a_string_raises_dbt_node_error():
 
 
 # With `quote: true`, dbt writes a test's `column_name` and an inferred `primary_key` as the quoted
-# identifier, while the declared column keeps its name.
+# identifier, while the declared column keeps its name. dbt wraps the name in its adapter's quote
+# marks and escapes no mark inside it, so `a"b` is written `"a"b"`.
 
 
 def _declaring(manifest, name):
@@ -1405,9 +1509,13 @@ def _declaring(manifest, name):
         ("id", '"id"'),
         ("id", "`id`"),
         ("id", "[id]"),
-        ('say "hi"', '"say ""hi"""'),
-        ("say `hi`", "`say ``hi```"),
-        ("a]b", "[a]]b]"),
+        ("Name", '"Name"'),
+        ('a"b', '"a"b"'),
+        ('say "hi"', '"say "hi""'),
+        ('a""b', '"a""b"'),
+        ("say `hi`", "`say `hi``"),
+        ("a]b", "[a]b]"),
+        ("a]]b", "[a]]b]"),
     ],
 )
 def test_a_quoted_test_column_lands_on_the_declared_column(declared, written):
@@ -1420,6 +1528,45 @@ def test_a_quoted_test_column_lands_on_the_declared_column(declared, written):
     assert column["required"] is True
     assert _not_null("generic_tests", "id") in column["quality"]
     assert "test_column_not_declared" not in generated.flags
+
+
+def test_a_quoted_name_is_never_unescaped():
+    # Undoing a doubled mark would send the `not_null` test on `"a""b"` to `a"b`.
+    manifest = _edited(
+        "cases", "not_null_generic_tests_id", _checks('"a""b"', '"a""b"')
+    )
+    _checks('"a"b"', '"a"b"')(_test(manifest, "unique_generic_tests_id"))
+    _declaring(manifest, 'a"b')
+    _declaring(manifest, 'a""b')
+    generated = _run(manifest, GENERIC)
+    props = _props(generated.document)
+    assert (props['a""b'].get("required"), props['a""b'].get("unique")) == (
+        True,
+        None,
+    )
+    assert (props['a"b'].get("required"), props['a"b'].get("unique")) == (
+        None,
+        True,
+    )
+    assert "test_column_not_declared" not in generated.flags
+
+
+@pytest.mark.parametrize(
+    ("declared", "written"),
+    [
+        ('say "hi"', '"say ""hi"""'),
+        ("say `hi`", "`say ``hi```"),
+        ("a]b", "[a]]b]"),
+    ],
+)
+def test_a_doubled_mark_inside_the_quotes_is_part_of_the_name(declared, written):
+    manifest = _edited(
+        "cases", "not_null_generic_tests_id", _checks(written, written)
+    )
+    _declaring(manifest, declared)
+    generated = _run(manifest, GENERIC)
+    assert "required" not in _props(generated.document)[declared]
+    assert "test_column_not_declared" in generated.flags
 
 
 def test_a_declared_column_named_with_quotes_takes_its_tests_as_written():

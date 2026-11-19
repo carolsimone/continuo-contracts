@@ -915,6 +915,44 @@ def test_the_service_that_the_manifest_names_wins_over_the_folder(
     assert json.loads(capsys.readouterr().out)["service"] == "finance"
 
 
+CASES = FIXTURES / "dbt" / "projects" / "cases"
+PKG_TAGGED = "model.cases_pkg.pkg_tagged"
+OTHER_SERVICE = (
+    "the node's service is cases-pkg, the declared service is cases: the release "
+    "rejects a manifest that holds a node of another service as invalid_artifact"
+)
+
+
+@pytest.mark.parametrize("flags", [(), ("--service", "cases")])
+def test_a_tagged_package_node_of_another_service_fails_the_check(
+    flags, tmp_path, capsys, caplog
+):
+    # The folder `cases` gives the service `cases` when `--service` is not given.
+    path = _write_json(tmp_path / "manifest.json", load_manifest("cases"))
+
+    status = _check(CASES, "--manifest", path, *flags, "--json")
+
+    assert status == 1
+    document = json.loads(capsys.readouterr().out)
+    assert _lines(document, PKG_TAGGED) == [OTHER_SERVICE]
+    assert f"{PKG_TAGGED}: {OTHER_SERVICE}" in _errors(caplog)
+    # Only the package's tagged node is of another service.
+    assert [
+        line["node_id"]
+        for line in document["lines"]
+        if "declared service" in line["message"]
+    ] == [PKG_TAGGED]
+
+
+def test_the_help_says_the_service_is_the_one_the_team_deploys_under(capsys):
+    with pytest.raises(SystemExit):
+        main(["dbt", "check", "--help"])
+
+    out = " ".join(capsys.readouterr().out.split())
+    assert "the service the team deploys the project under" in out
+    assert "compares the service of every node it keeps with it" in out
+
+
 ABSENT = object()
 
 
@@ -1080,7 +1118,8 @@ def test_the_seeds_are_read_from_the_project_folder(tmp_path, capsys):
     shutil.copytree(FINANCE / "seeds", project / "seeds")
     path = _write_json(tmp_path / "manifest.json", load_manifest("finance"))
 
-    _check(project, "--manifest", path, "--json")
+    # The folder is not named after the service, so the service is given.
+    _check(project, "--manifest", path, "--service", "finance", "--json")
 
     document = json.loads(capsys.readouterr().out)
     assert _lines(document, COSTS_SEED) != []

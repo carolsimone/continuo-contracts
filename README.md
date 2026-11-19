@@ -622,7 +622,11 @@ visible in the test node and is not detected.
   of its `refs` have the node's `name`, and, when they have one, its package (the first entry of
   its `fqn`) and its `version`. Otherwise the target is not in the manifest (a literal relation,
   a var or a macro, or a ref to a model that is disabled or absent), and the test is a `custom`
-  rule like one that is not strict. A `relationships` test that is not strict is a `custom` rule
+  rule like one that is not strict. A test with no `attached_node` (dbt 1.12 writes one for every
+  generic test on a column, so such a test comes from an older dbt or a manifest written by hand)
+  names no tested node, so no entry of its `depends_on.nodes` is known to be the target: it is a
+  `custom` rule like one that is not strict, whatever those entries are, and never a relationship
+  to the node itself. A `relationships` test that is not strict is a `custom` rule
   like any other generic test, below, with its severity and its `where`, and adds no
   relationship.
 - Any other generic test is `{id, name: <test name>, type: custom, engine: dbt, implementation:
@@ -639,10 +643,15 @@ visible in the test node and is not detected.
   `column_name`, and the test's own `column_name` otherwise: dbt writes a test declared on the
   model with a null `column_name` and the column or the SQL expression it checks in the kwarg, and
   a column test whose arguments name another column keeps the column it is declared under in its
-  own `column_name`. A name in one pair of SQL quotes, `"..."`, `` `...` `` or `[...]` with a
-  doubled closing mark read as one, as dbt writes a column with `quote: true` in a test and in a
-  model's inferred `primary_key`, names the declared column inside the quotes when no declared
-  column has the quoted name itself; no adapter is read. The contract carries the declared name.
+  own `column_name`. A name in one pair of SQL quotes, `"..."`, `` `...` `` or `[...]`, as dbt
+  writes a column with `quote: true` in a test and in a model's inferred `primary_key`, names the
+  declared column whose name is what the outer pair holds, as it is, when no declared column has
+  the quoted name itself; no adapter is read. dbt wraps the name in its adapter's marks and
+  escapes no mark inside it (dbt-postgres writes `"a"b"` for the column `a"b`), so only the outer
+  pair is taken off and a doubled mark inside stays as written. The double quotes are checked
+  against dbt-postgres; the backticks and the brackets follow the same rule but are not checked
+  against an adapter that writes them. A name that still names no declared column is a column
+  the node does not declare, below. The contract carries the declared name.
 - A test on a column the node does not declare, or on an expression, goes on the schema object, as
   the same rule with that column or expression as `column_name` in its arguments (inside
   `implementation` for a `custom` rule), and sets no `required` or `unique`; a `relationships`
@@ -695,8 +704,8 @@ canonical JSON (`canonical.canonical_json`) of an object with three keys:
 - `node`: the fields of the node that `read_tree("node")` names;
 - `tests`: for each test, the fields that `read_tree("test", test=test)` names, the list sorted by
   the canonical JSON of each item, so the order of the tests does not count;
-- `targets`: for each manifest node or source that a strict dbt `relationships` test on a
-  declared column points to, other than the tested node, its manifest key, such as
+- `targets`: for each manifest node or source that a strict dbt `relationships` test with an
+  `attached_node` on a declared column points to, other than the tested node, its manifest key, such as
   `model.shop.customer.v2`, mapped to the fields that `read_tree("nodes")` or
   `read_tree("sources")` names. A mapping with no such target is `{}`.
 
@@ -709,7 +718,7 @@ JSON sorts object keys. A `0` step over a list keeps a list of its first item al
 list, so the first resolved macro is `"macros": ["macro.dbt.test_not_null"]`. A value that is not
 a mapping where the tree names keys, or neither a mapping nor a list at a `*`, is kept whole. Left out are the `unique_id` of the node and of each
 test, every field no tree names, and the target of a `relationships` test that is not strict,
-is not dbt's, or is on a column the node does not declare.
+is not dbt's, has no `attached_node`, or is on a column the node does not declare.
 
 ```python
 generated = generate(
@@ -1284,8 +1293,9 @@ A producer's CI can check what continuo will make of a dbt service before the re
 does with each model, seed and snapshot what the release does: it leaves out the nodes
 `dbt.skip_reason` skips, writes the contract of each node it keeps with `dbt.generate`, checks it
 with `validate.validate_dbt_contract`, and hashes its stored form with `contract.normalise_dbt` and
-`contract.contract_hash`. It also compares the columns each seed declares with the header of its
-CSV file. It reads no file, runs no program, logs nothing and prints nothing: the caller reads the
+`contract.contract_hash`. It also compares the service of each node it keeps with the declared
+service, as the release does, and the columns each seed declares with the header of its CSV file.
+It reads no file, runs no program, logs nothing and prints nothing: the caller reads the
 manifest and the CSV headers, and prints the report. [cli](#cli) is that caller for `dbt check`.
 
 The check is lite because the release does more than it, so a report with no error does not
@@ -1326,17 +1336,27 @@ order:
    continuo skips it`, `local stub, continuo skips it` or `from an installed package and has no
    tag, continuo skips it`. A skipped node is never an error, and a skipped seed gets no header
    check. A node whose gate cannot read a field (`DbtNodeError`) gives one `error` line instead.
-2. A kept node with no tag, a dormant node, gives the `info` line `no tag: a dormant node, it runs
+2. When `declared_service` is not empty, a kept node whose service (`dbt.node_service`) is another
+   gives the `error` line `the node's service is <service>, the declared service is <declared>:
+   the release rejects a manifest that holds a node of another service as invalid_artifact`, as
+   its first line and whatever its contract: the release compares the service of every node it
+   keeps with the service its request declares. A tagged model of an installed package is such a
+   node. A kept node with no service (an `fqn` that is missing or empty, or whose first entry is
+   empty) gives `the node has no service, the declared service is <declared>: the release rejects
+   the manifest as invalid_artifact` instead. A skipped node is not compared, and with an empty `declared_service` no node is, as the
+   release compares none when its request declares no service. The line changes nothing else: a
+   valid contract of such a node still has its hash in `contracts`.
+3. A kept node with no tag, a dormant node, gives the `info` line `no tag: a dormant node, it runs
    only by hand`.
-3. `dbt.generate` writes the contract. A field it cannot read (`DbtNodeError`) gives one `error`
+4. `dbt.generate` writes the contract. A field it cannot read (`DbtNodeError`) gives one `error`
    line, and the node has no more lines. The message of such a line does not repeat the node id.
-4. Each issue of `validate.validate_dbt_contract` gives an `error` line, `<path>: <message>`.
-5. A contract with no issue has its stored form hashed, and `contracts` holds the hash. A
+5. Each issue of `validate.validate_dbt_contract` gives an `error` line, `<path>: <message>`.
+6. A contract with no issue has its stored form hashed, and `contracts` holds the hash. A
    contract with an issue has no hash, since only a valid contract gets one, so a hash in
    `contracts` never suggests that the release creates a contract it would reject. A declared read
    that is not `<schema>.<table>` gives an `error` line and no hash, because the stored form cannot
    be written.
-6. For a kept seed of the project, `read_header(node)` gives the names in the first row of its CSV
+7. For a kept seed of the project, `read_header(node)` gives the names in the first row of its CSV
    file, or `None` when the file cannot be read, which gives one `error` line. Otherwise
    `dbt.seed_header_issues` compares them with the seed's declared columns, the names of the
    properties of its contract in order, and each difference gives an `error` line. A kept seed of
@@ -1344,7 +1364,7 @@ order:
    has its CSV file in that package and not in the project: it gets the `info` line `a seed of an
    installed package: its CSV header is not checked`, and `read_header` is not called for it. A
    seed with no `package_name`, or a manifest that names no project, counts as the project's.
-7. When the contracts of two or more kept nodes have one id, such as models whose names differ
+8. When the contracts of two or more kept nodes have one id, such as models whose names differ
    only in case, or a project's model and a tagged model of an installed package with one name and
    schema and other aliases, each of those nodes gets the `error` line `contract id <id> is also
    the id of <the other node ids, in id order>: the release rejects it as duplicate_table`, and
@@ -1384,8 +1404,10 @@ because its contract is valid.
   contract has, by contract id, in the order of the node ids) and the property `ok`, `True` when
   no line is an `error`.
 - `check_manifest`: `check_manifest(manifest, *, declared_service, read_header) -> LiteReport`
-  checks the manifest `json.load` returns. `declared_service` is the service of the project when
-  the manifest names none, as in `dbt.project_service`. `read_header` takes a seed's manifest node
+  checks the manifest `json.load` returns. `declared_service` is the service the team deploys the
+  project under, which the check compares the service of every kept node with (none when it is
+  `""`), and the service of the project when the manifest names none, as in
+  `dbt.project_service`. `read_header` takes a seed's manifest node
   and returns the column names of its CSV header, or `None` when the file cannot be read; it is
   called once for each seed of the project that gets a contract, and an exception it raises is not
   caught. It raises `DbtNodeError` for a manifest `metadata`, `nodes` or test field in a shape the
@@ -1474,9 +1496,13 @@ producer's lite check of a dbt project, described below.
   the library cannot read is a usage error too, and a field of a node gives that node an error
   line. `PROJECT_DIR` must still be a folder, because the CSV files of the seeds are read from it.
 
-  `--service` is the service of the project that the gates compare each node with when the
-  manifest names none, as in `dbt.project_service`; without it the service is the name of
-  `PROJECT_DIR` with `_` written `-`, and `.` names the current folder. The header of a seed is the
+  `--service` must be the service the team deploys the project under, because the check compares
+  the service of every node it keeps with it, as the release does, and a node of another service,
+  such as a tagged model of an installed package, is an error line. It is also the service of the
+  project that the gates compare each node with when the manifest names none, as in
+  `dbt.project_service`. Without it the service is the name of `PROJECT_DIR` with `_` written `-`,
+  and `.` names the current folder, so pass `--service` when the folder is not named after the
+  service, or every kept node of the project is an error line. The header of a seed is the
   first row of `PROJECT_DIR/<original_file_path>` of its manifest node, read as UTF-8 with an
   optional byte order mark and with the delimiter of the seed's `config.delimiter`, a comma when it
   has none, so a BOM or CRLF line endings change nothing. The command reads that file only when it

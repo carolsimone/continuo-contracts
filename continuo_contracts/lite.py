@@ -4,8 +4,9 @@
 and snapshot what continuo's release does with it: it leaves out the nodes `dbt.skip_reason`
 skips, writes the contract of each node it keeps (`dbt.generate`), checks it
 (`validate.validate_dbt_contract`) and hashes its stored form (`contract.normalise_dbt` and
-`contract.contract_hash`). It also compares the columns a seed declares with the header of its CSV
-file, which `read_header` gives. The result is a `LiteReport`.
+`contract.contract_hash`). It also compares the service of each node it keeps with the declared
+service, the service the team deploys under, as the release does, and the columns a seed declares
+with the header of its CSV file, which `read_header` gives. The result is a `LiteReport`.
 
 The check reads no file, runs no program, logs nothing and prints nothing: the caller reads the
 manifest and the CSV headers and prints the report. It is a lite check because the release does
@@ -76,6 +77,18 @@ _SKIPS: Final = MappingProxyType(
     }
 )
 _DORMANT: Final = "no tag: a dormant node, it runs only by hand"
+# What the check says about a kept node whose service is not the declared service, which the
+# release rejects whatever the node's contract.
+_OTHER_SERVICE: Final = (
+    "the node's service is {}, the declared service is {}: the release rejects a manifest "
+    "that holds a node of another service as invalid_artifact"
+)
+# What the check says instead about a kept node with no service (no `fqn`, an empty one, or one
+# whose first name is empty), which the release cannot read or finds of another service.
+_NO_SERVICE: Final = (
+    "the node has no service, the declared service is {}: the release rejects the manifest "
+    "as invalid_artifact"
+)
 _ALL_SKIPPED: Final = (
     "every node of the service is skipped: the release rejects it as invalid_artifact "
     "(manifest contains no model/seed nodes)"
@@ -96,7 +109,8 @@ class Line:
     """One thing the lite check says about a node.
 
     `level` is `info` for a node the check leaves out, a dormant node or a seed of an installed
-    package, and `error` for a problem that fails the check. `node_id` is the node's key in the manifest, such as
+    package, and `error` for a problem that fails the check. `node_id` is the node's key in the
+    manifest, such as
     `model.shop.orders`, or the empty string for a line about the whole service. `message` does
     not repeat the node.
     """
@@ -172,6 +186,7 @@ def _check_kept_node(
     node: Mapping[str, Any],
     tests: Sequence[Mapping[str, Any]],
     manifest: Mapping[str, Any],
+    declared_service: str,
     read_header: Callable[[Mapping[str, Any]], Sequence[str] | None],
 ) -> tuple[list[Line], str | None, str | None]:
     """Return the lines of a node that continuo keeps, the id of its contract and its hash.
@@ -180,6 +195,15 @@ def _check_kept_node(
     is generated, has no validation issue and can be stored.
     """
     lines: list[Line] = []
+    # The gates have read the node's `fqn`, so its service can be read.
+    service = dbt.node_service(node)
+    if declared_service and service != declared_service:
+        message = (
+            _OTHER_SERVICE.format(service, declared_service)
+            if service
+            else _NO_SERVICE.format(declared_service)
+        )
+        lines.append(Line(_ERROR, node_id, message))
     try:
         if not dbt.schedule(node):
             lines.append(Line(_INFO, node_id, _DORMANT))
@@ -214,25 +238,36 @@ def check_manifest(
     """Return the lite check's report of the dbt `manifest`.
 
     `manifest` is a `manifest.json` as `json.load` returns it. `declared_service` is the service
-    of the project when the manifest names none, as in `dbt.project_service`. `read_header` gives
-    the column names in the first row of a seed's CSV file, from the seed's manifest node, and
-    `None` when the file cannot be read; it is called once for each seed of the project that gets
-    a contract, and an exception it raises is not caught.
+    the team deploys the project under: the release compares the service of every node it keeps
+    with it, and it is the service of the project when the manifest names none, as in
+    `dbt.project_service`. The empty string declares no service, and then no node's service is
+    compared with it, as the release compares none when its request declares no service.
+    `read_header` gives the column names in the first row of a seed's CSV file, from the seed's
+    manifest node, and `None` when the file cannot be read; it is called once for each seed of
+    the project that gets a contract, and an exception it raises is not caught.
 
     The models, seeds and snapshots of the manifest are taken by node id, in code point order,
     whatever the order of the manifest. For each node, in this order:
 
     1. A node that `dbt.skip_reason` leaves out gives one `info` line that says why, and nothing
        else. A node whose gate cannot read a field (`DbtNodeError`) gives one `error` line instead.
-    2. A kept node with no tag, a dormant node, gives an `info` line.
-    3. `dbt.generate` writes the contract. A field it cannot read (`DbtNodeError`) gives one
+    2. When `declared_service` is not empty, a kept node whose service, `dbt.node_service`, is
+       another gives an `error` line, `the node's service is <service>, the declared service is
+       <declared>: the release rejects a manifest that holds a node of another service as
+       invalid_artifact`, as the first line of the node, whatever its contract. A kept node with
+       no service, whose `fqn` is missing or empty or starts with an empty name, gives `the node
+       has no service, the declared service is <declared>: the release rejects the manifest as
+       invalid_artifact` there instead. A skipped node is not compared, since the release never
+       reads it.
+    3. A kept node with no tag, a dormant node, gives an `info` line.
+    4. `dbt.generate` writes the contract. A field it cannot read (`DbtNodeError`) gives one
        `error` line, and the node has no more lines.
-    4. Each issue of `validate.validate_dbt_contract` gives an `error` line, `<path>: <message>`.
-    5. A contract with no issue has its stored form, which `contract.normalise_dbt` gives with no
+    5. Each issue of `validate.validate_dbt_contract` gives an `error` line, `<path>: <message>`.
+    6. A contract with no issue has its stored form, which `contract.normalise_dbt` gives with no
        reads from compiled SQL, hashed with `contract.contract_hash`, and `contracts` maps the
        contract's id to the hash. A contract with an issue has no hash, as only a valid contract
        gets one. A declared read that is not a table gives an `error` line and no hash.
-    6. For a kept seed of the project, `read_header` gives its header. `None` gives an `error`
+    7. For a kept seed of the project, `read_header` gives its header. `None` gives an `error`
        line. Otherwise each column the header and the declared columns disagree on gives an
        `error` line, as `dbt.seed_header_issues` words it. The declared columns are the names of
        the contract's properties, in order. A kept seed of an installed package, one whose
@@ -240,7 +275,7 @@ def check_manifest(
        project: it gets an `info` line that says its header is not checked, and `read_header` is
        not called for it. A seed with no `package_name`, or a manifest that names no project,
        counts as the project's.
-    7. A generated contract whose id is the id of another node's generated contract, such as two
+    8. A generated contract whose id is the id of another node's generated contract, such as two
        names that differ only in case, or a project's model and a tagged package model of one
        name and schema with other aliases, gives an `error` line on each of those nodes,
        `contract id <id> is also the id of <the other node ids, in id order>: the release rejects
@@ -276,7 +311,12 @@ def check_manifest(
             continue
         unskipped += 1
         found[node_id], contract_id, digest = _check_kept_node(
-            node_id, node, tests.get(node_id, []), manifest, read_header
+            node_id,
+            node,
+            tests.get(node_id, []),
+            manifest,
+            declared_service,
+            read_header,
         )
         if contract_id is not None:
             claims.setdefault(contract_id, []).append((node_id, digest))
