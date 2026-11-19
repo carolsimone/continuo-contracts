@@ -1034,9 +1034,10 @@ def _relationship_target(
     It is the entry of the test's `depends_on.nodes` other than its `attached_node`. With none,
     the test points to the tested node itself when it refs it a second time, besides its `model`
     kwarg, and otherwise to nothing the manifest holds (a literal relation, a var or a macro, or
-    a model that is disabled or absent), which gives `None`. A test with no `attached_node`,
-    which dbt 1.12 writes for every generic test on a column, names no tested node, so no entry
-    of its `depends_on.nodes` is known to be the target, and it gives `None` whatever they are.
+    a model that is disabled or absent), which gives `None`. dbt 1.12 sets `attached_node` on
+    every generic test on a column, so a test without it comes from a manifest written by hand
+    or an older dbt; it names no tested node, so no entry of its `depends_on.nodes` is known to
+    be the target, and it gives `None` whatever they are.
     """
     attached = test.get("attached_node")
     if not attached:

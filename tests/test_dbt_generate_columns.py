@@ -597,7 +597,24 @@ def test_a_relationships_test_with_no_attached_node_is_a_custom_rule(nodes, refs
         assert schema_issues(generated.document) == []
 
 
-def test_a_relationships_test_with_no_attached_node_keeps_its_settings_and_flag():
+def test_a_strict_relationships_test_to_jinja_with_no_attached_node_is_a_flagged_custom_rule():
+    def to_a_var(test):
+        _unattached([GENERIC])(test)
+        test["test_metadata"]["kwargs"]["to"] = "{{ var('x') }}"
+
+    manifest = _edited("cases", _TO_CUSTOMER, to_a_var)
+    config = _test(manifest, _TO_CUSTOMER)["config"]
+    # Strict: severity error, no where and dbt's default thresholds.
+    assert (config["severity"].lower(), config.get("where")) == ("error", None)
+    generated = _run(manifest, GENERIC)
+    assert "jinja_in_test_arguments" in generated.flags
+    assert _props(generated.document)["customer_id"] == {
+        "name": "customer_id",
+        "quality": [_unresolved_rule("{{ var('x') }}")],
+    }
+
+
+def test_a_loose_relationships_test_with_no_attached_node_keeps_its_settings_and_flag():
     def loosened(test):
         _unattached([GENERIC])(test)
         test["config"].update(severity="warn", where="id > 0")

@@ -1502,7 +1502,7 @@ producer's lite check of a dbt project, described below.
   project that the gates compare each node with when the manifest names none, as in
   `dbt.project_service`. Without it the service is the name of `PROJECT_DIR` with `_` written `-`,
   and `.` names the current folder, so pass `--service` when the folder is not named after the
-  service. The header of a seed is the
+  service, or every kept node of the project is an error line. The header of a seed is the
   first row of `PROJECT_DIR/<original_file_path>` of its manifest node, read as UTF-8 with an
   optional byte order mark and with the delimiter of the seed's `config.delimiter`, a comma when it
   has none, so a BOM or CRLF line endings change nothing. The command reads that file only when it

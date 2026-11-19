@@ -10,7 +10,10 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `lite.check_manifest`, and so `continuo-contracts dbt check`, now gives an error line to each
   kept node whose service is not the declared service (`--service`, which must be the service the
   team deploys under), as the release rejects such a manifest as `invalid_artifact`, so a tagged
-  model of an installed package no longer passes the lite check.
+  model of an installed package no longer passes the lite check. A CI job that runs `dbt check`
+  from a folder not named after the deployed service, such as `dbt check .` from `transform/` or
+  `projects/shop` for the project `my_shop`, now fails every kept node unless it passes
+  `--service`.
 - `dbt.generate` now writes a `relationships` test that has no `attached_node` as a `custom` rule
   that keeps its `to` and `field`, whatever its `depends_on.nodes` holds, instead of a false
   relationship to the tested node itself or a `DbtNodeError` for two or more entries.
