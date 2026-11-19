@@ -83,6 +83,12 @@ _OTHER_SERVICE: Final = (
     "the node's service is {}, the declared service is {}: the release rejects a manifest "
     "that holds a node of another service as invalid_artifact"
 )
+# What the check says instead about a kept node with no service (no `fqn`, an empty one, or one
+# whose first name is empty), which the release cannot read or finds of another service.
+_NO_SERVICE: Final = (
+    "the node has no service, the declared service is {}: the release rejects the manifest "
+    "as invalid_artifact"
+)
 _ALL_SKIPPED: Final = (
     "every node of the service is skipped: the release rejects it as invalid_artifact "
     "(manifest contains no model/seed nodes)"
@@ -192,11 +198,12 @@ def _check_kept_node(
     # The gates have read the node's `fqn`, so its service can be read.
     service = dbt.node_service(node)
     if declared_service and service != declared_service:
-        lines.append(
-            Line(
-                _ERROR, node_id, _OTHER_SERVICE.format(service, declared_service)
-            )
+        message = (
+            _OTHER_SERVICE.format(service, declared_service)
+            if service
+            else _NO_SERVICE.format(declared_service)
         )
+        lines.append(Line(_ERROR, node_id, message))
     try:
         if not dbt.schedule(node):
             lines.append(Line(_INFO, node_id, _DORMANT))
@@ -247,8 +254,11 @@ def check_manifest(
     2. When `declared_service` is not empty, a kept node whose service, `dbt.node_service`, is
        another gives an `error` line, `the node's service is <service>, the declared service is
        <declared>: the release rejects a manifest that holds a node of another service as
-       invalid_artifact`, as the first line of the node, whatever its contract. A skipped node
-       is not compared, since the release never reads it.
+       invalid_artifact`, as the first line of the node, whatever its contract. A kept node with
+       no service, whose `fqn` is missing or empty or starts with an empty name, gives `the node
+       has no service, the declared service is <declared>: the release rejects the manifest as
+       invalid_artifact` there instead. A skipped node is not compared, since the release never
+       reads it.
     3. A kept node with no tag, a dormant node, gives an `info` line.
     4. `dbt.generate` writes the contract. A field it cannot read (`DbtNodeError`) gives one
        `error` line, and the node has no more lines.

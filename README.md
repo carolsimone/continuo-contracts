@@ -1341,7 +1341,9 @@ order:
    the release rejects a manifest that holds a node of another service as invalid_artifact`, as
    its first line and whatever its contract: the release compares the service of every node it
    keeps with the service its request declares. A tagged model of an installed package is such a
-   node. A skipped node is not compared, and with an empty `declared_service` no node is, as the
+   node. A kept node with no service (an `fqn` that is missing or empty, or whose first entry is
+   empty) gives `the node has no service, the declared service is <declared>: the release rejects
+   the manifest as invalid_artifact` instead. A skipped node is not compared, and with an empty `declared_service` no node is, as the
    release compares none when its request declares no service. The line changes nothing else: a
    valid contract of such a node still has its hash in `contracts`.
 3. A kept node with no tag, a dormant node, gives the `info` line `no tag: a dormant node, it runs

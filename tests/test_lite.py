@@ -790,6 +790,33 @@ def test_a_skipped_node_of_another_service_gets_no_service_line():
     assert report.lines == (Line("info", "model.pkg.rates", INSTALLED_PACKAGE),)
 
 
+NO_SERVICE = (
+    "the node has no service, the declared service is shop: the release rejects "
+    "the manifest as invalid_artifact"
+)
+
+
+@pytest.mark.parametrize(
+    "fqn", [None, [], [""]], ids=["no fqn", "an empty fqn", "an empty first name"]
+)
+def test_a_kept_node_with_no_service_says_it_has_none(fqn):
+    node = _model("orders")
+    if fqn is None:
+        del node["fqn"]
+    else:
+        node["fqn"] = fqn
+    assert dbt.node_service(node) == ""
+    # A tagged node with no service passes the gates.
+    assert dbt.skip_reason(node, project="shop") is None
+
+    report = _check(_manifest(node), service="shop")
+
+    assert report.lines[0] == Line("error", "model.shop.orders", NO_SERVICE)
+    # The node keeps the error lines its contract has.
+    assert len(report.lines) > 1
+    assert all(line.node_id == "model.shop.orders" for line in report.lines)
+
+
 def test_a_project_node_is_an_error_against_another_declared_service():
     manifest = _manifest(_model("orders"), project="my_shop")
 
