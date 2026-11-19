@@ -1284,8 +1284,9 @@ A producer's CI can check what continuo will make of a dbt service before the re
 does with each model, seed and snapshot what the release does: it leaves out the nodes
 `dbt.skip_reason` skips, writes the contract of each node it keeps with `dbt.generate`, checks it
 with `validate.validate_dbt_contract`, and hashes its stored form with `contract.normalise_dbt` and
-`contract.contract_hash`. It also compares the columns each seed declares with the header of its
-CSV file. It reads no file, runs no program, logs nothing and prints nothing: the caller reads the
+`contract.contract_hash`. It also compares the service of each node it keeps with the declared
+service, as the release does, and the columns each seed declares with the header of its CSV file.
+It reads no file, runs no program, logs nothing and prints nothing: the caller reads the
 manifest and the CSV headers, and prints the report. [cli](#cli) is that caller for `dbt check`.
 
 The check is lite because the release does more than it, so a report with no error does not
@@ -1326,17 +1327,25 @@ order:
    continuo skips it`, `local stub, continuo skips it` or `from an installed package and has no
    tag, continuo skips it`. A skipped node is never an error, and a skipped seed gets no header
    check. A node whose gate cannot read a field (`DbtNodeError`) gives one `error` line instead.
-2. A kept node with no tag, a dormant node, gives the `info` line `no tag: a dormant node, it runs
+2. When `declared_service` is not empty, a kept node whose service (`dbt.node_service`) is another
+   gives the `error` line `the node's service is <service>, the declared service is <declared>:
+   the release rejects a manifest that holds a node of another service as invalid_artifact`, as
+   its first line and whatever its contract: the release compares the service of every node it
+   keeps with the service its request declares. A tagged model of an installed package is such a
+   node. A skipped node is not compared, and with an empty `declared_service` no node is, as the
+   release compares none when its request declares no service. The line changes nothing else: a
+   valid contract of such a node still has its hash in `contracts`.
+3. A kept node with no tag, a dormant node, gives the `info` line `no tag: a dormant node, it runs
    only by hand`.
-3. `dbt.generate` writes the contract. A field it cannot read (`DbtNodeError`) gives one `error`
+4. `dbt.generate` writes the contract. A field it cannot read (`DbtNodeError`) gives one `error`
    line, and the node has no more lines. The message of such a line does not repeat the node id.
-4. Each issue of `validate.validate_dbt_contract` gives an `error` line, `<path>: <message>`.
-5. A contract with no issue has its stored form hashed, and `contracts` holds the hash. A
+5. Each issue of `validate.validate_dbt_contract` gives an `error` line, `<path>: <message>`.
+6. A contract with no issue has its stored form hashed, and `contracts` holds the hash. A
    contract with an issue has no hash, since only a valid contract gets one, so a hash in
    `contracts` never suggests that the release creates a contract it would reject. A declared read
    that is not `<schema>.<table>` gives an `error` line and no hash, because the stored form cannot
    be written.
-6. For a kept seed of the project, `read_header(node)` gives the names in the first row of its CSV
+7. For a kept seed of the project, `read_header(node)` gives the names in the first row of its CSV
    file, or `None` when the file cannot be read, which gives one `error` line. Otherwise
    `dbt.seed_header_issues` compares them with the seed's declared columns, the names of the
    properties of its contract in order, and each difference gives an `error` line. A kept seed of
@@ -1344,7 +1353,7 @@ order:
    has its CSV file in that package and not in the project: it gets the `info` line `a seed of an
    installed package: its CSV header is not checked`, and `read_header` is not called for it. A
    seed with no `package_name`, or a manifest that names no project, counts as the project's.
-7. When the contracts of two or more kept nodes have one id, such as models whose names differ
+8. When the contracts of two or more kept nodes have one id, such as models whose names differ
    only in case, or a project's model and a tagged model of an installed package with one name and
    schema and other aliases, each of those nodes gets the `error` line `contract id <id> is also
    the id of <the other node ids, in id order>: the release rejects it as duplicate_table`, and
@@ -1384,8 +1393,10 @@ because its contract is valid.
   contract has, by contract id, in the order of the node ids) and the property `ok`, `True` when
   no line is an `error`.
 - `check_manifest`: `check_manifest(manifest, *, declared_service, read_header) -> LiteReport`
-  checks the manifest `json.load` returns. `declared_service` is the service of the project when
-  the manifest names none, as in `dbt.project_service`. `read_header` takes a seed's manifest node
+  checks the manifest `json.load` returns. `declared_service` is the service the team deploys the
+  project under, which the check compares the service of every kept node with (none when it is
+  `""`), and the service of the project when the manifest names none, as in
+  `dbt.project_service`. `read_header` takes a seed's manifest node
   and returns the column names of its CSV header, or `None` when the file cannot be read; it is
   called once for each seed of the project that gets a contract, and an exception it raises is not
   caught. It raises `DbtNodeError` for a manifest `metadata`, `nodes` or test field in a shape the
@@ -1474,9 +1485,13 @@ producer's lite check of a dbt project, described below.
   the library cannot read is a usage error too, and a field of a node gives that node an error
   line. `PROJECT_DIR` must still be a folder, because the CSV files of the seeds are read from it.
 
-  `--service` is the service of the project that the gates compare each node with when the
-  manifest names none, as in `dbt.project_service`; without it the service is the name of
-  `PROJECT_DIR` with `_` written `-`, and `.` names the current folder. The header of a seed is the
+  `--service` must be the service the team deploys the project under, because the check compares
+  the service of every node it keeps with it, as the release does, and a node of another service,
+  such as a tagged model of an installed package, is an error line. It is also the service of the
+  project that the gates compare each node with when the manifest names none, as in
+  `dbt.project_service`. Without it the service is the name of `PROJECT_DIR` with `_` written `-`,
+  and `.` names the current folder, so pass `--service` when the folder is not named after the
+  service. The header of a seed is the
   first row of `PROJECT_DIR/<original_file_path>` of its manifest node, read as UTF-8 with an
   optional byte order mark and with the delimiter of the seed's `config.delimiter`, a comma when it
   has none, so a BOM or CRLF line endings change nothing. The command reads that file only when it

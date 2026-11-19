@@ -5,6 +5,13 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `lite.check_manifest`, and so `continuo-contracts dbt check`, now gives an error line to each
+  kept node whose service is not the declared service (`--service`, which must be the service the
+  team deploys under), as the release rejects such a manifest as `invalid_artifact`, so a tagged
+  model of an installed package no longer passes the lite check.
+
 ## [0.3.0] - 2026-11-19
 
 **TL;DR**

@@ -411,7 +411,10 @@ def test_with_no_project_name_every_kept_seed_has_its_header_checked():
 
     report = _check(manifest, read_header=lambda node: ["a"], service="shop")
 
-    assert report.lines == ()
+    # The header agrees with the declared columns: the one line is the service check's.
+    assert report.lines == (
+        Line("error", "seed.pkg.rates", _other_service("pkg", "shop")),
+    )
 
 
 def test_an_installed_seed_with_a_contract_issue_gets_both_lines():
@@ -692,8 +695,11 @@ def test_a_node_of_another_package_is_skipped_against_the_declared_service():
     assert report.lines == (Line("info", "model.pkg.rates", INSTALLED_PACKAGE),)
 
 
-@pytest.mark.parametrize("project", ["cases", "core"])
-def test_report_lines_do_not_depend_on_manifest_order(project):
+@pytest.mark.parametrize(
+    ("project", "service"),
+    [("cases", ""), ("core", ""), ("cases", "cases"), ("core", "other")],
+)
+def test_report_lines_do_not_depend_on_manifest_order(project, service):
     manifest = load_manifest(project)
     before = copy.deepcopy(manifest)
     nodes = list(manifest["nodes"].items())
@@ -705,14 +711,139 @@ def test_report_lines_do_not_depend_on_manifest_order(project):
         **manifest,
         "nodes": dict(nodes[1::2] + nodes[::2]),
     }
-    expected = _check(manifest, read_header=_csv_header(project))
+    expected = _check(manifest, read_header=_csv_header(project), service=service)
 
     for other in (reordered, shuffled):
-        report = _check(other, read_header=_csv_header(project))
+        report = _check(other, read_header=_csv_header(project), service=service)
 
         assert report == expected
         assert list(report.contracts) == list(expected.contracts)
     assert manifest == before
+
+
+# The release's service check: a kept node of another service than the declared one.
+
+
+def _other_service(node_service, declared):
+    return (
+        f"the node's service is {node_service}, the declared service is {declared}: "
+        "the release rejects a manifest that holds a node of another service as "
+        "invalid_artifact"
+    )
+
+
+def test_a_tagged_package_node_is_an_error_against_the_declared_service():
+    manifest = load_manifest("cases")
+
+    report = _check(manifest, service="cases")
+
+    line = Line(
+        "error",
+        "model.cases_pkg.pkg_tagged",
+        _other_service("cases-pkg", "cases"),
+    )
+    lines = list(CASES_LINES)
+    lines.insert(
+        lines.index(
+            Line("info", "model.cases_pkg.pkg_untagged", INSTALLED_PACKAGE)
+        ),
+        line,
+    )
+    assert report.lines == tuple(lines)
+    assert report.ok is False
+    # The node's contract keeps its hash: the line says what the release does with the manifest.
+    assert report.contracts == _check(manifest).contracts
+    assert "analytics.pkg_tagged" in report.contracts
+
+
+def test_every_node_of_the_project_passes_the_service_check_of_its_own_service():
+    manifest = copy.deepcopy(load_manifest("cases"))
+    for key in [
+        key for key in manifest["nodes"] if key.startswith("model.cases_pkg.")
+    ]:
+        del manifest["nodes"][key]
+
+    report = _check(manifest, service="cases")
+
+    assert report == _check(manifest)
+    assert not [
+        line for line in report.lines if "declared service" in line.message
+    ]
+
+
+def test_an_empty_declared_service_makes_no_service_check():
+    manifest = {"nodes": {"model.pkg.rates": _model("rates", project="pkg")}}
+
+    report = _check(manifest, service="")
+
+    assert report.lines == ()
+    assert report.ok is True
+
+
+def test_a_skipped_node_of_another_service_gets_no_service_line():
+    manifest = _manifest(
+        _model("orders"), _model("rates", project="pkg", tags=())
+    )
+
+    report = _check(manifest, service="shop")
+
+    assert report.lines == (Line("info", "model.pkg.rates", INSTALLED_PACKAGE),)
+
+
+def test_a_project_node_is_an_error_against_another_declared_service():
+    manifest = _manifest(_model("orders"), project="my_shop")
+
+    report = _check(manifest, service="my_shop")
+
+    # The node's service has `_` written `-`, and the declared service is compared as given.
+    assert report.lines == (
+        Line("error", "model.shop.orders", _other_service("shop", "my_shop")),
+    )
+    assert list(report.contracts) == ["analytics.orders"]
+
+
+def test_the_all_skipped_line_is_unchanged_by_the_service_check():
+    manifest = _manifest(
+        _model("a", owner=""), _model("c", project="other", tags=())
+    )
+
+    report = _check(manifest, service="another")
+
+    assert report.lines == (
+        Line("info", "model.other.c", INSTALLED_PACKAGE),
+        Line("info", "model.shop.a", NO_OWNER),
+        Line("error", "", ALL_SKIPPED),
+    )
+
+
+def test_the_service_line_comes_first_among_the_lines_of_a_node():
+    dormant = _aliased("orders", "orders_b", project="pkg")
+    dormant["tags"] = []
+    dormant["config"]["meta"]["criticality"] = "high"
+    broken = _model("sales", project="pkg")
+    broken["config"]["materialized"] = 5
+    # The gates compare each node with `pkg`, so the dormant node of `pkg` is kept.
+    manifest = _manifest(
+        _aliased("orders", "orders_a"), dormant, broken, project="pkg"
+    )
+
+    report = _check(manifest, service="shop")
+
+    assert [line.message for line in report.lines] == [
+        _other_service("pkg", "shop"),
+        DORMANT,
+        "customProperties[2].value: `criticality` is 'high', it must be one of "
+        "REGULATORY, CORE, SECONDARY",
+        _SHARED.format("analytics.orders", "model.shop.orders"),
+        _other_service("pkg", "shop"),
+        "config.materialized must be a non-empty string, got int",
+        _SHARED.format("analytics.orders", "model.pkg.orders"),
+    ]
+    assert [line.node_id for line in report.lines] == [
+        *["model.pkg.orders"] * 4,
+        *["model.pkg.sales"] * 2,
+        "model.shop.orders",
+    ]
 
 
 def test_the_lines_come_in_the_order_of_the_node_ids():

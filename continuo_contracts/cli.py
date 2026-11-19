@@ -813,7 +813,9 @@ def _parser() -> argparse.ArgumentParser:
         "--service",
         type=_service,
         help=(
-            "the service of the project when the manifest names none "
+            "the service the team deploys the project under: the check compares the service "
+            "of every node it keeps with it, as the release does, so a node of another service "
+            "is an error; it is also the service of the project when the manifest names none "
             "(default: the name of PROJECT_DIR, with _ written -)"
         ),
     )
