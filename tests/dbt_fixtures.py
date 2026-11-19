@@ -28,7 +28,7 @@ def load_manifest(name: str) -> dict[str, Any]:
     return manifest
 
 
-# The `source_sha256` of a node, computed as the README's dbt section describes it, from the
+# The `source_sha256` of a node, computed as docs/source-sha256.md describes it, from the
 # trees of `dbt.read_tree` and nothing else of the generator.
 
 

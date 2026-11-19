@@ -1,4 +1,4 @@
-"""The import contracts of CONTRIBUTING.md, checked mechanically.
+"""The layers of "Modules and layers" in docs/how-it-works.md, checked mechanically.
 
 import-linter (`uv run lint-imports`) enforces the contracts in `pyproject.toml`. These
 tests cover what it cannot say by itself:
@@ -127,7 +127,7 @@ def _copy_package(root: Path) -> Path:
 
 
 def test_no_contract_ignores_an_import() -> None:
-    """The graph in CONTRIBUTING.md is the spec: a baseline of exceptions cannot creep in."""
+    """The layers in docs/how-it-works.md are the spec: a baseline cannot creep in."""
     with_baseline = [c["name"] for c in _contracts() if "ignore_imports" in c]
 
     assert with_baseline == []

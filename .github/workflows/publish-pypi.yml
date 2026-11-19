@@ -39,7 +39,8 @@ name: publish-pypi
 # and FIX FORWARD with a new version. A failure BEFORE `publish` leaves nothing behind except the
 # git tag: delete it, fix, re-tag. A failure IN `publish` can leave some of the files on the
 # index, and a file already there fails the upload, so look at the index before re-running. No
-# GitHub Release exists for a failed run. See CONTRIBUTING.md for the full failure table.
+# GitHub Release exists for a failed run. The failure table is under "Releasing" in
+# CONTRIBUTING.md.
 #
 # Tag glob: `v*` is the only pattern this workflow listens to. A tag that matches it but has
 # neither shape above fails the first step of `prepare`, before anything is built.

@@ -35,8 +35,8 @@ no backports to earlier tags.
 
 In scope: a defect in this package that breaks what a hash is for.
 
-- Two nodes that differ in what they compute and get the same hash (spellings the README says
-  hash alike are not defects).
+- Two nodes that differ in what they compute and get the same hash (spellings the docs say hash
+  alike are not defects).
 - Output that differs between supported Python versions or platforms for the same input.
 
 Out of scope:

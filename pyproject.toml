@@ -96,8 +96,11 @@ warn_unused_ignores = true
 check_untyped_defs = true
 
 [tool.pytest.ini_options]
-addopts = "--import-mode=importlib --strict-markers -m 'not dbt'"
-testpaths = ["tests"]
+# The examples in the README and under `docs/` are doctests, so pytest runs them and they
+# cannot drift from the code.
+addopts = "--import-mode=importlib --strict-markers -m 'not dbt' --doctest-glob='*.md'"
+testpaths = ["tests", "README.md", "docs"]
+doctest_optionflags = ["ELLIPSIS", "NORMALIZE_WHITESPACE"]
 # The test helpers that sit beside the tests, such as `dbt_fixtures`, import by name.
 pythonpath = ["tests"]
 filterwarnings = ["error"]
@@ -109,9 +112,9 @@ markers = [
 root_package = "continuo_contracts"
 include_external_packages = true
 
-# The ordering of the import graph in CONTRIBUTING.md, not each edge of it. A module imports
-# only from the layers below its own, so nothing imports `cli`, and `errors` and `vocabulary`,
-# the bottom layer, import nothing from the package. The modules of one layer, separated by
+# The layers of "Modules and layers" in docs/how-it-works.md, not each edge of the import graph. A
+# module imports only from the layers below its own, so nothing imports `cli`, and `errors`
+# and `vocabulary`, the bottom layer, import nothing from the package. The modules of one layer, separated by
 # `|`, import none of each other, directly or through another module. `exhaustive` makes a
 # module that no layer names fail the check.
 [[tool.importlinter.contracts]]
