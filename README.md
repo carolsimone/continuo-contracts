@@ -643,10 +643,15 @@ visible in the test node and is not detected.
   `column_name`, and the test's own `column_name` otherwise: dbt writes a test declared on the
   model with a null `column_name` and the column or the SQL expression it checks in the kwarg, and
   a column test whose arguments name another column keeps the column it is declared under in its
-  own `column_name`. A name in one pair of SQL quotes, `"..."`, `` `...` `` or `[...]` with a
-  doubled closing mark read as one, as dbt writes a column with `quote: true` in a test and in a
-  model's inferred `primary_key`, names the declared column inside the quotes when no declared
-  column has the quoted name itself; no adapter is read. The contract carries the declared name.
+  own `column_name`. A name in one pair of SQL quotes, `"..."`, `` `...` `` or `[...]`, as dbt
+  writes a column with `quote: true` in a test and in a model's inferred `primary_key`, names the
+  declared column whose name is what the outer pair holds, as it is, when no declared column has
+  the quoted name itself; no adapter is read. dbt wraps the name in its adapter's marks and
+  escapes no mark inside it (dbt-postgres writes `"a"b"` for the column `a"b`), so only the outer
+  pair is taken off and a doubled mark inside stays as written. The double quotes are checked
+  against dbt-postgres; the backticks and the brackets follow the same rule but are not checked
+  against an adapter that writes them. A name that still names no declared column is a column
+  the node does not declare, below. The contract carries the declared name.
 - A test on a column the node does not declare, or on an expression, goes on the schema object, as
   the same rule with that column or expression as `column_name` in its arguments (inside
   `implementation` for a `custom` rule), and sets no `required` or `unique`; a `relationships`

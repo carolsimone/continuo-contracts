@@ -216,9 +216,9 @@ _TEST_SETTINGS: Final = (
 )
 _SEVERITIES: Final = MappingProxyType({"error": None, "warn": "warning"})
 _JINJA_MARKS: Final = ("{{", "{%")
-# The pairs of marks that quote an identifier in SQL, each with the doubled closing mark that
-# stands for one inside it: dbt writes a quoted column's name in a test and in an inferred
-# `primary_key` with the marks of its adapter.
+# The pairs of marks that quote an identifier in SQL, opening and closing: dbt writes a quoted
+# column's name in a test and in an inferred `primary_key` inside the marks of its adapter, and
+# escapes no mark inside the name.
 _QUOTES: Final = (('"', '"'), ("`", "`"), ("[", "]"))
 
 # The columns dbt adds to a snapshot's table, by their default names, and the one it adds when
@@ -864,16 +864,17 @@ def _declared(
     """Return the declared column that `name` names, or `None`.
 
     `name` names the column of that name. Failing that, a name in one pair of SQL quotes, `"..."`,
-    `` `...` `` or `[...]`, names the column whose name is inside them, with a doubled closing
-    mark read as one, as dbt writes the name of a column it quotes. No adapter is read, and a
-    declared name that holds quotes is found by the first lookup.
+    `` `...` `` or `[...]`, names the column whose name is what the outer pair holds, as it is:
+    dbt writes the name of a column it quotes inside its adapter's marks and escapes no mark
+    inside it, so no doubled mark is read as one. No adapter is read, and a declared name that
+    holds quotes is found by the first lookup.
     """
     column = columns.get(name)
     if column is not None or len(name) < 2:
         return column
     for opening, closing in _QUOTES:
         if name.startswith(opening) and name.endswith(closing):
-            return columns.get(name[1:-1].replace(closing * 2, closing))
+            return columns.get(name[1:-1])
     return None
 
 

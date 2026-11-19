@@ -1477,7 +1477,8 @@ def test_a_column_name_kwarg_that_is_not_a_string_raises_dbt_node_error():
 
 
 # With `quote: true`, dbt writes a test's `column_name` and an inferred `primary_key` as the quoted
-# identifier, while the declared column keeps its name.
+# identifier, while the declared column keeps its name. dbt wraps the name in its adapter's quote
+# marks and escapes no mark inside it, so `a"b` is written `"a"b"`.
 
 
 def _declaring(manifest, name):
@@ -1491,9 +1492,13 @@ def _declaring(manifest, name):
         ("id", '"id"'),
         ("id", "`id`"),
         ("id", "[id]"),
-        ('say "hi"', '"say ""hi"""'),
-        ("say `hi`", "`say ``hi```"),
-        ("a]b", "[a]]b]"),
+        ("Name", '"Name"'),
+        ('a"b', '"a"b"'),
+        ('say "hi"', '"say "hi""'),
+        ('a""b', '"a""b"'),
+        ("say `hi`", "`say `hi``"),
+        ("a]b", "[a]b]"),
+        ("a]]b", "[a]]b]"),
     ],
 )
 def test_a_quoted_test_column_lands_on_the_declared_column(declared, written):
@@ -1506,6 +1511,45 @@ def test_a_quoted_test_column_lands_on_the_declared_column(declared, written):
     assert column["required"] is True
     assert _not_null("generic_tests", "id") in column["quality"]
     assert "test_column_not_declared" not in generated.flags
+
+
+def test_a_quoted_name_is_never_unescaped():
+    # Undoing a doubled mark would send the `not_null` test on `"a""b"` to `a"b`.
+    manifest = _edited(
+        "cases", "not_null_generic_tests_id", _checks('"a""b"', '"a""b"')
+    )
+    _checks('"a"b"', '"a"b"')(_test(manifest, "unique_generic_tests_id"))
+    _declaring(manifest, 'a"b')
+    _declaring(manifest, 'a""b')
+    generated = _run(manifest, GENERIC)
+    props = _props(generated.document)
+    assert (props['a""b'].get("required"), props['a""b'].get("unique")) == (
+        True,
+        None,
+    )
+    assert (props['a"b'].get("required"), props['a"b'].get("unique")) == (
+        None,
+        True,
+    )
+    assert "test_column_not_declared" not in generated.flags
+
+
+@pytest.mark.parametrize(
+    ("declared", "written"),
+    [
+        ('say "hi"', '"say ""hi"""'),
+        ("say `hi`", "`say ``hi```"),
+        ("a]b", "[a]]b]"),
+    ],
+)
+def test_a_doubled_mark_inside_the_quotes_is_part_of_the_name(declared, written):
+    manifest = _edited(
+        "cases", "not_null_generic_tests_id", _checks(written, written)
+    )
+    _declaring(manifest, declared)
+    generated = _run(manifest, GENERIC)
+    assert "required" not in _props(generated.document)[declared]
+    assert "test_column_not_declared" in generated.flags
 
 
 def test_a_declared_column_named_with_quotes_takes_its_tests_as_written():

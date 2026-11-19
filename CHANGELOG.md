@@ -14,6 +14,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `dbt.generate` now writes a `relationships` test that has no `attached_node` as a `custom` rule
   that keeps its `to` and `field`, whatever its `depends_on.nodes` holds, instead of a false
   relationship to the tested node itself or a `DbtNodeError` for two or more entries.
+- `dbt.generate` now resolves a quoted column name in a test or a `primary_key` by taking off the
+  one outer pair of quote marks and nothing else, as dbt writes it, so a doubled mark inside the
+  name is no longer read as one and can no longer send a test to the wrong column.
 
 ## [0.3.0] - 2026-11-19
 
