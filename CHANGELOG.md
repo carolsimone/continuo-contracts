@@ -5,6 +5,20 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-19
+
+**TL;DR**
+
+- The lite check, `continuo-contracts dbt check`, applies the release's service check: a kept node
+  that belongs to another service than `--service` is an error line, as the release rejects such a
+  manifest. Upgrade: a CI job that runs `dbt check` from a folder not named after the deployed
+  service must pass `--service`.
+- Two fixes to dbt contract generation for manifests that dbt 1.12 does not write for an ordinary
+  project: a `relationships` test without `attached_node` is a custom rule, and a quoted column
+  name is resolved by taking off the one outer pair of quote marks.
+- No hash moves: the vector `vectors/dbt_contracts.json`, the golden contracts and the six 0.2.0
+  vector files are byte for byte the same as in 0.3.0.
+
 ### Fixed
 
 - `lite.check_manifest`, and so `continuo-contracts dbt check`, now gives an error line to each
