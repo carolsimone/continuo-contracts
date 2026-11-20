@@ -45,6 +45,7 @@ A module imports only from the rows below it, and the modules of one row import 
 |---|---|
 | `cli` | The `continuo-contracts` command: `validate`, `hash` and `dbt check` |
 | `lite` | The lite check: the dbt steps for every node of a manifest |
+| `ontology_check` | The ontology rules over contracts in memory |
 | `validate`, `ontology` | The ODCS schema check and continuo's rules, the ontology file and the ontology part of a contract |
 | `contract` | The stored form and `contract_hash` |
 | `python`, `yaml_strict`, `dbt` | Python node and projection, contract file reader, dbt nodes |

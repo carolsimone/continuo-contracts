@@ -144,11 +144,18 @@ def test_the_layers_name_every_module_of_the_package_once() -> None:
     )
 
 
-def test_lite_sits_between_cli_and_validate() -> None:
+def test_ontology_check_sits_between_lite_and_validate() -> None:
+    """`lite` runs its rules and imports `validate`, so it is above both, and the rules read
+    the ontology, so they are above it."""
     [graph] = [c for c in _contracts() if c["type"] == "layers"]
-    top_three = [_layer_modules(layer) for layer in graph["layers"][:3]]
+    top_four = [_layer_modules(layer) for layer in graph["layers"][:4]]
 
-    assert top_three == [["cli"], ["lite"], ["validate", "ontology"]]
+    assert top_four == [
+        ["cli"],
+        ["lite"],
+        ["ontology_check"],
+        ["validate", "ontology"],
+    ]
 
 
 def test_the_layers_place_ontology_beside_validate() -> None:
@@ -161,7 +168,7 @@ def test_the_layers_place_ontology_beside_validate() -> None:
     below = graph["layers"].index(beside) + 1
 
     assert re.split(r"\s*\|\s*", beside) == ["validate", "ontology"]
-    assert _layer_modules(graph["layers"][above]) == ["lite"]
+    assert _layer_modules(graph["layers"][above]) == ["ontology_check"]
     assert _layer_modules(graph["layers"][below]) == ["contract"]
 
 
@@ -402,6 +409,48 @@ OFFENCES = {
         "from continuo_contracts import lite\n",
         "import-graph",
         "continuo_contracts.ontology is not allowed to import",
+    ),
+    "ontology_check imports lite, the layer above it": (
+        "ontology_check",
+        "from continuo_contracts import lite\n",
+        "import-graph",
+        "continuo_contracts.ontology_check is not allowed to import",
+    ),
+    "ontology imports ontology_check, the layer above it": (
+        "ontology",
+        "from continuo_contracts import ontology_check\n",
+        "import-graph",
+        "continuo_contracts.ontology is not allowed to import",
+    ),
+    "validate imports ontology_check, the layer above it": (
+        "validate",
+        "from continuo_contracts import ontology_check\n",
+        "import-graph",
+        "continuo_contracts.validate is not allowed to import",
+    ),
+    "jsonschema in ontology_check": (
+        "ontology_check",
+        "import jsonschema\n",
+        "jsonschema-is-confined-to-validate",
+        "continuo_contracts.ontology_check is not allowed to import jsonschema",
+    ),
+    "yaml in ontology_check": (
+        "ontology_check",
+        "import yaml\n",
+        "yaml-is-confined-to-fingerprints-and-yaml-strict",
+        "continuo_contracts.ontology_check is not allowed to import yaml",
+    ),
+    "logging in ontology_check": (
+        "ontology_check",
+        "import logging\n",
+        "only-cli-logs",
+        "continuo_contracts.ontology_check is not allowed to import logging",
+    ),
+    "subprocess in ontology_check": (
+        "ontology_check",
+        "import subprocess\n",
+        "subprocess-is-confined-to-cli",
+        "continuo_contracts.ontology_check is not allowed to import subprocess",
     ),
     "yaml in ontology": (
         "ontology",

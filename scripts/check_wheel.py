@@ -48,6 +48,7 @@ REQUIRED_MEMBERS: tuple[str, ...] = tuple(
         "lite.py",
         "odcs-json-schema-v3.2.0.json",
         "ontology.py",
+        "ontology_check.py",
         "python.py",
         "py.typed",
         "schema.py",
