@@ -5,6 +5,18 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-21
+
+**TL;DR**
+
+- The dbt validation, and so the lite check `continuo-contracts dbt check` and the release, refuses
+  `contract.enforced: true` on a snapshot. dbt does not support contracts on snapshots: it
+  enforces the contract on the first run and fails every later run. Upgrade: a project with such a
+  snapshot, which 0.4.0 accepted, now fails the check. Remove `contract.enforced` from the
+  snapshot. A model's contract, and a snapshot without the flag, are unchanged.
+- No hash moves. The vectors of 0.4.0 are byte for byte the same, and the dbt contract vector gains
+  one case.
+
 ### Changed
 
 - The dbt validation refuses an enforced contract on a dbt snapshot, because dbt does not support
