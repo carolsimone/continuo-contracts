@@ -54,7 +54,7 @@ from continuo_contracts.python import (
     _key_position,
     canonical_sql_type,
 )
-from continuo_contracts.vocabulary import PROPERTIES, VENDOR
+from continuo_contracts.vocabulary import PROPERTIES, VENDOR, is_name
 
 REASONS: Final = (
     "strict_yaml",
@@ -963,21 +963,13 @@ def _check_assets(value: object) -> Iterator[str]:
         yield f"`assets` lists {_shown(asset)} twice, a path is listed once"
 
 
-def _is_part(value: object) -> bool:
-    """Say whether `value` can be the name of a thing or of a field of a thing.
-
-    A name is a string that is not blank, with no whitespace, control character, dot or slash.
-    """
-    return _identifier_fault(value) is None
-
-
 def _is_reference(value: object, *, with_field: bool) -> bool:
     """Say whether `value` is `<Thing>.<field>`, or `<Thing>` alone when `with_field` is false."""
     if not isinstance(value, str):
         return False
     parts = value.split(".")
     wanted = (2,) if with_field else (1, 2)
-    return len(parts) in wanted and all(_is_part(part) for part in parts)
+    return len(parts) in wanted and all(is_name(part) for part in parts)
 
 
 def _is_scalar(value: object) -> bool:
@@ -991,7 +983,7 @@ def _is_scalar(value: object) -> bool:
 
 
 def _check_entity(value: object) -> Iterator[str]:
-    if not _is_part(value):
+    if not is_name(value):
         yield (
             f"`entity` is {_shown(value)}, it must be the name of a thing, a string with no "
             "whitespace, dot or slash"

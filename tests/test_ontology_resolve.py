@@ -309,6 +309,62 @@ entities:
     columns = _columns(_resolve(_contract([_column("id")], entity="Thing"), ont))
 
     assert columns["id"]["logicalType"] == "integer"
+
+
+def test_a_key_part_that_is_also_a_personal_property_is_personal_with_the_type_of_the_key():
+    ont = ontology.load(
+        """
+principals: {services: {core: {domain: core}}}
+entities:
+  Thing:
+    key: {id: int, other: string}
+    properties:
+      id: {type: string, personal: true}
+      other: {type: string, personal: false}
+"""
+    )
+    stored = _contract([_column("id"), _column("other")], entity="Thing")
+
+    columns = _columns(_resolve(stored, ont))
+
+    assert columns["id"]["classification"] == "personal"
+    assert columns["id"]["logicalType"] == "integer"
+    assert columns["id"]["primaryKey"] is True
+    assert columns["id"]["primaryKeyPosition"] == 1
+    assert "classification" not in columns["other"]
+    assert columns["other"]["primaryKeyPosition"] == 2
+
+
+def test_a_declared_classification_wins_over_the_personal_mark_of_a_key_part():
+    ont = ontology.load(
+        """
+principals: {services: {core: {domain: core}}}
+entities:
+  Thing:
+    key: {id: int}
+    properties:
+      id: {personal: true}
+"""
+    )
+    stored = _contract([_column("id", classification="internal")], entity="Thing")
+
+    assert _columns(_resolve(stored, ont))["id"]["classification"] == "internal"
+
+
+def test_a_key_part_with_no_property_of_its_name_is_not_personal():
+    ont = ontology.load(
+        """
+principals: {services: {core: {domain: core}}}
+entities:
+  Thing:
+    key: {id: int}
+    properties:
+      name: {type: string, personal: true}
+"""
+    )
+
+    columns = _columns(_resolve(_contract([_column("id")], entity="Thing"), ont))
+
     assert "classification" not in columns["id"]
 
 
@@ -734,9 +790,25 @@ def test_a_declared_type_of_an_aggregate_column_wins():
         {"from": "", "agg": "count"},
         {"from": 5, "agg": "sum"},
         {"from": "Transaction.amount_eur.x", "agg": "sum"},
+        # An empty field after the dot is a malformed `from`, not the bare thing.
+        {"from": "Transaction.", "agg": "count"},
+        {"from": "Transaction.", "agg": "sum"},
+        {"from": "Transaction.", "period": "day"},
+        {"from": ".amount_eur", "agg": "sum"},
+        # Neither a `from` nor a `period`: nothing to fill from, whatever `agg` says.
+        {"agg": "count"},
+        {"agg": "sum"},
+        {"agg": "count", "where": {"source": "card"}},
         {"agg": ""},
         {},
         {"period": ""},
+        {"where": {"source": "card"}},
+        # An `agg` that is not a string, beside a `from` or a `period` that would resolve.
+        {"agg": 5},
+        {"from": "Transaction.amount_eur", "agg": 5},
+        {"from": "Transaction", "agg": ["count"]},
+        {"period": "day", "agg": 5},
+        {"period": "day", "agg": True},
         "sum",
         None,
     ],
@@ -1127,6 +1199,43 @@ entities:
     ]
 
 
+def test_a_property_that_writes_both_ref_and_a_typed_ref_reads_the_ref_key():
+    ont = ontology.load(
+        """
+principals: {services: {core: {domain: core}}}
+entities:
+  A: {key: {id: int}}
+  B: {key: {id: string}}
+  Pair: {key: {x: int, y: int}}
+  Holder:
+    key: {id: int}
+    properties:
+      both:          {ref: A, type: "ref B"}
+      typed_first:   {type: "ref B", ref: A}
+      ref_over_type: {ref: A, type: string}
+      pair_wins:     {ref: Pair, type: "ref A"}
+      typed_only:    {type: "ref B"}
+      empty_ref:     {ref: "", type: "ref B"}
+"""
+    )
+    names = [
+        "both", "typed_first", "ref_over_type", "pair_wins", "typed_only",
+        "empty_ref",
+    ]  # fmt: skip
+    stored = _contract([_column(name) for name in names], entity="Holder")
+
+    resolved = _columns(_resolve(stored, ont))
+
+    assert {name: resolved[name].get("logicalType") for name in names} == {
+        "both": "integer",
+        "typed_first": "integer",
+        "ref_over_type": "integer",
+        "pair_wins": None,
+        "typed_only": "string",
+        "empty_ref": "string",
+    }
+
+
 def test_the_ontology_type_map():
     ont = ontology.load(
         """
@@ -1196,3 +1305,81 @@ def test_a_table_with_no_columns_gets_only_its_link():
         _link("continuo-ontology:User")
     ]
     assert "properties" not in resolved["schema"][0]
+
+
+# A binding that `resolve` writes is one the validator accepts.
+
+
+def _unloaded(entities):
+    """An `Ontology` built by hand, so that `load` does not refuse a name it would refuse."""
+    return ontology.Ontology(
+        document={
+            "principals": {"services": {"core": {"domain": "core"}}},
+            "entities": entities,
+        },
+        sha256="0" * 64,
+    )
+
+
+@pytest.mark.parametrize("name", ["display name", "display.name", "display/name"])
+def test_a_name_that_a_reference_cannot_carry_is_never_written_as_a_property(
+    name,
+):
+    # `load` refuses these names; an ontology built another way must not make `resolve` write a
+    # `<Thing>.<field>` that `validate` refuses, whether the name is a key part or a property.
+    ont = _unloaded(
+        {
+            "T": {
+                "key": {"id": "int", name: "int"},
+                "properties": {name + " 2": {"type": "string"}},
+            }
+        }
+    )
+    stored = _contract(
+        [_column("id"), _column(name), _column(name + " 2")], entity="T"
+    )
+
+    columns = _columns(_resolve(stored, ont))
+
+    assert _bindings(columns["id"]) == {"property": "T.id"}
+    for refused in (name, name + " 2"):
+        assert "customProperties" not in columns[refused]
+        assert "authoritativeDefinitions" not in columns[refused]
+
+
+@pytest.mark.parametrize("name", ["display name", "display.name", "display/name"])
+def test_a_column_with_such_a_name_is_left_unbound_by_a_loaded_ontology(name):
+    ont = ontology.load(
+        "principals: {services: {core: {domain: core}}}\n"
+        "entities: {T: {key: {id: int}, properties: {display_name: {type: string}}}}\n"
+    )
+    stored = _contract([_column("id"), _column(name)], entity="T")
+
+    columns = _columns(_resolve(stored, ont))
+
+    assert columns[name] == {"name": name}
+    assert _bindings(columns["id"]) == {"property": "T.id"}
+
+
+@pytest.mark.parametrize("name", ["display name", "display.name", "display/name"])
+def test_the_resolved_form_of_a_column_with_such_a_name_is_valid(name):
+    # The validator refuses a `property` of `<Thing>.<field>` whose field has whitespace, a dot
+    # or a slash, so `resolve` writes none, even for an ontology that declares such a field.
+    stored = json.loads(GOLDEN.read_text("ascii"))["stored"]
+    stored["customProperties"] = [
+        item
+        for item in stored["customProperties"]
+        if item["property"] != "service"
+    ] + [_p("service", "core")]
+    table = stored["schema"][0]
+    table["customProperties"] = [_p("entity", "T")]
+    table["properties"] = [{"name": "id"}, {"name": name}]
+    stored = canonical_form(stored)
+    assert validate_dbt_contract(stored) == []
+    ont = _unloaded({"T": {"key": {"id": "int"}, "properties": {name: {}}}})
+
+    resolved = _resolve(stored, ont)
+
+    assert validate_dbt_contract(resolved) == []
+    assert _bindings(_columns(resolved)["id"]) == {"property": "T.id"}
+    assert "customProperties" not in _columns(resolved)[name]

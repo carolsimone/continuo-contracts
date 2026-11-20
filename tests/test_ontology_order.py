@@ -193,6 +193,57 @@ def test_a_contract_that_reads_its_own_relation_has_no_order_edge(read):
     assert layers_of(findings) == [["analytics.incr"]]
 
 
+def test_a_self_read_of_a_relation_two_contracts_hold_is_no_edge_to_the_other():
+    # `a` and `b` are two contracts that write to one physical relation. A read of that relation
+    # finds `a`, the lower id, so it is the relation `b` holds too: `b` reads itself, not `a`.
+    state = {
+        "a": contract("core", "a", physical_name="shared"),
+        "b": contract(
+            "core", "b", physical_name="shared", reads=["analytics.shared"]
+        ),
+    }
+
+    findings = estate_run(state, without_birth_copy())
+
+    assert problems(findings) == []
+    assert layers_of(findings) == [["analytics.a", "analytics.b"]]
+
+
+def test_the_read_of_another_contract_beside_a_self_read_keeps_its_edge():
+    state = {
+        "a": contract("core", "a", physical_name="shared"),
+        "b": contract(
+            "core",
+            "b",
+            physical_name="shared",
+            reads=["analytics.Shared", "analytics.c"],
+        ),
+        "c": contract("core", "c"),
+    }
+
+    findings = estate_run(state, without_birth_copy())
+
+    assert problems(findings) == []
+    assert layers_of(findings) == [
+        ["analytics.a", "analytics.c"],
+        ["analytics.b"],
+    ]
+
+
+def test_the_lower_id_that_reads_the_shared_relation_is_a_self_read_too():
+    state = {
+        "a": contract(
+            "core", "a", physical_name="shared", reads=["analytics.shared"]
+        ),
+        "b": contract("core", "b", physical_name="shared"),
+    }
+
+    findings = estate_run(state, without_birth_copy())
+
+    assert problems(findings) == []
+    assert layers_of(findings) == [["analytics.a", "analytics.b"]]
+
+
 def test_a_self_reading_copy_is_placed_after_what_it_reads_like_any_other():
     state = base()
     set_custom(

@@ -46,6 +46,12 @@ are byte for byte the same, and `ontology.json` is new.
 - The level `warning` of a lite check line, logged at WARNING: it never changes the exit status.
 - The test vector `vectors/ontology.json`, which pins the first resolved forms, their
   `contract_hash` and their findings.
+- `vocabulary.is_name`, the rule for the name of a thing or of a field: a string with no
+  whitespace, control character, dot or slash, since `<Thing>.<field>` cannot carry one.
+  `validate` reads the names of a binding with it, and `ontology.load` refuses a thing, key part or
+  property name it rejects, so a column named `display name` is bound by hand or not at all. The
+  `quality` rule reads the data-quality tests on each column as well as those on the table, and
+  reports a `params` that is not a mapping.
 
 ### Changed
 

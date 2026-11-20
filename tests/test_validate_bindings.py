@@ -12,14 +12,14 @@ from pathlib import Path
 
 import pytest
 
-from continuo_contracts import yaml_strict
+from continuo_contracts import validate, yaml_strict
 from continuo_contracts.validate import (
     dbt_rule_issues,
     rule_issues,
     validate_dbt_contract,
     validate_python_contract,
 )
-from continuo_contracts.vocabulary import PROPERTIES
+from continuo_contracts.vocabulary import PROPERTIES, is_name
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 DEMO = FIXTURES / "demo" / "service-py" / "contracts" / "py_daily_kpis.odcs.yaml"
@@ -365,3 +365,29 @@ def test_a_property_that_the_vocabulary_does_not_know_stays_unknown(family):
     assert _found(_check(family, doc)) == [
         ("schema[0].customProperties[0]", "unknown_property")
     ]
+
+
+def test_the_name_of_a_thing_and_the_name_of_a_table_are_read_by_one_rule():
+    # `is_name` is the rule for `<Thing>.<field>`, and `validate` has always held a table and a
+    # schema to the same one: no whitespace, control character, dot or slash.
+    characters = [chr(code) for code in range(0xA0)] + list(
+        "\u00a0\u1680\u2003\u2028\u3000.\\/"
+    )
+    values = [
+        *characters,
+        *(f"a{character}b" for character in characters),
+        "",
+        " ",
+        "name",
+        "display name",
+        "a.b",
+        "a/b",
+        3,
+        None,
+        ["a"],
+    ]
+
+    for value in values:
+        assert is_name(value) is (validate._identifier_fault(value) is None), (
+            repr(value)
+        )

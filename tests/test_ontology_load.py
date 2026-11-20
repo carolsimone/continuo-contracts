@@ -191,6 +191,25 @@ def test_the_ontology_is_frozen():
         ("principals: {services: {' ': {domain: core}}}", "principals.services"),
         ("entities: {User: {key: {'': int}}}", "entities.User.key"),
         ("entities: {User: {properties: {'': {}}}}", "entities.User.properties"),
+        # A name that `<Thing>.<field>` cannot carry: whitespace, a dot or a slash.
+        ("entities: {'User x': {owner: core}}", "entities"),
+        ("entities: {'User.x': {owner: core}}", "entities"),
+        ("entities: {'User/x': {owner: core}}", "entities"),
+        ("entities: {User: {key: {'user id': int}}}", "entities.User.key"),
+        ("entities: {User: {key: {'user.id': int}}}", "entities.User.key"),
+        ("entities: {User: {key: {'user/id': int}}}", "entities.User.key"),
+        (
+            "entities: {User: {properties: {'display name': {}}}}",
+            "entities.User.properties",
+        ),
+        (
+            "entities: {User: {properties: {'display.name': {}}}}",
+            "entities.User.properties",
+        ),
+        (
+            "entities: {User: {properties: {'display/name': {}}}}",
+            "entities.User.properties",
+        ),
     ],
 )
 def test_an_ontology_of_the_wrong_shape_is_refused(text, path):
@@ -217,6 +236,49 @@ def test_the_message_is_the_path_a_colon_and_the_reason():
     )
     assert str(not_a_mapping.value) == "<root>: must be a mapping, got a list"
     assert str(blank.value) == "entities: a thing name is not blank, got ' '"
+
+
+@pytest.mark.parametrize(
+    "text, message",
+    [
+        (
+            "entities: {'User x': {}}",
+            "entities: a thing name has no whitespace, control character, dot or slash, "
+            "got 'User x'",
+        ),
+        (
+            "entities: {User: {key: {'user.id': int}}}",
+            "entities.User.key: a part name has no whitespace, control character, dot or "
+            "slash, got 'user.id'",
+        ),
+        (
+            "entities: {User: {properties: {'a/b': {}}}}",
+            "entities.User.properties: a property name has no whitespace, control "
+            "character, dot or slash, got 'a/b'",
+        ),
+    ],
+)
+def test_a_name_that_a_reference_cannot_carry_is_refused_with_the_path_of_its_mapping(
+    text, message
+):
+    with pytest.raises(OntologyError) as refused:
+        ontology.load(text)
+
+    assert str(refused.value) == message
+
+
+def test_a_domain_a_service_a_team_and_a_role_keep_names_with_whitespace():
+    # Only the names that `<Thing>.<field>` carries are bound: a principal is named as its owner
+    # writes it.
+    o = ontology.load(
+        "principals:\n"
+        "  domains: {'core data': {owner_team: 'core team'}}\n"
+        "  services: {'my service': {domain: 'core data'}}\n"
+        "  teams: {'core team': {idp_group: 'okta:core'}}\n"
+        "  roles: {'data analyst': {idp_group: 'okta:analysts'}}\n"
+    )
+
+    assert o.declares("my service")
 
 
 @pytest.mark.parametrize(

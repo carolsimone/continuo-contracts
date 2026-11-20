@@ -6,7 +6,7 @@ import dataclasses
 import pytest
 import yaml
 
-from continuo_contracts import ontology
+from continuo_contracts import ontology, ontology_check
 from continuo_contracts.contract import canonical_form
 from continuo_contracts.ontology_check import (
     PER_SERVICE_RULES,
@@ -405,6 +405,80 @@ def test_property_ref_must_name_a_thing():
     )
 
 
+@pytest.mark.parametrize(
+    "spelling",
+    [
+        {"type": "ref Customer"},
+        {"type": "ref   Customer"},
+        {"type": " ref Customer "},
+        {"ref": "Customer", "type": "ref User"},
+        {"type": "ref User", "ref": "Customer"},
+        {"ref": "Customer", "type": "string"},
+        {"ref": "", "type": "ref Customer"},
+    ],
+)
+def test_a_dangling_reference_in_either_spelling_is_an_error(spelling):
+    def mutate(document):
+        document["entities"]["Transaction"]["properties"]["user_id"] = spelling
+
+    assert_finding(
+        ontology_problems(mutate),
+        "error",
+        "ontology",
+        "Transaction.user_id",
+        "references Customer, which is not a thing",
+    )
+
+
+@pytest.mark.parametrize(
+    "spelling",
+    [
+        {"type": "ref User"},
+        {"ref": "User"},
+        {"type": "ref Customer", "ref": "User"},
+        {"ref": "User", "type": "ref Customer"},
+        {"ref": "", "type": "ref User"},
+        {"type": "ref"},
+        {"type": "reference Customer"},
+        {"type": "refUser"},
+    ],
+)
+def test_a_reference_that_names_a_thing_in_either_spelling_has_no_finding(
+    spelling,
+):
+    def mutate(document):
+        document["entities"]["Transaction"]["properties"]["user_id"] = spelling
+
+    assert ontology_problems(mutate) == []
+
+
+def test_a_typed_reference_is_as_much_a_relationship_as_a_ref_key():
+    # Transaction reaches User through `user_id`, however that property writes its reference: a
+    # column from User on a copy of Transaction is a declared join.
+    for spelling in ({"ref": "User"}, {"type": "ref User"}):
+        document = ontology_document()
+        document["entities"]["Transaction"]["properties"]["user_id"] = spelling
+        state = base()
+        table(state["txns"])["properties"].append(
+            column("acquired_at", "User.created_at")
+        )
+
+        findings = run(state, ("contract",), document)
+
+        assert problems(findings) == [], spelling
+
+
+def test_a_dangling_typed_reference_does_not_break_the_contract_rule():
+    document = ontology_document()
+    document["entities"]["Transaction"]["properties"]["user_id"] = {
+        "type": "ref Customer"
+    }
+
+    findings = run(base(), ("contract",), document)
+
+    assert problems(findings) == []
+
+
 def test_key_ref_must_name_a_thing():
     def mutate(document):
         document["entities"]["UserRevenue"]["key"] = {"user_id": "ref Person"}
@@ -431,6 +505,34 @@ def test_derived_from_must_name_a_real_property():
         "UserRevenue.revenue_eur",
         "Transaction.amount",
     )
+
+
+@pytest.mark.parametrize(
+    "source", ["Transaction.", "User.", ".amount_eur", "Transaction.amount_eur."]
+)
+def test_derived_from_with_an_empty_field_is_an_error(source):
+    def mutate(document):
+        document["entities"]["UserRevenue"]["properties"]["revenue_eur"][
+            "derived_from"
+        ] = [source]
+
+    assert_finding(
+        ontology_problems(mutate),
+        "error",
+        "ontology",
+        "UserRevenue.revenue_eur",
+        f"derived_from {source}:",
+    )
+
+
+@pytest.mark.parametrize("source", ["Transaction", "Transaction.amount_eur"])
+def test_derived_from_a_thing_or_a_field_of_it_has_no_finding(source):
+    def mutate(document):
+        document["entities"]["UserRevenue"]["properties"]["revenue_eur"][
+            "derived_from"
+        ] = [source]
+
+    assert ontology_problems(mutate) == []
 
 
 def test_derived_from_must_name_a_thing():
@@ -723,6 +825,59 @@ def test_readers_are_the_roles_with_access_read(roles, granted):
         f for f in findings if f.rule == "access" and f.severity == "error"
     ]
     assert (refused == []) is granted, listing(findings)
+
+
+@pytest.mark.parametrize("rule", RELEASE_RULES)
+def test_a_reader_with_no_role_name_is_reported_and_aborts_no_rule(rule):
+    # An empty `role` is dropped by the canonical form, which leaves `{access: read}`: the reader
+    # has no name, and the `contract` rule says so.
+    state = base()
+    state["txns"]["roles"] = [
+        {"role": "finance", "access": "read"},
+        {"access": "read"},
+    ]
+
+    findings = run(state, (rule,))
+
+    hits = [
+        (f.severity, f.rule, f.subject, f.message)
+        for f in findings
+        if f.severity == "error"
+    ]
+    assert hits == (
+        [
+            (
+                "error",
+                "contract",
+                "analytics.txns",
+                "reader '' is not a declared domain",
+            )
+        ]
+        if rule == "contract"
+        else []
+    )
+
+
+def test_a_reader_with_an_empty_role_is_one_error_over_every_release_rule():
+    state = base()
+    state["txns"] = contract(
+        "core",
+        "txns",
+        entity="Transaction",
+        reads=["analytics.events_sink"],
+        readers=("finance", ""),
+        columns=TRANSACTION_COLUMNS,
+    )
+    assert {"access": "read"} in state["txns"]["roles"]
+
+    findings = run(state, RELEASE_RULES)
+
+    [error] = [f for f in findings if f.severity == "error"]
+    assert (error.rule, error.subject, error.message) == (
+        "contract",
+        "analytics.txns",
+        "reader '' is not a declared domain",
+    )
 
 
 def test_a_role_that_is_not_a_reader_is_not_checked_as_a_domain():
@@ -1102,6 +1257,137 @@ def test_non_mapping_quality_params_is_a_quality_error():
     assert_finding(run(state), "error", "quality", "analytics.revenue", "params")
 
 
+def a_test(**params):
+    """A data-quality test whose params are `params`."""
+    return {
+        "type": "custom",
+        "engine": "data-quality",
+        "name": "drift",
+        "implementation": {"enabled": True, "params": params},
+    }
+
+
+def on_column(state, name, test):
+    """Put `test` on the column `name` of the revenue contract of `state`."""
+    [found] = [
+        c for c in table(state["revenue"])["properties"] if c["name"] == name
+    ]
+    found["quality"] = [test]
+
+
+def test_a_column_level_test_naming_a_missing_column_is_an_error():
+    state = base()
+    on_column(state, "revenue_eur", a_test(source_attribute="nope"))
+
+    findings = run(state, ("quality",))
+
+    [error] = [f for f in findings if f.severity == "error"]
+    assert (error.rule, error.subject, error.contract_id) == (
+        "quality",
+        "analytics.revenue",
+        "analytics.revenue",
+    )
+    assert error.message == (
+        "test 'drift' on column revenue_eur: source_attribute names 'nope', "
+        "which is not a column of analytics.revenue"
+    )
+
+
+def test_a_column_level_test_naming_real_columns_passes():
+    state = base()
+    on_column(
+        state,
+        "revenue_eur",
+        a_test(source_attribute="user_id", drift_attribute="revenue_eur"),
+    )
+
+    assert problems(run(state)) == []
+
+
+def test_a_table_test_and_a_column_test_are_both_checked():
+    state = base()
+    table(state["revenue"])["quality"] = [a_test(table_attribute="gone")]
+    on_column(state, "user_id", a_test(column_attribute="also_gone"))
+
+    messages = sorted(
+        f.message for f in run(state, ("quality",)) if f.severity == "error"
+    )
+
+    assert messages == [
+        "test 'drift' on column user_id: column_attribute names 'also_gone', "
+        "which is not a column of analytics.revenue",
+        "test 'drift': table_attribute names 'gone', which is not a column of "
+        "analytics.revenue",
+    ]
+
+
+def test_a_column_level_test_of_another_engine_is_not_checked():
+    state = base()
+    on_column(
+        state,
+        "revenue_eur",
+        {**a_test(source_attribute="nope"), "engine": "dbt"},
+    )
+
+    assert_no_finding(run(state), "error", "quality")
+
+
+@pytest.mark.parametrize("bad", [[], "", 0, False, ["user_id"], "user_id", 3])
+def test_a_params_value_that_is_not_a_mapping_is_an_error_whatever_it_holds(bad):
+    state = base()
+    table(state["revenue"])["quality"] = [
+        {
+            "type": "custom",
+            "engine": "data-quality",
+            "name": "drift",
+            "implementation": {"enabled": True, "params": bad},
+        }
+    ]
+
+    [error] = [f for f in run(state, ("quality",)) if f.severity == "error"]
+
+    assert error.message == (
+        f"test 'drift': params must be a mapping, not a {type(bad).__name__}"
+    )
+
+
+def test_a_column_level_params_value_that_is_not_a_mapping_is_an_error():
+    state = base()
+    on_column(
+        state,
+        "revenue_eur",
+        {
+            "type": "custom",
+            "engine": "data-quality",
+            "name": "drift",
+            "implementation": {"enabled": True, "params": []},
+        },
+    )
+
+    [error] = [f for f in run(state, ("quality",)) if f.severity == "error"]
+
+    assert error.message == (
+        "test 'drift' on column revenue_eur: params must be a mapping, not a list"
+    )
+
+
+@pytest.mark.parametrize(
+    "implementation", [{"enabled": True}, {"params": None}, {"params": {}}]
+)
+def test_a_missing_null_or_empty_params_value_passes(implementation):
+    state = base()
+    table(state["revenue"])["quality"] = [
+        {
+            "type": "custom",
+            "engine": "data-quality",
+            "name": "rows",
+            "implementation": implementation,
+        }
+    ]
+
+    assert_no_finding(run(state), "error", "quality")
+
+
 def test_a_test_of_another_engine_is_not_checked():
     state = base()
     table(state["revenue"])["quality"] = [
@@ -1149,6 +1435,33 @@ def test_personal_classification_on_a_non_personal_column_is_a_warning():
     assert_finding(
         run(state), "warning", "privacy", "analytics.seed_users", "created_at"
     )
+
+
+def test_a_key_part_that_is_also_a_personal_property_is_classified_once_resolved():
+    document = ontology_document()
+    document["entities"]["Subscriber"] = {
+        "owner": "core",
+        "key": {"email": "string"},
+        "properties": {"email": {"type": "string", "personal": True}},
+        "access": [
+            {
+                "properties": ["email"],
+                "readers": ["core"],
+                "purpose": "service_operation",
+            }
+        ],
+    }
+    chosen = ontology_of(document)
+    stored = contract(
+        "core", "subscribers", entity="Subscriber", columns=[("email", None)]
+    )
+
+    resolved = ontology.resolve(stored, chosen)
+
+    assert ontology_findings(chosen) == []
+    assert table(resolved)["properties"][0]["classification"] == "personal"
+    findings = check(chosen, [resolved], rules=PER_SERVICE_RULES)
+    assert problems(findings) == [], listing(findings)
 
 
 # The drift rule.
@@ -1401,6 +1714,59 @@ def progress_calls(contracts, rules):
     calls = []
     check(ONT, contracts, rules=rules, progress=lambda: calls.append(1))
     return len(calls)
+
+
+def test_the_reference_graph_is_built_once_however_many_contracts_are_checked(
+    monkeypatch,
+):
+    state = base()
+    for number in range(25):
+        state[f"copy{number}"] = contract(
+            "core",
+            f"copy{number}",
+            entity="Transaction",
+            columns=[
+                *TRANSACTION_COLUMNS,
+                ("born", "User.created_at"),
+                ("rate", "FxRate.rate_to_eur"),
+            ],
+        )
+    expected = run(state, RELEASE_RULES)
+    built = []
+    graph = ontology_check._reference_graph
+
+    def counting(entities):
+        built.append(entities)
+        return graph(entities)
+
+    monkeypatch.setattr(ontology_check, "_reference_graph", counting)
+
+    findings = run(state, RELEASE_RULES)
+
+    assert len(built) == 1
+    assert findings == expected
+    # Transaction reaches User and does not reach FxRate: one join warning for each copy.
+    joins = [
+        f for f in findings if f.severity == "warning" and "FxRate" in f.message
+    ]
+    assert len(joins) == 25
+
+
+def test_the_reference_graph_is_built_once_for_a_run_that_has_no_contract(
+    monkeypatch,
+):
+    built = []
+    graph = ontology_check._reference_graph
+
+    def counting(entities):
+        built.append(entities)
+        return graph(entities)
+
+    monkeypatch.setattr(ontology_check, "_reference_graph", counting)
+
+    check(ONT, [], rules=RELEASE_RULES)
+
+    assert len(built) == 1
 
 
 def test_progress_is_called_after_each_contract_of_each_rule():

@@ -136,6 +136,13 @@ def stored_without_bindings(project: str) -> dict[str, dict[str, Any]]:
     return _stored(project, _unbound(load_manifest(project)))
 
 
+def stored_from(
+    project: str, manifest: dict[str, Any]
+) -> dict[str, dict[str, Any]]:
+    """Return what `stored` returns for `project`, from `manifest` in place of its own."""
+    return _stored(project, manifest)
+
+
 def _stored(project: str, manifest: dict[str, Any]) -> dict[str, dict[str, Any]]:
     service = dbt.project_service(manifest, "")
     joined = dbt.tests_by_node(manifest)

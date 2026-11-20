@@ -90,6 +90,12 @@ a free-form value such as a property's `value`. An unknown name is `unknown_prop
 on the wrong object, or one the family does not carry, is `refused_property`. A repeat in one list
 is a `value` issue at each copy after the first.
 
+`vocabulary.is_name(value)` says whether a string can name a thing or a field of a thing: it is not
+empty and holds no whitespace, control character, dot or slash. The `entity` binding and each part
+of a `property` and of an `aggregate`'s `from` are checked with it, and so are the thing, key part
+and property names that `ontology.load` accepts, so a binding that `resolve` writes is one that
+`validate` accepts.
+
 `vocabulary.PROPERTIES` names each property and the object whose `customProperties` list carries
 it, `sits_on`: the contract (`root`), the schema object (`schema`), a quality rule (`quality`) or a
 column (`column`). Most sit on the contract. `reads`, `entity`, `grain`, `fixed` and `filter` sit on

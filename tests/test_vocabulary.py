@@ -8,6 +8,7 @@ from continuo_contracts.vocabulary import (
     VENDOR,
     ContinuoProperty,
     continuo_values,
+    is_name,
 )
 
 ROOT_AUTHORED = [
@@ -314,3 +315,49 @@ def test_continuo_values_gives_nothing_for_an_empty_list():
 def test_continuo_values_skips_an_unusable_item_and_keeps_the_rest(item):
     good = {"vendor": "continuo", "property": "criticality", "value": "CORE"}
     assert continuo_values([item, good]) == {"criticality": "CORE"}
+
+
+# The name of a thing or of a field of a thing.
+
+
+@pytest.mark.parametrize(
+    "name", ["User", "user_id", "created-at", "x", "Prénom", "名前", "a:b", "$1"]
+)
+def test_a_name_with_no_whitespace_control_character_dot_or_slash_is_a_name(
+    name,
+):
+    assert is_name(name) is True
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "",
+        " ",
+        "display name",
+        " lead",
+        "trail ",
+        "a\tb",
+        "a\nb",
+        "a\u00a0b",
+        "a\u2003b",
+        "a\x00b",
+        "a\x1fb",
+        "a\x7fb",
+        "a\x85b",
+        "a.b",
+        ".b",
+        "a.",
+        "a/b",
+        "/",
+    ],
+)
+def test_a_string_with_whitespace_a_control_character_a_dot_or_a_slash_is_no_name(
+    name,
+):
+    assert is_name(name) is False
+
+
+@pytest.mark.parametrize("value", [None, 3, 1.5, True, ["a"], {"a": 1}, b"a"])
+def test_a_value_that_is_not_a_string_is_no_name(value):
+    assert is_name(value) is False

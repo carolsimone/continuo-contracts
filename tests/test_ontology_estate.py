@@ -7,6 +7,7 @@ findings the estate gives is written down by hand below, a line for each with it
 finding that is not in it is a defect to look into, not a line to add.
 """
 
+import copy
 import json
 import re
 
@@ -21,17 +22,19 @@ from ontology_fixtures import (
     READS,
     resolved,
     stored,
+    stored_from,
     stored_without_bindings,
     without_filled,
 )
 
-from continuo_contracts import dbt, ontology
-from continuo_contracts.contract import contract_hash
+from continuo_contracts import dbt, ontology, yaml_strict
+from continuo_contracts.contract import contract_hash, normalise_python
 from continuo_contracts.ontology_check import (
     RELEASE_RULES,
     check,
     ontology_findings,
 )
+from continuo_contracts.validate import validate_python_contract
 
 ROOT = Path(__file__).resolve().parents[1]
 PROJECTS_DIR = ROOT / "tests" / "fixtures" / "dbt" / "projects"
@@ -42,6 +45,15 @@ GOLDEN = (
     / "ontology"
     / "golden"
     / "analytics.fx_transactions_eur.json"
+)
+PY_DEMO = (
+    ROOT
+    / "tests"
+    / "fixtures"
+    / "demo"
+    / "service-py"
+    / "contracts"
+    / "py_daily_kpis.odcs.yaml"
 )
 
 
@@ -168,6 +180,103 @@ def test_strip_of_a_bound_stored_form_is_the_stored_form_with_no_binding_key(
         assert contract_hash(stripped) == contract_hash(unbound[contract_id])
         # Hashed as written, without `strip`, the bound form hashes differently.
         assert contract_hash(contract) != contract_hash(unbound[contract_id])
+
+
+# Values that the canonical form drops, in contracts that validate accepts.
+
+
+def _emptied_dbt(project):
+    """The resolved contracts of `project`, generated from a manifest full of empty values.
+
+    Each node and column has an empty description and each node an empty list of tags. A node
+    that grants nothing and names no reader has an empty mapping of grants and an empty list of
+    readers. The stored form leaves each of them out.
+    """
+    manifest = copy.deepcopy(load_manifest(project))
+    for node in manifest["nodes"].values():
+        node["description"] = ""
+        node["tags"] = []
+        node["config"].setdefault("grants", {})
+        node["config"].setdefault("meta", {}).setdefault(
+            "continuo", {}
+        ).setdefault("readers", [])
+        for column in node.get("columns", {}).values():
+            column["description"] = ""
+    return {
+        contract_id: ontology.resolve(contract, DEMO)
+        for contract_id, contract in stored_from(project, manifest).items()
+    }
+
+
+def _emptied_python():
+    """A bound Python contract of `service-py` that writes values the stored form leaves out.
+
+    It has an empty reader role, which is dropped and leaves `{access: read}`, an empty
+    description, empty tags and quality, empty `fixed` and `filter` mappings, and columns with an
+    empty description and classification. It is valid, and its one finding is the reader that has
+    no name.
+    """
+    doc = yaml_strict.load(PY_DEMO.read_text(encoding="utf-8"))
+    doc.update(id="analytics.py_empties", name="py_empties")
+    doc["roles"] = [{"role": "", "access": "read"}]
+    doc["tags"] = []
+    doc["description"]["usage"] = ""
+    table = doc["schema"][0]
+    table.update(name="py_empties", quality=[])
+    table["customProperties"] = [
+        {"vendor": "continuo", "property": "grain", "value": ["day"]},
+        {"vendor": "continuo", "property": "fixed", "value": {}},
+        {"vendor": "continuo", "property": "filter", "value": {}},
+    ]
+    for column in table["properties"]:
+        column.update(description="", classification="", tags=[])
+        column["customProperties"] = [
+            {"vendor": "continuo", "property": "local", "value": True}
+        ]
+    assert (
+        validate_python_contract(
+            doc, path="contracts/py_empties.odcs.yaml", service="service-py"
+        )
+        == []
+    )
+    stored_form = normalise_python(doc, service="service-py", reads=[])
+    assert stored_form["roles"] == [{"access": "read"}]
+    return ontology.resolve(stored_form, DEMO)
+
+
+def test_empty_values_the_stored_form_drops_abort_no_rule():
+    contracts = [
+        *_emptied_dbt("core_bound").values(),
+        *_emptied_dbt("finance_bound").values(),
+        _emptied_python(),
+    ]
+
+    findings = check(DEMO, contracts, rules=RELEASE_RULES)
+
+    got = sorted(
+        (f.severity, f.rule, f.subject) for f in findings if f.severity != "info"
+    )
+    # The dbt nodes give the findings they give with their values written; the Python contract
+    # adds the reader with no name, the one finding about it.
+    assert got == sorted(
+        [*EXPECTED, ("error", "contract", "analytics.py_empties")]
+    )
+    [reader] = [
+        f
+        for f in findings
+        if f.subject == "analytics.py_empties" and f.severity != "info"
+    ]
+    assert reader.message == "reader '' is not a declared domain"
+
+
+@pytest.mark.parametrize("rule", RELEASE_RULES)
+def test_each_rule_runs_over_contracts_with_empty_values(rule):
+    contracts = [
+        *_emptied_dbt("core_bound").values(),
+        _emptied_python(),
+    ]
+
+    check(DEMO, contracts, rules=(rule,))
 
 
 # Where the contracts come after the models they read.

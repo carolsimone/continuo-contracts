@@ -30,11 +30,14 @@ string, is allowed on every mapping in the table.
 | an access rule | `properties`, `readers`, `purpose` |
 
 Every value is a string except `personal` and `nullable` (true or false), the lists `derived_from`,
-`properties` and `readers` (of strings) and `access` (of access rules). A name is not blank. The
-mappings of names (`domains`, `services`, `teams`, `roles`, `entities`, `key` and `properties`)
-take no `description`, because it would be a name. A type is `int`, `string`, `timestamp`, `date`,
+`properties` and `readers` (of strings) and `access` (of access rules). A name is not blank, and
+the name of a thing, of a key part and of a property is one that `<Thing>.<field>` can carry, so
+`vocabulary.is_name` accepts it: no whitespace, control character, dot or slash. The mappings of
+names (`domains`, `services`, `teams`, `roles`, `entities`, `key` and `properties`) take no
+`description`, because it would be a name. A type is `int`, `string`, `timestamp`, `date`,
 `money`, `decimal`, `bool`, `enum[a, b]` or `ref <Thing>`, and a property may write `ref: <Thing>`
-instead of a type.
+instead of a type. Both spellings are one reference, to the rules and to `resolve` alike, and when
+a property writes both, `ref` wins.
 
 ```python
 >>> from continuo_contracts import ontology
@@ -61,6 +64,10 @@ instead of a type.
 Traceback (most recent call last):
   ...
 continuo_contracts.errors.OntologyError: entities.User.personnal: unknown key, the keys of a thing are access, born_in, description, key, owner, properties
+>>> ontology.load("entities: {User: {properties: {'display name': {}}}}")
+Traceback (most recent call last):
+  ...
+continuo_contracts.errors.OntologyError: entities.User.properties: a property name has no whitespace, control character, dot or slash, got 'display name'
 
 ```
 
@@ -115,15 +122,17 @@ fills:
 - on a table whose `entity` is a thing, a link to the thing, the `authoritativeDefinitions` entry
   `{type: ontology, url: "continuo-ontology:<Thing>"}` (`ontology.LINK_PREFIX` is the prefix);
 - on a column with no binding, when the thing has a key part or a property of that name, the
-  binding `property: <Thing>.<name>`;
+  binding `property: <Thing>.<name>` (a column whose name `vocabulary.is_name` refuses gets none);
 - on a column whose `property` names a field of a thing that exists, the link
   `continuo-ontology:<Thing>.<field>`, the `logicalType` of the field's type, `classification:
-  personal` for a personal property, and for a key part of the table's own thing, when no column
+  personal` for a personal field, and for a key part of the table's own thing, when no column
   has `primaryKey: true`, `primaryKey: true` and its `primaryKeyPosition`, the place of the part in
-  the thing's `key`, from 1;
-- on a column with an `aggregate` whose `from` exists, `semanticType: measure` and the `logicalType`
-  of `from` when it has an `agg` (`integer` for `count`), or `semanticType: dimension` and
-  `logicalType: date` when it has a `period` and no `agg`.
+  the thing's `key`, from 1. A key part is looked up before a property of the same name, which
+  gives the type and the place, and it is personal when that property is;
+- on a column with an `aggregate` that has a `from` or a `period` and whose `from` exists,
+  `semanticType: measure` and the `logicalType` of `from` when it has an `agg` (`integer` for
+  `count`), or `semanticType: dimension` and `logicalType: date` when it has a `period` and no
+  `agg`.
 
 | Type | `logicalType` |
 |---|---|
@@ -139,7 +148,9 @@ Any other type gives no `logicalType`. A key of one column carries no `primaryKe
 filled the key, as every stored form has it. A binding that does not resolve, a thing or a field
 the ontology lacks or a value of the wrong shape, stays as written and fills nothing, and so does a
 column that holds more than one of `property`, `local` and `aggregate`: `resolve` fills and the
-[rules](#the-rules) judge. It reads the top-level columns only.
+[rules](#the-rules) judge. A `Thing.` with no field, an `aggregate` with neither a `from` nor a
+`period` and an `agg` that is not a string are of the wrong shape. It reads the top-level columns
+only.
 
 The contract below binds `customers` to `Customer`. The author writes `entity` and `local`, and
 `resolve` finds the key, the personal column and the types:
@@ -215,10 +226,10 @@ run, except `ontology`; any other name raises `ValueError` before a rule runs.
 
 | Rule | Checks | Findings |
 |---|---|---|
-| `ontology` | the file alone: each service names a declared domain, each thing an owner that is a declared domain, each `ref` a thing, each `derived_from` a thing or a field that exists, each access rule properties of its thing and readers that are domains, each personal property an access rule | errors |
+| `ontology` | the file alone: each service names a declared domain, each thing an owner that is a declared domain, each `ref` (either spelling) a thing, each `derived_from` a thing or a `Thing.field` that exists, each access rule properties of its thing and readers that are domains, each personal property an access rule | errors |
 | `contract` | the domain is the service's; exactly one of `entity` and `grain`; the thing exists; `fixed` names key parts, with a value an `enum` allows; `filter` names fields; each binding names a field that exists; each reader is a declared domain | errors, and a warning for a column that comes from a thing the entity does not reach through a reference |
 | `coverage` | each column has a binding, no column has two, and a copy carries each key part or fixes or filters it | a warning for unbound columns, errors for the others |
-| `quality` | a data-quality test's `*_attribute` parameter names a column | errors |
+| `quality` | a data-quality test's `*_attribute` parameter names a column of the contract, for a test on the table or on a column, and its `params` is a mapping | errors |
 | `privacy` | a column that holds a personal property is classified `personal`, and no other column is | an error for the first, a warning for the second |
 | `access` | a contract reads a table only when its service's domain is the table's domain or its thing's owner, or the table's contract lists that domain as a reader | an error for a read without a grant, a warning for a table no checked contract holds |
 | `order` | the copies fall into layers by what they read, none in a cycle (a contract's read of its own relation, as an incremental model makes, is no edge), and a thing's copies follow its birth copy, the one `born_in` names | errors for a cycle, a copy upstream of the birth copy or a `born_in` that names a copy of another thing, warnings for a copy with no path from the birth copy or a `born_in` no contract holds, and one `info` finding with the layers |

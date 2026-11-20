@@ -20,7 +20,8 @@ rule                  what it checks
 `contract`            a contract's domain, its entity or grain, `fixed`, `filter`, each
                       column's binding and the domains of its readers
 `coverage`            each column has one binding, and a copy carries every key part
-`quality`             a data-quality test names columns of the contract
+`quality`             a data-quality test, on the table or on a column, names columns of
+                      the contract
 `privacy`             a personal property is classified personal, and only one is
 `access`              a contract reads only what its domain may read
 `order`               the copies are in layers, none in a cycle, and a thing's copies follow
@@ -59,12 +60,12 @@ copies of that thing are not ordered against a birth copy. The layers are one `i
 
 import re
 
-from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping, Sequence, Set
+from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any, Final
 
-from continuo_contracts.ontology import Ontology, has_bindings
+from continuo_contracts.ontology import Ontology, _reference, has_bindings
 from continuo_contracts.vocabulary import continuo_values
 
 SEVERITIES: Final[tuple[str, ...]] = ("error", "warning", "info")
@@ -107,7 +108,6 @@ _UNDECLARED_BINDINGS: Final = (
 _COLUMN_BINDINGS: Final = ("property", "local", "aggregate")
 
 _ENUM: Final = re.compile(r"enum\[(.*)\]")
-_REF: Final = re.compile(r"ref\s+(\S+)")
 
 
 @dataclass(frozen=True)
@@ -133,7 +133,9 @@ class _Copy:
 
     `entity` is empty and `grain` has no item for a contract that writes none. `bindings` holds
     the columns that write a binding, with the first of `property`, `local` and `aggregate`
-    that the column writes, and `kinds` lists, for each column, every one it writes.
+    that the column writes, and `kinds` lists, for each column, every one it writes. `quality`
+    lists each quality rule of the table and of its columns with the name of the column it sits
+    on, `None` for a rule of the table.
     """
 
     id: str
@@ -150,14 +152,16 @@ class _Copy:
     bindings: Mapping[str, Mapping[str, Any]]
     kinds: Mapping[str, Sequence[str]]
     classification: Mapping[str, Any]
-    quality: Sequence[Mapping[str, Any]]
+    quality: Sequence[tuple[str | None, Mapping[str, Any]]]
 
 
 @dataclass(frozen=True)
 class _Estate:
     """The ontology and the copies that the rules of one `check` read.
 
-    `copies` is sorted by `id`, and `by_relation` finds a copy by its physical relation.
+    `copies` is sorted by `id`, and `by_relation` finds a copy by its physical relation. `graph`
+    links each thing to the things it references and to those that reference it, and is built
+    once for the estate. `reachable` answers from it, once for each thing that it is asked about.
     """
 
     ontology: Ontology
@@ -165,6 +169,23 @@ class _Estate:
     domains: Mapping[str, Any]
     copies: Sequence[_Copy]
     by_relation: Mapping[str, _Copy]
+    graph: Mapping[str, Set[str]]
+    _reached: dict[str, Set[str]] = field(
+        default_factory=dict, init=False, repr=False, compare=False
+    )
+
+    def reachable(self, start: str) -> Set[str]:
+        """Return the things reachable from `start` through references, in either direction."""
+        found = self._reached.get(start)
+        if found is None:
+            seen, todo = {start}, [start]
+            while todo:
+                for following in self.graph.get(todo.pop(), ()):
+                    if following not in seen:
+                        seen.add(following)
+                        todo.append(following)
+            found = self._reached[start] = frozenset(seen)
+        return found
 
 
 type _Pass = Callable[[_Estate, Callable[[], None]], list[Finding]]
@@ -279,22 +300,23 @@ def _thing_findings(
                 name, f"owner {thing.get('owner')!r} is not a declared domain"
             )
         )
-    for part in _key_parts(thing):
-        target = _ref_of(thing, part)
-        if target and target not in entities:
+    for part, referenced in _key_references(thing).items():
+        if referenced not in entities:
             findings.append(
                 _ontology_error(
                     f"{name}.{part}",
-                    f"key references {target}, which is not a thing",
+                    f"key references {referenced}, which is not a thing",
                 )
             )
     properties = _properties(thing)
+    references = _property_references(thing)
     for prop, spec in properties.items():
-        if spec.get("ref") and spec["ref"] not in entities:
+        target = references.get(prop)
+        if target is not None and target not in entities:
             findings.append(
                 _ontology_error(
                     f"{name}.{prop}",
-                    f"references {spec['ref']}, which is not a thing",
+                    f"references {target}, which is not a thing",
                 )
             )
         for source in spec.get("derived_from", []):
@@ -358,43 +380,51 @@ def _enum_values(type_text: str) -> list[str] | None:
     )
 
 
-def _ref_of(thing: Mapping[str, Any], name: str) -> str | None:
-    """Return the thing that the key part or property `name` references, if any."""
-    parts = _key_parts(thing)
-    if name in parts:
-        found = _REF.fullmatch(parts[name].strip())
-        return found.group(1) if found else None
-    ref: str | None = _properties(thing).get(name, {}).get("ref")
-    return ref
+def _key_references(thing: Mapping[str, Any]) -> dict[str, str]:
+    """Return the thing that each key part references, by part, for the parts that reference one."""
+    return {
+        part: target
+        for part, kind in _key_parts(thing).items()
+        if (target := _reference(kind))
+    }
+
+
+def _property_references(thing: Mapping[str, Any]) -> dict[str, str]:
+    """Return the thing that each property references, by property, in either spelling."""
+    return {
+        prop: target
+        for prop, spec in _properties(thing).items()
+        if (target := _reference(spec.get("type"), spec.get("ref")))
+    }
 
 
 def _references(thing: Mapping[str, Any]) -> set[str]:
-    return {ref for name in _fields(thing) if (ref := _ref_of(thing, name))}
+    return {
+        *_key_references(thing).values(),
+        *_property_references(thing).values(),
+    }
 
 
-def _reachable(entities: Mapping[str, Any], start: str) -> set[str]:
-    """Return the things reachable from `start` through references, in either direction."""
+def _reference_graph(entities: Mapping[str, Any]) -> dict[str, Set[str]]:
+    """Return, for each thing, the things it references and the things that reference it."""
     links: dict[str, set[str]] = {name: set() for name in entities}
     for name, thing in entities.items():
         for target in _references(thing):
             if target in links:
                 links[name].add(target)
                 links[target].add(name)
-    seen, todo = {start}, [start]
-    while todo:
-        for following in links.get(todo.pop(), ()):
-            if following not in seen:
-                seen.add(following)
-                todo.append(following)
-    return seen
+    return dict(links)
 
 
 def _unresolved(entities: Mapping[str, Any], dotted: str) -> str | None:
-    """Return `None` when `Thing` or `Thing.field` exists, else why it does not."""
-    name, _, prop = dotted.partition(".")
+    """Return `None` when `Thing` or `Thing.field` exists, else why it does not.
+
+    A dot with nothing after it is a field with no name, not the thing alone.
+    """
+    name, dot, prop = dotted.partition(".")
     if name not in entities:
         return f"{name} is not a thing in the ontology"
-    if prop and prop not in _fields(entities[name]):
+    if dot and prop not in _fields(entities[name]):
         return f"{dotted} is not a property or key part of {name}"
     return None
 
@@ -426,12 +456,14 @@ def _estate(ontology: Ontology, declared: Sequence[Mapping[str, Any]]) -> _Estat
     for copy in copies:
         by_relation.setdefault(copy.relation, copy)
     principals: Mapping[str, Any] = ontology.document.get("principals", {})
+    entities: Mapping[str, Any] = ontology.document.get("entities", {})
     return _Estate(
         ontology,
-        ontology.document.get("entities", {}),
+        entities,
         principals.get("domains", {}),
         copies,
         by_relation,
+        _reference_graph(entities),
     )
 
 
@@ -446,7 +478,13 @@ def _copy(stored: Mapping[str, Any]) -> _Copy:
     raw_columns = table.get("properties", [])
     bindings: dict[str, Mapping[str, Any]] = {}
     kinds: dict[str, tuple[str, ...]] = {}
+    quality: list[tuple[str | None, Mapping[str, Any]]] = [
+        (None, rule) for rule in table.get("quality", [])
+    ]
     for column in raw_columns:
+        quality.extend(
+            (column["name"], rule) for rule in column.get("quality", [])
+        )
         written = continuo_values(column.get("customProperties"))
         column_kinds = tuple(
             kind
@@ -471,8 +509,10 @@ def _copy(stored: Mapping[str, Any]) -> _Copy:
         fixed=values.get("fixed", {}),
         filter_=values.get("filter", {}),
         reads=values.get("reads", []),
+        # The canonical form drops an empty `role`, so a reader may have no name here: the
+        # `contract` rule reports it.
         readers=[
-            role["role"]
+            role.get("role", "")
             for role in stored.get("roles", [])
             if role.get("access") == "read"
         ],
@@ -482,7 +522,7 @@ def _copy(stored: Mapping[str, Any]) -> _Copy:
         classification={
             column["name"]: column.get("classification") for column in raw_columns
         },
-        quality=table.get("quality", []),
+        quality=quality,
     )
 
 
@@ -519,7 +559,7 @@ def _contract_rule(estate: _Estate, copy: _Copy) -> list[Finding]:
             )
         )
     thing: Mapping[str, Any] | None = None
-    linked: set[str] = set()
+    linked: Set[str] = frozenset()
     if copy.entity:
         if copy.entity not in entities:
             findings.append(
@@ -531,7 +571,7 @@ def _contract_rule(estate: _Estate, copy: _Copy) -> list[Finding]:
             )
         else:
             thing = entities[copy.entity]
-            linked = _reachable(entities, copy.entity)
+            linked = estate.reachable(copy.entity)
     if thing is not None:
         findings.extend(_selection_findings(copy, thing))
     for column, binding in copy.bindings.items():
@@ -747,8 +787,8 @@ def _order_rule(estate: _Estate, progress: Callable[[], None]) -> list[Finding]:
         edges[copy.id] = {
             target.id
             for relation in copy.reads
-            if (target := estate.by_relation.get(relation.lower()))
-            and target.id != copy.id
+            if relation.lower() != copy.relation
+            and (target := estate.by_relation.get(relation.lower()))
         }
         progress()
     layers = _layers(edges)
@@ -881,28 +921,31 @@ def _drift_rule(estate: _Estate, progress: Callable[[], None]) -> list[Finding]:
 
 def _quality_rule(estate: _Estate, copy: _Copy) -> list[Finding]:
     findings: list[Finding] = []
-    for test in copy.quality:
+    for column, test in copy.quality:
         if test.get("engine") != "data-quality":
             continue
+        where = "" if column is None else f" on column {column}"
         implementation = test.get("implementation")
         if not isinstance(implementation, Mapping):
             findings.append(
                 _error(
                     "quality",
                     copy,
-                    f"test {test.get('name')!r}: the data-quality engine needs an "
+                    f"test {test.get('name')!r}{where}: the data-quality engine needs an "
                     "implementation mapping with enabled, granularity and params, "
                     f"not a {type(implementation).__name__}",
                 )
             )
             continue
-        params = implementation.get("params") or {}
+        params = implementation.get("params")
+        if params is None:
+            params = {}
         if not isinstance(params, Mapping):
             findings.append(
                 _error(
                     "quality",
                     copy,
-                    f"test {test.get('name')!r}: params must be a mapping, "
+                    f"test {test.get('name')!r}{where}: params must be a mapping, "
                     f"not a {type(params).__name__}",
                 )
             )
@@ -911,7 +954,7 @@ def _quality_rule(estate: _Estate, copy: _Copy) -> list[Finding]:
             _error(
                 "quality",
                 copy,
-                f"test {test.get('name')!r}: {key} names {value!r}, "
+                f"test {test.get('name')!r}{where}: {key} names {value!r}, "
                 f"which is not a column of {copy.id}",
             )
             for key, value in params.items()

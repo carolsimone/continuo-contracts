@@ -10,6 +10,10 @@ declares and which domain each belongs to.
 whose keys are names (the domains, the services, a thing's properties) has no `description` key
 of its own, because it would be a name.
 
+The name of a thing, of a key part and of a property is written in `<Thing>.<field>` by the
+bindings of a contract, so `load` refuses one that `vocabulary.is_name` refuses: a name with
+whitespace, a control character, a dot or a slash. The names of the principals are free.
+
 ====================  ==================================================================
 mapping               keys
 ====================  ==================================================================
@@ -45,7 +49,7 @@ from continuo_contracts import yaml_strict
 from continuo_contracts.contract import _drop_single_key_position, canonical_form
 from continuo_contracts.errors import OntologyError, StrictYamlError
 from continuo_contracts.hashing import sha256_hex
-from continuo_contracts.vocabulary import VENDOR, continuo_values
+from continuo_contracts.vocabulary import VENDOR, continuo_values, is_name
 
 # The `url` of an `authoritativeDefinitions` entry that links a contract to the ontology.
 LINK_PREFIX: Final = "continuo-ontology:"
@@ -89,7 +93,8 @@ class Ontology:
 
 # What the shape check knows about each kind of value. A `_Leaf` is a scalar of one Python type
 # and `what` says it in the message; a `_List` holds items of one spec; a `_Record` is a mapping
-# with a fixed set of keys; a `_Named` is a mapping of names to values of one spec.
+# with a fixed set of keys; a `_Named` is a mapping of names to values of one spec, and `bound`
+# says that each name is one that `<Thing>.<field>` can carry.
 
 
 @dataclass(frozen=True)
@@ -115,6 +120,7 @@ class _Named:
     names: str
     value: _Spec
     values: str
+    bound: bool = False
 
 
 type _Spec = _Leaf | _List | _Record | _Named
@@ -150,8 +156,8 @@ _THING: Final = _record(
     "a thing",
     owner=_TEXT,
     born_in=_TEXT,
-    key=_Named("part", _TEXT, "type string"),
-    properties=_Named("property", _PROPERTY, "property"),
+    key=_Named("part", _TEXT, "type string", bound=True),
+    properties=_Named("property", _PROPERTY, "property", bound=True),
     access=_List("a list of access rules", _ACCESS),
 )
 _ONTOLOGY: Final = _record(
@@ -164,7 +170,7 @@ _ONTOLOGY: Final = _record(
         roles=_by_name("role", idp_group=_TEXT),
         people=_record("people", source=_TEXT),
     ),
-    entities=_Named("thing", _THING, "thing"),
+    entities=_Named("thing", _THING, "thing", bound=True),
 )
 
 _KINDS: Final = {
@@ -182,8 +188,10 @@ def load(text: str) -> Ontology:
     """Return the `Ontology` that the YAML `text` holds.
 
     The text is read with `yaml_strict.load` and its shape is checked against the keys the
-    module describes: each value has the type of its key, and a key that the module does not
-    list is refused. Raises `OntologyError` for any failure, with the message `<path>: <reason>`,
+    module describes: each value has the type of its key, a key that the module does not
+    list is refused, and so is a name that is blank and a thing, key part or property name that
+    `vocabulary.is_name` refuses (the path of such a name is that of the mapping that holds it).
+    Raises `OntologyError` for any failure, with the message `<path>: <reason>`,
     where the path is dotted, such as `entities.User.personnal`, with `[<index>]` for an item of
     a list, and is `<root>` for the document itself. A text that strict YAML refuses is reported
     at `<root>` with the reader's own message. Only the first failure, in the order of the
@@ -232,6 +240,12 @@ def _check(value: object, spec: _Spec, path: str) -> None:
             if not key.strip():
                 raise _refusal(
                     path, f"a {spec.names} name is not blank, got {key!r}"
+                )
+            if spec.bound and not is_name(key):
+                raise _refusal(
+                    path,
+                    f"a {spec.names} name has no whitespace, control character, dot or "
+                    f"slash, got {key!r}",
                 )
             _check(entry, spec.value, _join(path, key))
 
@@ -351,6 +365,21 @@ _LOGICAL_TYPES: Final = MappingProxyType(
 _REF: Final = re.compile(r"ref\s+(\S+)")
 
 
+def _reference(type_text: object, ref: object = None) -> str | None:
+    """Return the thing that a field references, or `None` when it references none.
+
+    A property writes its reference as `ref: <Thing>` or as the type `ref <Thing>`, and a key part
+    as the type alone. `ref`, the value of a property's `ref` key, wins when it is not empty, as
+    it does when a property writes both. This is the one place that reads either spelling.
+    """
+    if ref:
+        return str(ref)
+    if not isinstance(type_text, str):
+        return None
+    found = _REF.fullmatch(type_text.strip())
+    return found.group(1) if found else None
+
+
 @dataclass(frozen=True)
 class _Field:
     """A key part or a property of a thing.
@@ -383,28 +412,32 @@ def resolve(stored: Mapping[str, Any], ontology: Ontology) -> dict[str, Any]:
     - on a schema object whose `entity` names a thing of the ontology: a link to the thing, an
       `authoritativeDefinitions` entry of `type` `ontology` and the `url` `continuo-ontology:<Thing>`;
     - on each column with no binding (no `property`, `local` or `aggregate`), when the entity
-      is a thing that has a key part or a property of the column's name: the binding
-      `property: <Thing>.<column>`;
+      is a thing that has a key part or a property of the column's name and `vocabulary.is_name`
+      accepts the name: the binding `property: <Thing>.<column>`;
     - on each column whose `property` is `<Thing>.<field>`, where the thing and the field
       exist: a link `continuo-ontology:<Thing>.<field>`; the `logicalType` of the field's type
       (`int` is `integer`, `string` is `string`, `timestamp` is `timestamp`, `date` is `date`,
       `money` and `decimal` are `number`, `bool` is `boolean`, `enum[...]` is `string`, and
       `ref <Thing>` is the type of the key of that thing when its key has one part, so the
       type of a part is read from the key before a property of the same name, and any other
-      type gives no `logicalType`); `classification: personal` for a property with
-      `personal: true`; and, when `<Thing>` is the entity of the schema object, `<field>` is a
+      type gives no `logicalType`; a property writes a reference as `ref: <Thing>` or as the
+      type `ref <Thing>`, and `ref` wins when it writes both); `classification: personal` for
+      a field with `personal: true` (a key part is personal when the property of the same name
+      is); and, when `<Thing>` is the entity of the schema object, `<field>` is a
       part of its key and no column of the schema object has `primaryKey: true`,
       `primaryKey: true` with the `primaryKeyPosition` of the part, its place in the thing's
       key counted from 1 in file order (a contract that ends with one key column, whatever
       filled it, holds no position, as every stored form does);
-    - on each column with an `aggregate` whose `from` exists (when it has one): `semanticType:
-      measure` and the `logicalType` of `from` when it has an `agg` (`integer` for `count`), and
-      `semanticType: dimension` and `logicalType: date` when it has a `period` and no `agg`.
+    - on each column with an `aggregate` that has a `from` or a `period` and whose `from` exists
+      (when it has one): `semanticType: measure` and the `logicalType` of `from` when it has an
+      `agg` (`integer` for `count`), and `semanticType: dimension` and `logicalType: date` when
+      it has a `period` and no `agg`.
 
     A binding that does not resolve (a thing or a field the ontology does not have, or a value
-    of the wrong shape) is left as written and nothing is filled for it, and so is a column that
-    holds more than one of `property`, `local` and `aggregate`. Whether a binding resolves is for
-    `ontology_check`. Only top-level columns are read.
+    of the wrong shape, such as `Thing.` with no field, an `aggregate` with neither a `from` nor
+    a `period` or an `agg` that is not a string) is left as written and nothing is filled for it,
+    and so is a column that holds more than one of `property`, `local` and `aggregate`. Whether a
+    binding resolves is for `ontology_check`. Only top-level columns are read.
     """
     resolved = canonical_form(stored)
     service = continuo_values(resolved.get("customProperties")).get("service")
@@ -436,7 +469,7 @@ def _resolve_table(table: dict[str, Any], entities: Mapping[str, Any]) -> None:
             continue
         if not kinds and thing is not None:
             name = column.get("name")
-            if _field(thing, name) is not None:
+            if is_name(name) and _field(thing, name) is not None:
                 bound = {"property": f"{entity}.{name}"}
                 column.setdefault("customProperties", []).append(
                     {
@@ -482,29 +515,37 @@ def _resolve_property(
 def _resolve_aggregate(
     column: dict[str, Any], value: object, entities: Mapping[str, Any]
 ) -> None:
-    """Fill `column` from the `aggregate` mapping `value`, when its `from` resolves."""
+    """Fill `column` from the `aggregate` mapping `value`, when it is well formed and resolves.
+
+    It is well formed when it has a `from` or a `period` that is a string with text, and an `agg`
+    that is a string when it has one.
+    """
     if not isinstance(value, Mapping):
         return
     source = value.get("from")
+    period = value.get("period")
+    agg = value.get("agg")
+    named_period = isinstance(period, str) and bool(period)
+    if (source is None and not named_period) or not isinstance(agg, str | None):
+        return
     logical = None
     if source is not None:
         if not isinstance(source, str):
             return
-        name, _, field_name = source.partition(".")
+        name, dot, field_name = source.partition(".")
         thing = entities.get(name)
         if thing is None:
             return
-        if field_name:
+        if dot:
             found = _field(thing, field_name)
             if found is None:
                 return
             logical = _logical_type(entities, found.type, ())
-    agg = value.get("agg")
-    if agg and isinstance(agg, str):
+    if agg:
         semantic = "measure"
         if agg == "count":
             logical = "integer"
-    elif value.get("period") and isinstance(value["period"], str):
+    elif named_period:
         semantic, logical = "dimension", "date"
     else:
         return
@@ -525,21 +566,24 @@ def _add_link(obj: dict[str, Any], url: str) -> None:
 def _field(thing: Mapping[str, Any] | None, name: object) -> _Field | None:
     """Return the key part or property `name` of `thing`, or `None` when it has none.
 
-    A key part is looked up before a property of the same name.
+    A key part is looked up before a property of the same name: its type and its place are the
+    key's. The property of that name still says whether the field is personal, so a key part
+    named by a personal property is personal.
     """
     if thing is None or not isinstance(name, str):
         return None
     key: Mapping[str, str] = thing.get("key", {})
-    if name in key:
-        return _Field(key[name], False, list(key).index(name) + 1)
     properties: Mapping[str, Mapping[str, Any]] = thing.get("properties", {})
     declared = properties.get(name)
+    personal = declared is not None and declared.get("personal") is True
+    if name in key:
+        return _Field(key[name], personal, list(key).index(name) + 1)
     if declared is None:
         return None
-    ref = declared.get("ref")
+    target = _reference(declared.get("type"), declared.get("ref"))
     return _Field(
-        f"ref {ref}" if ref is not None else declared.get("type"),
-        declared.get("personal") is True,
+        declared.get("type") if target is None else f"ref {target}",
+        personal,
         None,
     )
 
@@ -558,8 +602,8 @@ def _logical_type(
         return _LOGICAL_TYPES[text]
     if text.startswith("enum[") and text.endswith("]"):
         return "string"
-    ref = _REF.fullmatch(text)
-    if ref is None or (target := ref.group(1)) in seen:
+    target = _reference(text)
+    if target is None or target in seen:
         return None
     key: Mapping[str, str] = entities.get(target, {}).get("key", {})
     if len(key) != 1:

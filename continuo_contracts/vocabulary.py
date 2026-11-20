@@ -5,7 +5,13 @@ An ODCS contract carries custom properties as `{vendor, property, value}` items 
 each one the library knows, the place of the contract where it sits, who may write it in a
 Python contract and what a dbt contract does with it. `continuo_values` reads the values of the
 items of one list.
+
+The bindings name things and their fields as `<Thing>` and `<Thing>.<field>`. `is_name` says
+whether a string can be the name of one of them, so the ontology file, the resolution of a
+contract and the validation of a binding all read one rule.
 """
+
+import re
 
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -13,6 +19,9 @@ from types import MappingProxyType
 from typing import Any, Final
 
 VENDOR: Final = "continuo"
+
+# The control characters: C0 (U+0000 to U+001F), DEL (U+007F) and C1 (U+0080 to U+009F).
+_CONTROL: Final = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 
 
 @dataclass(frozen=True)
@@ -96,3 +105,21 @@ def continuo_values(custom_properties: object) -> dict[str, Any]:
         if isinstance(name, str) and "value" in item:
             values[name] = item["value"]
     return values
+
+
+def is_name(value: object) -> bool:
+    """Say whether `value` can be the name of a thing, or of a field of a thing.
+
+    A name is a string that is not empty and holds no whitespace (what `str.isspace` reads as
+    whitespace, the same code points on every supported Python), no control character (U+0000 to
+    U+001F and U+007F to U+009F), no dot and no slash. A dot separates the thing from the field
+    in `<Thing>.<field>`, so a name that held one could not be written there.
+    """
+    return (
+        isinstance(value, str)
+        and bool(value)
+        and not any(character.isspace() for character in value)
+        and _CONTROL.search(value) is None
+        and "." not in value
+        and "/" not in value
+    )

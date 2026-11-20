@@ -367,7 +367,8 @@ def check_manifest(
     nodes = manifest.get("nodes") or {}
     found: dict[str, list[Line]] = {}
     claims: dict[str, list[tuple[str, str | None]]] = {}
-    # The stored form of each contract that the ontology may be read against, by node id.
+    # The stored form of each contract that the ontology is read against, by node id: kept only
+    # when there is an ontology, so a check without one lets each form go once it is hashed.
     stored_forms: dict[str, dict[str, Any]] = {}
     unskipped = 0
     for node_id in sorted(nodes):
@@ -394,8 +395,12 @@ def check_manifest(
         )
         if contract_id is not None:
             claims.setdefault(contract_id, []).append((node_id, digest))
-        if stored is not None and (
-            not declared_service or dbt.node_service(node) == declared_service
+        if (
+            ontology is not None
+            and stored is not None
+            and (
+                not declared_service or dbt.node_service(node) == declared_service
+            )
         ):
             stored_forms[node_id] = stored
     contracts: dict[str, str] = {}

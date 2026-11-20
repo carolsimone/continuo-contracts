@@ -50,7 +50,7 @@ A module imports only from the rows below it, and the modules of one row import 
 | `contract` | The stored form and `contract_hash` |
 | `python`, `yaml_strict`, `dbt` | Python node and projection, contract file reader, dbt nodes |
 | `canonical`, `hashing`, `schema`, `fingerprints` | Canonical JSON, folds, ODCS schema, input map |
-| `errors`, `vocabulary` | The errors, the `continuo` custom properties and where each may sit |
+| `errors`, `vocabulary` | The errors, the `continuo` custom properties and where each may sit, and the rule for the name of a thing |
 
 Each library is confined to the modules that need it: jsonschema to `validate`, PyYAML to
 `yaml_strict` and `fingerprints`, `logging` and `subprocess` to `cli`. `uv run lint-imports`
