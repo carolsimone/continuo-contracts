@@ -25,7 +25,11 @@ from continuo_contracts.vocabulary import continuo_values
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "dbt"
 PROJECTS = ("cases", "core", "finance", "marketing", "service_1")
 # The contracts of the `cases` project that fail validation.
-INVALID = ("analytics.bad_criticality", "analytics.long_tag")
+INVALID = (
+    "analytics.bad_criticality",
+    "analytics.enforced_contract_snapshot",
+    "analytics.long_tag",
+)
 
 NO_OWNER = "no owner, continuo skips it"
 LOCAL_STUB = "local stub, continuo skips it"
@@ -66,6 +70,13 @@ CASES_LINES = (
     Line("info", "model.cases.no_owner", NO_OWNER),
     Line("info", "model.cases.stub", LOCAL_STUB),
     Line("info", "model.cases_pkg.pkg_untagged", INSTALLED_PACKAGE),
+    Line(
+        "error",
+        "snapshot.cases.enforced_contract_snapshot",
+        "customProperties[6]: a dbt-snapshot node does not take "
+        "`contractEnforced`: dbt does not support contracts on snapshots, "
+        "remove `contract.enforced` from the snapshot",
+    ),
     Line("info", "snapshot.cases.orders_snapshot", DORMANT),
 )
 
@@ -156,7 +167,11 @@ def test_cases_lists_each_skip_with_its_reason_and_passes_except_the_bad_nodes()
         "model.cases_pkg.pkg_untagged",
     }
     errors = {line.node_id for line in report.lines if line.level == "error"}
-    assert errors == {"model.cases.bad_criticality", "model.cases.long_tag"}
+    assert errors == {
+        "model.cases.bad_criticality",
+        "model.cases.long_tag",
+        "snapshot.cases.enforced_contract_snapshot",
+    }
 
 
 def test_a_node_that_passes_gets_no_line():
@@ -373,6 +388,7 @@ def test_the_header_is_read_only_for_a_seed_that_gets_a_contract():
     assert [line.node_id for line in report.lines if line.level == "error"] == [
         "model.cases.bad_criticality",
         "model.cases.long_tag",
+        "snapshot.cases.enforced_contract_snapshot",
     ]
 
 
@@ -541,7 +557,7 @@ def test_every_valid_kept_node_of_cases_has_the_hash_of_its_stored_form():
         expected[generated.document["id"]] = contract_hash(
             normalise_dbt(generated.document, reads=[])
         )
-    assert len(expected) == 17
+    assert len(expected) == 18
     assert {k: v for k, v in expected.items() if k not in INVALID} == (
         report.contracts
     )
@@ -585,6 +601,10 @@ def test_a_contract_with_a_validation_issue_has_error_lines_and_no_hash():
     for node_id, contract_id in (
         ("model.cases.bad_criticality", "analytics.bad_criticality"),
         ("model.cases.long_tag", "analytics.long_tag"),
+        (
+            "snapshot.cases.enforced_contract_snapshot",
+            "analytics.enforced_contract_snapshot",
+        ),
     ):
         assert contract_id not in report.contracts
         assert [

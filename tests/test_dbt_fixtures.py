@@ -93,6 +93,9 @@ def test_the_cases_manifest_has_a_node_for_each_rule():
         nodes["snapshot.cases.orders_snapshot"]["config"]["hard_deletes"]
         == "new_record"
     )
+    enforced = nodes["snapshot.cases.enforced_contract_snapshot"]
+    assert enforced["config"]["contract"]["enforced"] is True
+    assert enforced["tags"] == ["project_tag"]
     assert "test.cases.assert_singular_target" in nodes
 
 

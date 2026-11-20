@@ -1797,3 +1797,29 @@ def test_the_ontology_is_read_before_dbt_runs_and_the_flag_is_optional(
     )
 
     assert fake_dbt.ran
+
+
+ENFORCED_SNAPSHOT_ISSUE = (
+    "a dbt-snapshot node does not take `contractEnforced`: dbt does not support "
+    "contracts on snapshots, remove `contract.enforced` from the snapshot"
+)
+
+
+def test_a_snapshot_with_an_enforced_contract_fails_the_check(
+    tmp_path, capsys, caplog
+):
+    manifest = copy.deepcopy(load_manifest("cases"))
+    node_id = "snapshot.cases.orders_snapshot"
+    manifest["nodes"][node_id]["config"]["contract"] = {"enforced": True}
+    path = _write_json(tmp_path / "manifest.json", manifest)
+
+    status = _check(CASES, "--manifest", path, "--json")
+
+    assert status == 1
+    document = json.loads(capsys.readouterr().out)
+    messages = _lines(document, node_id)
+    assert len(messages) == 1
+    assert messages[0].endswith(f": {ENFORCED_SNAPSHOT_ISSUE}")
+    assert messages[0].startswith("customProperties[")
+    assert f"{node_id}: {messages[0]}" in _errors(caplog)
+    assert "analytics.orders_snapshot" not in document["contracts"]

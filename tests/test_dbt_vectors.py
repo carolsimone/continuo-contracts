@@ -46,7 +46,10 @@ RULES = {
     "sql_reads": "model.cases.governed",
 }
 # The case of each node whose generated contract is not valid, with the manifest key of its node.
-ISSUES = {"bad_criticality": "model.cases.bad_criticality"}
+ISSUES = {
+    "bad_criticality": "model.cases.bad_criticality",
+    "enforced_snapshot_contract": "snapshot.cases.enforced_contract_snapshot",
+}
 # The cases whose node and tests are fixture nodes that the writer edits, with the manifest key of
 # the node and the edit.
 EDITED = {
@@ -69,7 +72,7 @@ EDITED = {
 }
 
 # The SHA-256 of the file, which no later change may move.
-DBT_CONTRACTS = "78b37ecb83cab4605ec8b71e52dafd290f68efb6fd8021fffb5649a6e288c110"
+DBT_CONTRACTS = "f3f5ceed22eeceafe03ab43f4c978ada153969cf39653ee85ef28a799f5791f9"
 
 # The SHA-256 of each vector file of 0.2.0, which no later change may move.
 OLDER_VECTORS = {

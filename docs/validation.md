@@ -57,7 +57,7 @@ JSON schema gives each error as an `odcs_schema` issue, and last come continuo's
 | `unknown_property` | a `continuo` property not in `vocabulary.PROPERTIES` | both |
 | `refused_property` | a property the family does not carry, or on the wrong object | both |
 | `refused_field` | a field the contract may not write | both |
-| `kind_rule` | a property the kind needs is missing, or one it refuses is written | Python |
+| `kind_rule` | a property the kind needs is missing, or one it refuses is written | both |
 | `column_type` | a `physicalType` continuo does not accept | Python |
 | `primary_key` | the key of an `upsert` node is missing or malformed | Python |
 | `value` | a value, a column name or a quality rule breaks its rule | both |
@@ -127,6 +127,12 @@ A dbt contract writes `service`, `kind`, `filePath` and `materialization`, else 
 - `materialization`: a mapping whose `materialized` is text (its issue is at `value.materialized`).
 - `criticality`: `REGULATORY`, `CORE` or `SECONDARY`. `schedule`: a name, no whitespace, 50 at most.
 - `timeoutMinutes`: an integer from 1 to 10080, not a boolean or a float.
+
+A `dbt-snapshot` node does not take `contractEnforced: true`, because dbt does not support
+contracts on snapshots: that is a `kind_rule` issue at the item of the property, whose message says
+to remove `contract.enforced` from the snapshot. `dbt.generate` still writes the property for such a
+snapshot, and `validate_dbt_contract` refuses it. `contractEnforced` is accepted on a model and on a
+seed, and a snapshot that does not enforce a contract is valid.
 
 ## Binding values
 

@@ -23,7 +23,11 @@ from continuo_contracts.vocabulary import PROPERTIES
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 GOLDEN = FIXTURES / "dbt" / "golden"
 VECTORS = resources.files("continuo_contracts") / "vectors"
-BAD = {"analytics.bad_criticality", "analytics.long_tag"}
+BAD = {
+    "analytics.bad_criticality",
+    "analytics.long_tag",
+    "analytics.enforced_contract_snapshot",
+}
 
 
 def _golden(project, name):
@@ -68,7 +72,7 @@ def _drop(doc, name):
 # The goldens.
 
 
-def test_every_golden_generated_contract_is_valid_except_the_two_bad_cases():
+def test_every_golden_generated_contract_is_valid_except_the_bad_cases():
     paths = sorted(GOLDEN.rglob("*.json"))
     assert {path.stem for path in paths} >= BAD
     for path in paths:
@@ -76,7 +80,7 @@ def test_every_golden_generated_contract_is_valid_except_the_two_bad_cases():
         assert bool(issues) == (path.stem in BAD), path
 
 
-def test_every_golden_stored_contract_is_valid_except_the_two_bad_cases():
+def test_every_golden_stored_contract_is_valid_except_the_bad_cases():
     for path in sorted(GOLDEN.rglob("*.json")):
         issues = validate_dbt_contract(json.loads(path.read_text())["stored"])
         assert bool(issues) == (path.stem in BAD), path
@@ -271,6 +275,103 @@ def test_the_three_dbt_kinds_are_accepted(name, form):
     doc = _doc(name)
     assert doc["customProperties"][_index(doc, "kind")]["value"] == form
     assert validate_dbt_contract(doc) == []
+
+
+# An enforced contract, which dbt does not support on a snapshot.
+
+
+def _enforced(name, *, value=True):
+    """The generated contract of a golden node of the `cases` project, with `contractEnforced`."""
+    doc = _doc(name)
+    names = [item["property"] for item in doc["customProperties"]]
+    if "contractEnforced" in names:
+        _set(doc, "contractEnforced", value)
+    else:
+        doc["customProperties"].insert(
+            _index(doc, "materialization") + 1,
+            _continuo("contractEnforced", value),
+        )
+    return doc
+
+
+@pytest.mark.parametrize("form", ["generated", "stored"])
+def test_an_enforced_contract_on_a_snapshot_is_a_kind_rule_issue_at_its_item(
+    form,
+):
+    doc = _doc("analytics.orders_snapshot", form=form)
+    doc["customProperties"].append(_continuo("contractEnforced", True))
+    issue = _only(validate_dbt_contract(doc))
+    assert (issue.path, issue.reason) == (
+        f"customProperties[{_index(doc, 'contractEnforced')}]",
+        "kind_rule",
+    )
+    assert issue.message == (
+        "a dbt-snapshot node does not take `contractEnforced`: dbt does not support "
+        "contracts on snapshots, remove `contract.enforced` from the snapshot"
+    )
+    assert issue.reason in REASONS
+
+
+def test_the_enforced_snapshot_contract_is_refused_by_the_rules_alone():
+    doc = _enforced("analytics.orders_snapshot")
+    assert _found(dbt_rule_issues(doc)) == [
+        (f"customProperties[{_index(doc, 'contractEnforced')}]", "kind_rule")
+    ]
+
+
+@pytest.mark.parametrize(
+    "value", [False, "true", 1, None, "yes", [True], {"a": 1}]
+)
+def test_a_snapshot_contract_enforced_other_than_true_is_not_refused(value):
+    assert (
+        validate_dbt_contract(_enforced("analytics.orders_snapshot", value=value))
+        == []
+    )
+
+
+def test_a_snapshot_with_no_enforced_contract_is_valid():
+    doc = _doc("analytics.orders_snapshot")
+    assert "contractEnforced" not in {
+        i["property"] for i in doc["customProperties"]
+    }
+    assert validate_dbt_contract(doc) == []
+
+
+def test_an_enforced_contract_on_a_model_is_valid():
+    doc = _doc("analytics.enforced")
+    assert (
+        doc["customProperties"][_index(doc, "contractEnforced")]["value"] is True
+    )
+    assert validate_dbt_contract(doc) == []
+
+
+def test_an_enforced_contract_on_a_seed_is_valid():
+    assert validate_dbt_contract(_enforced("analytics.typed_seed")) == []
+
+
+def test_an_enforced_contract_on_a_snapshot_has_its_own_issue_beside_another_fault():
+    doc = _enforced("analytics.orders_snapshot")
+    _set(doc, "criticality", "high")
+    assert _found(validate_dbt_contract(doc)) == [
+        (f"customProperties[{_index(doc, 'criticality')}].value", "value"),
+        (f"customProperties[{_index(doc, 'contractEnforced')}]", "kind_rule"),
+    ]
+
+
+def test_a_kind_that_is_not_a_snapshot_gets_no_snapshot_issue():
+    doc = _enforced("analytics.orders_snapshot")
+    _set(doc, "kind", "python-node")
+    issue = _only(validate_dbt_contract(doc))
+    assert issue.reason == "value"
+    assert issue.path.endswith(".value")
+
+
+def test_an_enforced_contract_with_no_kind_is_only_a_missing_field():
+    doc = _enforced("analytics.orders_snapshot")
+    _drop(doc, "kind")
+    assert _found(validate_dbt_contract(doc)) == [
+        ("customProperties", "missing_field")
+    ]
 
 
 @pytest.mark.parametrize(

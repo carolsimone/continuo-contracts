@@ -30,19 +30,26 @@ hash once:
 
 ## Contracts
 
-The contract check only widens, with one exception below. A newer version accepts every contract an
+The contract check only widens, with two exceptions below. A newer version accepts every contract an
 older one accepted, and gives it the same [stored form](glossary.md#stored-form) and the same
 `contract_hash`. The vocabulary of a contract, its kinds, custom properties and values, grows, and a
 rule that would refuse a contract an earlier version accepted is not added. An upgrade needs no edit
 to a contract.
 
-The exception is the binding keys of a dbt node. 0.4.0 adds seven bindings to the vocabulary: a
+The first exception is the binding keys of a dbt node. 0.4.0 adds seven bindings to the vocabulary: a
 Python contract may write them, which 0.3.1 refused as `unknown_property`. It also reads a dbt
 node's `meta.continuo` binding keys, and refuses a binding of the wrong shape whatever any setting
 of the install says ([validation](validation.md#binding-values)). So a dbt project whose
 `meta.continuo` carries a binding key of the wrong shape, such as `grain: []` or `entity: 42`, which
 0.3.1 ignored, now gives a `value` issue, and the [lite check](glossary.md#lite-check) fails on it.
 Correct or remove the key.
+
+The second exception is an enforced contract on a dbt snapshot. dbt does not support contracts on
+snapshots, so 0.4.1 refuses a `dbt-snapshot` node that writes `contractEnforced: true` as a
+`kind_rule` issue ([validation](validation.md#dbt-contract-rules)), which 0.3.x and 0.4.0 accepted,
+and the [lite check](glossary.md#lite-check) fails on it. Remove `contract.enforced` from the
+snapshot's config. A model or a seed with an enforced contract, and a snapshot with none, are
+accepted as before.
 
 Other output can change. 0.3.1, a patch, changed `dbt.generate`'s output for two inputs and made
 the [lite check](glossary.md#lite-check) reject more: read a version's CHANGELOG section before you

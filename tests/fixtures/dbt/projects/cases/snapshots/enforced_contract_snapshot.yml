@@ -1,0 +1,10 @@
+snapshots:
+  - name: enforced_contract_snapshot
+    relation: source('raw', 'orders')
+    config:
+      strategy: timestamp
+      unique_key: id
+      updated_at: updated_at
+      tags: [project_tag]
+      contract:
+        enforced: true

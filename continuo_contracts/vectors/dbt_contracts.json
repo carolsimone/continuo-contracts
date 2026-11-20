@@ -2877,6 +2877,66 @@
   "tests": []
  },
  {
+  "issues": [
+   {
+    "path": "customProperties[6]",
+    "reason": "kind_rule"
+   }
+  ],
+  "manifest": {
+   "nodes": {},
+   "sources": {}
+  },
+  "name": "enforced_snapshot_contract",
+  "node": {
+   "alias": "enforced_contract_snapshot",
+   "columns": {},
+   "config": {
+    "check_cols": null,
+    "column_types": {},
+    "contract": {
+     "enforced": true
+    },
+    "dbt_valid_to_current": null,
+    "grants": {},
+    "group": null,
+    "incremental_strategy": null,
+    "materialized": "snapshot",
+    "meta": {
+     "criticality": "CORE",
+     "owner": "cases"
+    },
+    "on_schema_change": "ignore",
+    "snapshot_meta_column_names": {
+     "dbt_is_deleted": null,
+     "dbt_scd_id": null,
+     "dbt_updated_at": null,
+     "dbt_valid_from": null,
+     "dbt_valid_to": null
+    },
+    "strategy": "timestamp",
+    "unique_key": "id",
+    "updated_at": "updated_at"
+   },
+   "description": "",
+   "fqn": [
+    "cases",
+    "enforced_contract_snapshot"
+   ],
+   "name": "enforced_contract_snapshot",
+   "original_file_path": "snapshots/enforced_contract_snapshot.yml",
+   "resource_type": "snapshot",
+   "schema": "analytics",
+   "tags": [
+    "project_tag"
+   ],
+   "unique_id": "snapshot.cases.enforced_contract_snapshot"
+  },
+  "reads": [],
+  "source_sha256": "4a0404fb8c00820e5d71d0952cec63de84ae36958c915f88db7d0406b4a73df8",
+  "tests": []
+ },
+ {
   "contract_hash": "sha256:fea1f2410357b35f19e2c2cda6cdcb8d651543e34546846904f2d7fcb78bd6d4",
   "flags": [
    "jinja_in_test_arguments"
