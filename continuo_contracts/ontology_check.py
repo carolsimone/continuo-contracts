@@ -10,7 +10,8 @@ A `Finding` has a `severity` (`SEVERITIES`), the `rule` that wrote it (`RULES`),
 contract is its `id`, and the subject of any other finding is a thing, `<Thing>.<property>`, a
 service or a path of the ontology file. Every error of a rule in `RELEASE_RULES` names a contract:
 the findings with no `contract_id` are the ones of the `ontology` rule, the information and the
-warnings of `drift` and the information about a service.
+warnings of `drift`, the layers and the warning about a `born_in` of `order`, and the
+information about a service.
 
 ====================  ==================================================================
 rule                  what it checks
@@ -22,6 +23,8 @@ rule                  what it checks
 `quality`             a data-quality test names columns of the contract
 `privacy`             a personal property is classified personal, and only one is
 `access`              a contract reads only what its domain may read
+`order`               the copies are in layers, none in a cycle, and a thing's copies follow
+                      its birth copy
 `drift`               each property and each thing is held by a copy
 ====================  ==================================================================
 
@@ -42,6 +45,15 @@ object, which is what another contract's `reads` names. The case of the `id`, of
 a read does not matter: all are compared in lower case. When two contracts hold one relation, the
 one with the lower `id` is the copy. `check` gives the same findings whatever
 the order of `contracts`.
+
+The `order` rule reads the `reads` of each copy, whatever its kind: a copy that reads nothing,
+as a Python node does, is in the first layer. A read that no checked contract holds adds no edge
+and no finding of this rule, because the `access` rule warns about it. A copy that is in a
+cycle is an error. When a thing names its birth copy in `born_in`, the other copies of the
+thing must be downstream of it: one upstream of it is an error and one with no path from it is
+a warning. A `born_in` that no checked contract holds is one warning on the thing, and the
+copies of that thing are not ordered against a birth copy. The layers are one `info` finding,
+`copy graph`, written when no copy is in or downstream of a cycle.
 """
 
 import re
@@ -673,6 +685,152 @@ def _access_rule(estate: _Estate, copy: _Copy) -> list[Finding]:
     return findings
 
 
+# The `order` rule: copies are placed from the copies they read, never from the thing. It reads
+# the whole graph, so `progress` is called as each copy's reads are resolved to edges.
+
+
+def _closure(start: str, step: Mapping[str, set[str]]) -> set[str]:
+    """Return the copies reached from `start` by one or more `step`s."""
+    seen: set[str] = set()
+    todo = [start]
+    while todo:
+        for following in step[todo.pop()]:
+            if following not in seen:
+                seen.add(following)
+                todo.append(following)
+    return seen
+
+
+def _layers(edges: Mapping[str, set[str]]) -> list[list[str]]:
+    """Return the layers of the copies: layer n reads only from layers before n.
+
+    A copy in a cycle, or downstream of one, has no layer.
+    """
+    pending = dict(edges)
+    layers: list[list[str]] = []
+    done: set[str] = set()
+    while pending:
+        ready = sorted(
+            copy_id for copy_id, reads in pending.items() if reads <= done
+        )
+        if not ready:
+            break
+        layers.append(ready)
+        done.update(ready)
+        for copy_id in ready:
+            del pending[copy_id]
+    return layers
+
+
+def _cycles(
+    edges: Mapping[str, set[str]], unplaced: set[str]
+) -> dict[str, list[str]]:
+    """Return the copies of the cycle of each copy in a cycle, among the `unplaced` copies."""
+    reach = {copy_id: _closure(copy_id, edges) for copy_id in unplaced}
+    return {
+        copy_id: sorted(
+            other
+            for other in reach[copy_id]
+            if other in reach and copy_id in reach[other]
+        )
+        for copy_id in reach
+        if copy_id in reach[copy_id]
+    }
+
+
+def _order_rule(estate: _Estate, progress: Callable[[], None]) -> list[Finding]:
+    edges: dict[str, set[str]] = {}
+    for copy in estate.copies:
+        edges[copy.id] = {
+            target.id
+            for relation in copy.reads
+            if (target := estate.by_relation.get(relation.lower()))
+        }
+        progress()
+    layers = _layers(edges)
+    placed = {copy_id for layer in layers for copy_id in layer}
+    findings: list[Finding] = []
+    if len(placed) < len(edges):
+        cycles = _cycles(edges, set(edges) - placed)
+        findings.extend(
+            _error("order", copy, f"cycle among {cycles[copy.id]}")
+            for copy in estate.copies
+            if copy.id in cycles
+        )
+    elif layers:
+        listing = " | ".join(
+            f"{number}: {', '.join(layer)}"
+            for number, layer in enumerate(layers, start=1)
+        )
+        findings.append(Finding("info", "order", "copy graph", listing, None))
+    downstream: dict[str, set[str]] = {copy_id: set() for copy_id in edges}
+    for copy_id, reads in edges.items():
+        for read in reads:
+            downstream[read].add(copy_id)
+    for name, thing in estate.entities.items():
+        if thing.get("born_in"):
+            findings.extend(
+                _birth_findings(estate, name, thing["born_in"], edges, downstream)
+            )
+    return findings
+
+
+def _birth_findings(
+    estate: _Estate,
+    name: str,
+    birth: str,
+    edges: Mapping[str, set[str]],
+    downstream: Mapping[str, set[str]],
+) -> list[Finding]:
+    """Return the findings about the birth copy `birth` of the thing `name`."""
+    subject = f"{name}.born_in"
+    found = estate.by_relation.get(birth.lower())
+    if found is None:
+        return [
+            Finding(
+                "warning",
+                "order",
+                subject,
+                f"{birth} is not held by any checked contract: the copies of "
+                f"{name} are not ordered against a birth copy",
+                None,
+            )
+        ]
+    if found.entity != name:
+        what = f"a copy of {found.entity}" if found.entity else "an aggregate"
+        return [
+            _error(
+                "order",
+                found,
+                f"{subject} names {birth}, which is {what}, not a copy of {name}",
+            )
+        ]
+    findings: list[Finding] = []
+    before = _closure(found.id, edges)
+    after = _closure(found.id, downstream)
+    for copy in estate.copies:
+        if copy.entity != name or copy.id == found.id:
+            continue
+        if copy.id in before:
+            findings.append(
+                _error(
+                    "order",
+                    copy,
+                    f"is upstream of {name}'s birth copy {birth}",
+                )
+            )
+        elif copy.id not in after:
+            findings.append(
+                _warning(
+                    "order",
+                    copy,
+                    f"copy of {name} not downstream of its birth copy {birth}: "
+                    "its order relative to the birth copy is not derivable",
+                )
+            )
+    return findings
+
+
 # The `drift` rule: what no copy holds. It reads the copies of a thing together, so it
 # collects first and reports after.
 
@@ -808,6 +966,7 @@ _PASSES: Final[Mapping[str, _Pass]] = MappingProxyType(
         "contract": _per_copy(_contract_rule),
         "coverage": _per_copy(_coverage_rule),
         "access": _per_copy(_access_rule),
+        "order": _order_rule,
         "drift": _drift_rule,
         "quality": _per_copy(_quality_rule),
         "privacy": _per_copy(_privacy_rule),

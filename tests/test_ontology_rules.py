@@ -28,8 +28,7 @@ UNDECLARED_BINDINGS = (
     "they are kept as written and not checked"
 )
 
-# `order` has its own tests.
-CHECKED = tuple(rule for rule in RELEASE_RULES if rule != "order")
+CHECKED = RELEASE_RULES
 
 ONTOLOGY = {
     "principals": {
@@ -1296,7 +1295,7 @@ def test_the_texts_of_an_undeclared_service_are_exact():
 
 
 def broken():
-    """An estate with an error of each rule that has a pass, and one of each severity."""
+    """An estate with an error of each rule that `check` runs, and one of each severity."""
     state = base()
     set_custom(table(state["events"]), "fixed", {"source": "atm"})  # contract
     table(state["seed_users"])["properties"].pop(0)  # coverage
@@ -1314,6 +1313,9 @@ def broken():
         }
     ]  # quality
     del table(state["seed_users"])["properties"][0]["classification"]  # privacy
+    set_custom(
+        table(state["events"]), "reads", ["analytics.events_sink"]
+    )  # order
     return state
 
 
@@ -1329,6 +1331,7 @@ def test_every_error_names_a_contract():
         "contract",
         "coverage",
         "access",
+        "order",
         "quality",
         "privacy",
     }, listing(findings)
@@ -1413,7 +1416,7 @@ def test_progress_is_not_called_when_no_rule_runs():
     assert check(ONT, contracts, rules=()) == []
 
 
-@pytest.mark.parametrize("rule", ["order", "ontology", "nonsense"])
+@pytest.mark.parametrize("rule", ["ontology", "nonsense"])
 def test_check_refuses_a_rule_it_has_no_pass_for(rule):
     with pytest.raises(ValueError, match=rule):
         check(ONT, list(base().values()), rules=("contract", rule))
