@@ -933,6 +933,50 @@ def test_a_read_reaches_the_copy_by_its_physical_name():
     )
 
 
+def test_a_contract_with_upper_case_letters_in_its_name_is_reached_by_its_relation():
+    state = base()
+    # The id is in lower case and the name keeps its case, as a dbt node writes them. No
+    # grant is given to finance, so the read is an error, not an unbound table.
+    state["txns"] = contract(
+        "core",
+        "Txns",
+        entity="Transaction",
+        reads=["analytics.events_sink"],
+        columns=TRANSACTION_COLUMNS,
+    )
+    assert state["txns"]["id"] == "analytics.txns"
+    assert table(state["txns"])["name"] == "Txns"
+
+    findings = run(state)
+
+    [error] = [
+        f for f in findings if f.rule == "access" and f.severity == "error"
+    ]
+    assert error.contract_id == "analytics.revenue"
+    assert "analytics.txns without a grant" in error.message
+    assert_no_finding(findings, "warning", "access")
+
+
+def test_a_read_is_matched_to_its_copy_without_regard_to_case():
+    state = base()
+    set_custom(
+        table(state["revenue"]),
+        "reads",
+        ["Analytics.Txns", "Analytics.Seed_Users"],
+    )
+
+    findings = run(state)
+
+    # `analytics.txns` grants finance and `analytics.seed_users` does not, so the second read
+    # is an error that shows the read as written, and neither is an unbound table.
+    [error] = [
+        f for f in findings if f.rule == "access" and f.severity == "error"
+    ]
+    assert error.contract_id == "analytics.revenue"
+    assert "Analytics.Seed_Users without a grant" in error.message
+    assert_no_finding(findings, "warning", "access")
+
+
 def test_a_finding_about_an_aliased_contract_names_the_contract_id():
     state = base()
     state["orders_v2"] = contract(

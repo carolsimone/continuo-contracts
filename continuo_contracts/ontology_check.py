@@ -38,8 +38,9 @@ resolve them.
 
 A copy is a contract of a declared service. Copies are found by their physical relation, the
 `id` of the contract without its last name part, then `.` and the `physicalName` of its schema
-object, in lower case, which is what another contract's `reads` names. When two contracts hold
-one relation, the one with the lower `id` is the copy. `check` gives the same findings whatever
+object, which is what another contract's `reads` names. The case of the `id`, of the names and of
+a read does not matter: all are compared in lower case. When two contracts hold one relation, the
+one with the lower `id` is the copy. `check` gives the same findings whatever
 the order of `contracts`.
 """
 
@@ -425,10 +426,9 @@ def _copy(stored: Mapping[str, Any]) -> _Copy:
     contract_id = _contract_id(stored)
     table = stored["schema"][0]
     name = table["name"]
-    relation = (
-        f"{contract_id.removesuffix(f'.{name}')}."
-        f"{table.get('physicalName') or name}"
-    ).lower()
+    # A dbt node writes its id in lower case and keeps the case of its name.
+    schema = contract_id.lower().removesuffix(f".{name}".lower())
+    relation = f"{schema}.{table.get('physicalName') or name}".lower()
     values = continuo_values(table.get("customProperties"))
     raw_columns = table.get("properties", [])
     bindings: dict[str, Mapping[str, Any]] = {}
@@ -645,7 +645,7 @@ def _access_rule(estate: _Estate, copy: _Copy) -> list[Finding]:
     findings: list[Finding] = []
     reader = estate.ontology.domain_of(copy.service)
     for relation in copy.reads:
-        target = estate.by_relation.get(relation)
+        target = estate.by_relation.get(relation.lower())
         if target is None:
             findings.append(
                 _warning(
