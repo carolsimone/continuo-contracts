@@ -1,7 +1,7 @@
 """Build the dbt fixture manifests that the tests read.
 
 Run it with `uv run python scripts/build_dbt_fixtures.py [PROJECT ...]`; with no project it
-builds all five. For each project under `tests/fixtures/dbt/projects` it copies the project, and
+builds all seven. For each project under `tests/fixtures/dbt/projects` it copies the project, and
 the local packages it names, to a temporary directory, runs `dbt deps` (when the project has a
 `packages.yml`) and `dbt parse` with the pinned dbt in a `TZ=Asia/Tokyo` environment, and writes
 the manifest it parsed to `tests/fixtures/dbt/manifests/<project>.json.gz`. The environment is
@@ -38,7 +38,15 @@ ROOT = Path(__file__).resolve().parents[1]
 PROJECTS = ROOT / "tests" / "fixtures" / "dbt" / "projects"
 MANIFESTS = ROOT / "tests" / "fixtures" / "dbt" / "manifests"
 
-NAMES = ("core", "finance", "marketing", "service_1", "cases")
+NAMES = (
+    "core",
+    "finance",
+    "marketing",
+    "service_1",
+    "cases",
+    "core_bound",
+    "finance_bound",
+)
 DBT_VERSION = "1.12.0b1"
 DBT_COMMAND = (
     "uvx",

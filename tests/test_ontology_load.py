@@ -731,6 +731,10 @@ def test_the_vectors_and_goldens_give_stored_forms_to_strip():
 
 def test_strip_is_the_identity_on_every_vector():
     for origin, stored in _every_stored_form_of_every_vector_and_golden():
+        if origin.startswith("ontology.json"):
+            # The stored forms of this vector carry bindings on purpose: it is the one that pins
+            # what resolve makes of them.
+            continue
         assert canonical_json(ontology.strip(stored)) == canonical_json(stored), (
             origin
         )

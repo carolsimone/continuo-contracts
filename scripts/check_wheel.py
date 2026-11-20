@@ -57,6 +57,7 @@ REQUIRED_MEMBERS: tuple[str, ...] = tuple(
         "vectors/contracts.json",
         "vectors/dbt_contracts.json",
         "vectors/hashing.json",
+        "vectors/ontology.json",
         "vectors/projection.json",
         "vectors/sql_types.json",
         "vectors/strict_yaml.json",

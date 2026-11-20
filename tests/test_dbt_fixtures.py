@@ -25,7 +25,15 @@ spec = importlib.util.spec_from_file_location("build_dbt_fixtures", SCRIPT)
 build_dbt_fixtures = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(build_dbt_fixtures)
 
-NAMES = ["core", "finance", "marketing", "service_1", "cases"]
+NAMES = [
+    "core",
+    "finance",
+    "marketing",
+    "service_1",
+    "cases",
+    "core_bound",
+    "finance_bound",
+]
 PROJECTS = build_dbt_fixtures.PROJECTS
 
 
@@ -36,7 +44,7 @@ def test_the_fixture_manifests_were_built_by_the_pinned_dbt(name):
     assert m["metadata"]["adapter_type"] == "postgres"
 
 
-def test_the_script_names_the_five_projects_and_the_version_the_manifests_carry():
+def test_the_script_names_the_seven_projects_and_the_version_the_manifests_carry():
     assert list(build_dbt_fixtures.NAMES) == NAMES
     assert build_dbt_fixtures.DBT_VERSION == "1.12.0b1"
 
@@ -165,13 +173,16 @@ def _declared_columns(project):
     declare columns for and that the manifest has a node of."""
     nodes = load_manifest(project)["nodes"]
     declared = {}
+    # A project's directory and the name its `dbt_project.yml` gives it differ for the bound
+    # projects, which keep the name of the project they copy.
+    name = load_manifest(project)["metadata"]["project_name"]
     for path in sorted((PROJECTS / project).rglob("*.yml")):
         if path.parent == PROJECTS / project:
             continue
         document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         for section, resource_type in (("models", "model"), ("seeds", "seed")):
             for entry in document.get(section, []):
-                node_id = f"{resource_type}.{project}.{entry['name']}"
+                node_id = f"{resource_type}.{name}.{entry['name']}"
                 if entry.get("columns") and node_id in nodes:
                     declared[node_id] = [
                         column["name"] for column in entry["columns"]
@@ -270,7 +281,7 @@ def test_the_build_environment_drops_the_callers_postgres_database(monkeypatch):
     assert "POSTGRES_SSLMODE" not in env
 
 
-def test_main_builds_all_five_projects_by_default(tmp_path, monkeypatch):
+def test_main_builds_all_seven_projects_by_default(tmp_path, monkeypatch):
     monkeypatch.setattr(build_dbt_fixtures, "MANIFESTS", tmp_path / "out")
     monkeypatch.setattr(build_dbt_fixtures, "build", lambda name: name.encode())
     assert build_dbt_fixtures.main([]) == 0

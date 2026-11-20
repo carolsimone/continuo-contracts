@@ -369,7 +369,7 @@ def test_no_older_vector_moved():
     names = {
         entry.name for entry in VECTORS.iterdir() if entry.name.endswith(".json")
     }
-    assert names == {*OLDER_VECTORS, "dbt_contracts.json"}
+    assert names == {*OLDER_VECTORS, "dbt_contracts.json", "ontology.json"}
 
 
 def _properties(case):
