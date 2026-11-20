@@ -12,6 +12,7 @@ Which exceptions does the package raise, and when? Every error the package defin
 | `ProjectionError` | an unsupported SQL type or Python node | `<schema>.<table>:`, or nothing |
 | `DbtNodeError` | a manifest field the library cannot read | the node or test id, or `manifest` |
 | `FingerprintsFileError` | a malformed `fingerprints.yaml` | the place in the file |
+| `OntologyError` | an ontology file that `ontology.load` refuses | the dotted path, or `<root>` |
 | `SchemaFileError` | the packaged ODCS schema has other bytes: reinstall | the file |
 | `StrictYamlError` | YAML that the strict reader refuses | `line <n>, column <n>:` |
 
@@ -23,15 +24,20 @@ Which exceptions does the package raise, and when? Every error the package defin
   columns, `primary_key` or `assets` is the wrong container. It has no prefix from
   `canonical_sql_type`, from an entry that is not a mapping or lacks `schema` or `table`, or from
   `node_from_odcs`'s own checks (schema object, id, columns).
+- `OntologyError`: the message is `<path>: <reason>`, such as `entities.User.personnal: unknown key,
+  ...`, with `[<index>]` for a list item. A text that strict YAML refuses is reported at `<root>`
+  with the reader's own message, and only the first failure, in file order, is reported
+  ([ontology](ontology.md#the-file)).
 
 ## Problems that are not raised
 
 The `validate` functions return [`Issue` lists](validation.md), and the `validate` and `hash`
-commands turn a `StrictYamlError` into the one issue `strict_yaml` at `$`. `lite.check_manifest`
-turns a `DbtNodeError` from a node's field, or a `HashInputError` from a declared read, into an
-`error` line of that node. A field of the manifest's `metadata` or `nodes`, or a test's
-`attached_node` or `depends_on.nodes`, still raises `DbtNodeError`. `dbt check` then prints
-`the manifest is not the shape of a dbt manifest` and exits 2.
+commands turn a `StrictYamlError` into the one issue `strict_yaml` at `$`. `ontology check` and
+`dbt check --ontology` turn an `OntologyError` into the ERROR line `<file>: <message>` and the exit
+status 2. `lite.check_manifest` turns a `DbtNodeError` from a node's field, or a `HashInputError`
+from a declared read, into an `error` line of that node. A field of the manifest's `metadata` or
+`nodes`, or a test's `attached_node` or `depends_on.nodes`, still raises `DbtNodeError`.
+`dbt check` then prints `the manifest is not the shape of a dbt manifest` and exits 2.
 
 ## Python's own errors
 

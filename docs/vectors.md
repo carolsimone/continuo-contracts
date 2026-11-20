@@ -2,7 +2,7 @@
 
 How do I check a port or a code change against the test vectors?
 
-The wheel ships seven JSON files in `continuo_contracts/vectors/`. Each is a list of
+The wheel ships eight JSON files in `continuo_contracts/vectors/`. Each is a list of
 [test vectors](glossary.md#test-vector): an input and the output one function gives for it. A
 [port](glossary.md#port), or a change to this package, passes when it gives every output.
 
@@ -28,6 +28,15 @@ The wheel ships seven JSON files in `continuo_contracts/vectors/`. Each is a lis
 - `dbt_contracts.json` fixes a dbt contract: `node`, `tests`, `manifest` and `reads` give
   `generated` (from `dbt.generate`), `flags`, `source_sha256`, `stored` (from `normalise_dbt`) and
   `contract_hash`. A case with `issues` gives `source_sha256` and the issues instead.
+- `ontology.json` fixes `ontology.resolve` and the per-service check. A case is `{name, ontology,
+  stored, resolved, contract_hash, findings}`: `ontology` is the text of an [ontology
+  file](ontology.md#the-file) and `stored` the stored form of one contract, with the bindings its
+  team wrote. `ontology.resolve(stored, ontology.load(ontology))` gives `resolved`, `contract_hash`
+  is the hash of `resolved`, and `findings` are what `ontology_check.check` returns for `resolved`
+  alone with `PER_SERVICE_RULES`, each as `{severity, rule, subject, message, contract_id}`, in
+  order. The four cases are a dbt model with a filter and a join, a dbt seed with personal columns,
+  a Python node with aggregates and a service the ontology does not declare, whose `resolved` is
+  its `stored`.
 
 ## Read a vector
 
@@ -57,8 +66,10 @@ Compute each case's output from its input fields and compare it, types included 
 
 ## Change a vector
 
-The rule for the six files other than `dbt_contracts.json` is that they never change. The
-procedure for `dbt_contracts.json` is `uv run python scripts/write_dbt_goldens.py`, which writes it
-from the fixture manifests. `tests/test_dbt_vectors.py` fixes the SHA-256 of all seven files, so a
-changed case also needs a deliberate edit of that test. [Stability](stability.md) says when a
-change may move a hash.
+The rule for the seven files other than `dbt_contracts.json`, `ontology.json` among them, is that
+they never change. The procedure for `dbt_contracts.json` is
+`uv run python scripts/write_dbt_goldens.py`, which writes it from the fixture manifests.
+`tests/test_dbt_vectors.py` fixes the SHA-256 of `dbt_contracts.json` and of the six older files,
+and `tests/test_ontology_vectors.py` fixes that of `ontology.json`,
+`d4a64f5b203ca30f2a534ac35ac0e5131f297505fc863562fabb4562b58d5416`, so a changed case also needs a
+deliberate edit of that test. [Stability](stability.md) says when a change may move a hash.

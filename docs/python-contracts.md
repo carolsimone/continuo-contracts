@@ -101,6 +101,56 @@ An `upsert` node needs a key: `primaryKey: true` on one column or more, each `re
 not `DOUBLE PRECISION`. In a key of two or more columns, each has its own `primaryKeyPosition`, a
 whole number from 1 (`1.0` counts as 1). On `replace` and `append` the key only describes the table.
 
+## Bind to an ontology
+
+An author may bind the table and its columns to an [ontology](ontology.md) with seven more
+properties, each an item `{vendor: continuo, property: <name>, value: <value>}` of a
+`customProperties` list. They sit on the schema object, which is the table, and on a column, not on
+the contract, and each is written once per list.
+
+| Property | Sits on | Value |
+|---|---|---|
+| `entity` | the schema object | the name of a thing |
+| `grain` | the schema object | a non-empty list of strings |
+| `fixed` | the schema object | a mapping of key part to a string, number or boolean |
+| `filter` | the schema object | a mapping of field to a string, number or boolean |
+| `property` | a column | `<Thing>.<field>` |
+| `local` | a column | `true` |
+| `aggregate` | a column | a mapping of `from`, `agg`, `where`, `period`, with a `from` or a `period` |
+
+```yaml
+schema:
+  - name: daily_kpis
+    customProperties:
+      - {vendor: continuo, property: grain, value: [day]}
+    properties:
+      - name: day
+        physicalType: date
+        customProperties:
+          - {vendor: continuo, property: aggregate, value: {period: day}}
+```
+
+A binding on another object is a `refused_property` issue, and one of the wrong shape is a `value`
+issue at the `value` of its item, such as `schema[0].customProperties[0].value`
+([validation](validation.md#binding-values)). `normalise_python` keeps the bindings as written, and
+what each means, how `resolve` fills the rest and which rules check them is in the
+[ontology](ontology.md) page.
+
+```python
+>>> doc = yaml_strict.load(text)
+>>> table = doc["schema"][0]
+>>> table["customProperties"] = [{"vendor": "continuo", "property": "grain", "value": ["day"]}]
+>>> table["properties"][0]["customProperties"] = [
+...     {"vendor": "continuo", "property": "aggregate", "value": {"period": "day"}}]
+>>> validate.validate_python_contract(doc, path=path, service="finance")
+[]
+>>> table["customProperties"][0]["value"] = []
+>>> issues = validate.validate_python_contract(doc, path=path, service="finance")
+>>> [(issue.path, issue.reason) for issue in issues]
+[('schema[0].customProperties[0].value', 'value')]
+
+```
+
 ## The `validate` and `hash` commands
 
 `continuo-contracts validate PATH... [--service SERVICE] [--json]` checks each file, and each

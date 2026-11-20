@@ -26,8 +26,10 @@ selects every entry (a mapping as `[key, value]` pairs in its order, a list as a
 ```text
 node:    resource_type name version schema alias fqn original_file_path description tags
          deprecation_date primary_key  columns.*.{name description data_type tags
-         meta.continuo.classification}  config.meta.{owner criticality timeout_minutes}
-         config.meta.continuo.{readers reads tests.*.{name enabled granularity params}}
+         meta.continuo.{classification property local agg from period where}}
+         config.meta.{owner criticality timeout_minutes}
+         config.meta.continuo.{readers reads entity grain fixed filter
+         tests.*.{name enabled granularity params}}
          config.{materialized unique_key incremental_strategy on_schema_change contract.enforced
          access group freshness.build_after.{count period} grants strategy updated_at check_cols
          hard_deletes snapshot_meta_column_names dbt_valid_to_current quote_columns column_types}
@@ -36,6 +38,12 @@ test:    name column_name attached_node depends_on.nodes test_metadata.{name nam
 nodes:   schema name version
 sources: schema identifier name
 ```
+
+Ten of these paths are the [ontology bindings](ontology.md#bind-a-contract) of a node: the four
+keys `config.meta.continuo.{entity grain fixed filter}` and the six column keys
+`columns.*.meta.continuo.{property local agg from period where}`. A node that writes none of them
+selects no new field, so these paths leave its `source_sha256` as it was. A node that writes one,
+even as null, which the select keeps, gets a different one ([stability](stability.md)).
 
 A test tree also selects, for each test:
 
