@@ -58,6 +58,7 @@ def test_a_wheel_without_its_data_files_is_refused(tmp_path):
         "continuo_contracts/vectors/contracts.json",
         "continuo_contracts/vectors/dbt_contracts.json",
         "continuo_contracts/vectors/hashing.json",
+        "continuo_contracts/vectors/ontology.json",
         "continuo_contracts/vectors/projection.json",
         "continuo_contracts/vectors/sql_types.json",
         "continuo_contracts/vectors/strict_yaml.json",

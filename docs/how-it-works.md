@@ -43,17 +43,40 @@ A module imports only from the rows below it, and the modules of one row import 
 
 | Modules | Job |
 |---|---|
-| `cli` | The `continuo-contracts` command: `validate`, `hash` and `dbt check` |
+| `cli` | The `continuo-contracts` command: `validate`, `hash`, `dbt check` and `ontology check` |
 | `lite` | The lite check: the dbt steps for every node of a manifest |
-| `validate` | The ODCS schema check and continuo's rules |
+| `ontology_check` | The ontology rules over contracts in memory |
+| `validate`, `ontology` | The ODCS schema check and continuo's rules, the ontology file and the ontology part of a contract |
 | `contract` | The stored form and `contract_hash` |
 | `python`, `yaml_strict`, `dbt` | Python node and projection, contract file reader, dbt nodes |
 | `canonical`, `hashing`, `schema`, `fingerprints` | Canonical JSON, folds, ODCS schema, input map |
-| `errors`, `vocabulary` | The errors, the `continuo` custom properties and where each may sit |
+| `errors`, `vocabulary` | The errors, the `continuo` custom properties and where each may sit, and the rule for the name of a thing |
 
 Each library is confined to the modules that need it: jsonschema to `validate`, PyYAML to
 `yaml_strict` and `fingerprints`, `logging` and `subprocess` to `cli`. `uv run lint-imports`
 enforces the rows and these confinements from `[tool.importlinter]` in `pyproject.toml`.
+
+## The ontology modules
+
+Two modules read contracts against an [ontology](glossary.md#ontology), a file that names the
+services, things and properties of the data ([ontology](ontology.md)). They take values and return
+values like every module but `cli`: the caller reads the file and the contracts.
+
+- `ontology` loads the file (`ontology.load` reads it with `yaml_strict` and checks its shape
+  against the keys it lists) and answers which services the file declares. It also reads the
+  ontology part of a stored contract: `has_bindings` says whether the contract writes a
+  [binding](glossary.md#binding), `strip` takes the bindings and the links to the ontology out, and
+  `resolve` fills a stored form with what the ontology knows. `resolve` and `strip` end in
+  `contract.canonical_form`, the walk that `normalise_python` and `normalise_dbt` end with, so a
+  resolved form hashes as any stored form does.
+- `ontology_check` runs the rules over stored contracts in memory: `check` takes the loaded
+  `Ontology`, the contracts and the names of the rules, and returns `Finding`s, and
+  `ontology_findings` checks the file alone. The [lite check](glossary.md#lite-check) resolves
+  each contract of one service and runs the [per-service rules](glossary.md#per-service-rule). The
+  rules that need the contracts of every service run only at the release.
+
+The lite check hashes the stored form, so a resolved form changes no hash it reports.
+`ontology.json` pins the first resolved forms and their hashes ([test vectors](vectors.md)).
 
 ## Why the package is pure
 

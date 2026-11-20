@@ -81,6 +81,7 @@ shape the generator cannot read raises an error, `DbtNodeError`, that names the 
 | property `freshnessBuildAfter` | `{count, period}` of a model's `config.freshness.build_after` |
 | property `snapshot` | a snapshot's settings, below |
 | property `quoteColumns` | a seed's `config.quote_columns` |
+| `schema[0]` properties `entity`, `grain`, `fixed`, `filter` | the same keys of `config.meta.continuo`: [bindings](#bind-to-an-ontology) |
 
 A property is a root `{vendor: continuo, property, value}` item, written in this order when it has
 a value. `service` is left out with no `fqn`, which validation reports as `missing_field`.
@@ -107,6 +108,7 @@ with both `not_null` and `unique` tests.
 | `physicalType` | `data_type`, trimmed; on a seed, a non-blank `config.column_types` entry wins |
 | `logicalType` | from `physicalType`, by the list below |
 | `classification` | the column's `meta.continuo.classification` |
+| properties `property`, `local`, `aggregate` | the column's `meta.continuo.property`, `.local`, and `.from`, `.agg`, `.where`, `.period` as one `aggregate`: [bindings](#bind-to-an-ontology) |
 | `primaryKey` | `true` when a model's `primary_key` lists it; an undeclared entry is dropped |
 | `primaryKeyPosition` | its place in `primary_key` from 1 (dropped entries count), in a key of 2+ |
 
@@ -126,6 +128,72 @@ is read in lower case, each run of spaces or tabs as one space, and maps by this
 
 Another name, a `[` or a non-ASCII character gives none. A string type whose `<inside>` is digits
 from 1 to 2**53 - 1, leading zeros ignored, gives `logicalTypeOptions.maxLength`.
+
+## Bind to an ontology
+
+A node and its columns may carry the seven [bindings](glossary.md#binding) that tie a contract to an
+[ontology](ontology.md). A team writes them under `meta.continuo`, and `dbt.generate` writes them
+as custom properties of the `continuo` vendor:
+
+```yaml
+models:
+  - name: daily_sales
+    config:
+      meta:
+        owner: team-shop
+        continuo:
+          entity: Sale                  # the table is a copy of the thing Sale
+          fixed: {channel: web}         # it holds only this value of a key part
+          filter: {status: paid}        # and only the rows with this value of a field
+    columns:
+      - {name: sale_id, meta: {continuo: {property: Sale.sale_id}}}
+      - {name: note, meta: {continuo: {local: true}}}
+      - name: total
+        meta: {continuo: {from: Sale.amount, agg: sum, where: {channel: web}}}
+      - {name: day, meta: {continuo: {period: day}}}
+```
+
+| `meta.continuo` key | Where | Becomes |
+|---|---|---|
+| `entity`, `grain`, `fixed`, `filter` | the node's `config.meta` | the property of that name on the schema object, after `reads` |
+| `property` | a column's `meta` | the column's property `property`, `<Thing>.<field>` |
+| `local` | a column's `meta` | the column's property `local`, written only when `true` |
+| `from`, `agg`, `where`, `period` | a column's `meta` | the one column property `aggregate`, a mapping of the keys the column writes |
+
+A key that is absent or null writes nothing, nor does `local: false`. A value is copied as the
+manifest holds it, whatever its shape, so a wrong one reaches `validate`, which refuses it with a
+`value` issue ([validation](validation.md#binding-values)). A node's `source_sha256` covers these
+keys ([source_sha256](source-sha256.md#read-trees)). The [ontology](ontology.md) page says what each
+binding means and which rules check it.
+
+```python
+>>> from continuo_contracts import dbt, validate
+>>> node = {
+...     "resource_type": "model", "name": "daily_sales", "schema": "analytics",
+...     "fqn": ["shop", "daily_sales"], "tags": ["daily"],
+...     "original_file_path": "models/daily_sales.sql",
+...     "config": {"materialized": "table", "meta": {"owner": "team-shop", "continuo": {
+...         "entity": "Sale", "fixed": {"channel": "web"}, "filter": {"status": "paid"}}}},
+...     "columns": {
+...         "sale_id": {"name": "sale_id", "meta": {"continuo": {"property": "Sale.sale_id"}}},
+...         "note": {"name": "note", "meta": {"continuo": {"local": True}}},
+...         "total": {"name": "total", "meta": {"continuo": {
+...             "from": "Sale.amount", "agg": "sum", "where": {"channel": "web"}}}},
+...         "day": {"name": "day", "meta": {"continuo": {"period": "day"}}}}}
+>>> doc = dbt.generate(node, [], manifest={}).document
+>>> {p["property"]: p["value"] for p in doc["schema"][0]["customProperties"]}
+{'entity': 'Sale', 'fixed': {'channel': 'web'}, 'filter': {'status': 'paid'}}
+>>> for column in doc["schema"][0]["properties"]:
+...     [item] = column["customProperties"]
+...     print(column["name"], item["property"], item["value"])
+sale_id property Sale.sale_id
+note local True
+total aggregate {'agg': 'sum', 'from': 'Sale.amount', 'where': {'channel': 'web'}}
+day aggregate {'period': 'day'}
+>>> validate.validate_dbt_contract(doc)
+[]
+
+```
 
 ## Tests and quality rules
 

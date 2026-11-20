@@ -4,7 +4,7 @@ Install the wheel into a clean virtual environment, then run this script with th
 interpreter in isolated mode, from a directory that is not the checkout:
 `<venv>/bin/python -I scripts/smoke_installed.py`. The package must come from a `site-packages`
 directory, `fingerprints.yaml` must load with entries in every section, the packaged ODCS schema
-must load with its pinned bytes, every case of the seven vector files must pass when read through
+must load with its pinned bytes, every case of the eight vector files must pass when read through
 `importlib.resources`, canonical JSON must give the documented bytes, and the installed console
 script `continuo-contracts` must run `dbt check` on a manifest and refuse a folder that does not
 exist. Exit status 0 means all of it held, 1 means a failure was logged.
@@ -18,13 +18,14 @@ import sys
 import tempfile
 
 from collections.abc import Mapping
+from dataclasses import asdict
 from importlib import resources
 from pathlib import Path
 from typing import Any, cast
 
 import continuo_contracts
 
-from continuo_contracts import schema, yaml_strict
+from continuo_contracts import ontology, schema, yaml_strict
 from continuo_contracts.canonical import canonical_json
 from continuo_contracts.contract import (
     contract_hash,
@@ -41,6 +42,7 @@ from continuo_contracts.errors import (
 )
 from continuo_contracts.fingerprints import SECTIONS, load
 from continuo_contracts.hashing import fold3, fold4, shared_fold, shared_hash
+from continuo_contracts.ontology_check import PER_SERVICE_RULES, check
 from continuo_contracts.python import (
     PythonNode,
     canonical_sql_type,
@@ -413,6 +415,36 @@ def _dbt_check_failures() -> list[str]:
     return failures
 
 
+def _ontology_failures(cases: list[dict[str, Any]]) -> list[str]:
+    """Return the ontology vector cases whose resolved form, hash or findings differ."""
+    failures: list[str] = []
+    for case in cases:
+        name = case["name"]
+        try:
+            loaded = ontology.load(case["ontology"])
+            resolved = ontology.resolve(case["stored"], loaded)
+            found = [
+                asdict(finding)
+                for finding in check(loaded, [resolved], rules=PER_SERVICE_RULES)
+            ]
+        except ContractsError as error:
+            failures.append(f"ontology vector {name!r}: refused: {error}")
+            continue
+        if resolved != case["resolved"]:
+            failures.append(
+                f"ontology vector {name!r}: the resolved form differs"
+            )
+        if contract_hash(resolved) != case["contract_hash"]:
+            failures.append(
+                f"ontology vector {name!r}: the hash is {contract_hash(resolved)}"
+            )
+        if found != case["findings"]:
+            failures.append(
+                f"ontology vector {name!r}: the findings are {found!r}"
+            )
+    return failures
+
+
 def _canonical_json_failures() -> list[str]:
     """Return a problem when `canonical_json` does not give the documented bytes."""
     expected = b'{"a":true,"b":[1,"' + NON_ASCII_UTF8 + b'"]}'
@@ -431,6 +463,7 @@ def main() -> int:
     strict_yaml = _vector_cases("strict_yaml.json")
     contracts = _vector_cases("contracts.json")
     dbt_contracts = _vector_cases("dbt_contracts.json")
+    ontologies = _vector_cases("ontology.json")
     failures = [
         *_installed_failures(),
         *_fingerprint_failures(),
@@ -442,6 +475,7 @@ def main() -> int:
         *_strict_yaml_failures(strict_yaml),
         *_contract_failures(contracts),
         *_dbt_contract_failures(dbt_contracts),
+        *_ontology_failures(ontologies),
         *_canonical_json_failures(),
         *_dbt_check_failures(),
     ]
@@ -453,6 +487,7 @@ def main() -> int:
         ("strict_yaml.json", strict_yaml),
         ("contracts.json", contracts),
         ("dbt_contracts.json", dbt_contracts),
+        ("ontology.json", ontologies),
     ):
         if not cases:
             failures.append(f"{name} holds no cases")
@@ -462,7 +497,7 @@ def main() -> int:
         return 1
     logger.info(
         "continuo-contracts %s installed at %s: %d projection, %d sql type, %d canonical json, "
-        "%d hashing, %d strict yaml, %d contract and %d dbt contract cases pass",
+        "%d hashing, %d strict yaml, %d contract, %d dbt contract and %d ontology cases pass",
         continuo_contracts.__version__,
         Path(continuo_contracts.__file__).parent,
         len(projections),
@@ -472,6 +507,7 @@ def main() -> int:
         len(strict_yaml),
         len(contracts),
         len(dbt_contracts),
+        len(ontologies),
     )
     return 0
 

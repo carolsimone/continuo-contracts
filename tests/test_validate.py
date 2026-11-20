@@ -131,7 +131,7 @@ def test_the_full_contracts_name_their_table_after_their_file():
         ),
         (
             lambda d: d["customProperties"].append(
-                _continuo("entity", "Transaction")
+                _continuo("nonsense", "Transaction")
             ),
             "customProperties[4]",
             "unknown_property",
@@ -185,7 +185,7 @@ def test_every_issue_has_one_of_the_reasons():
     bad_rules = _kpis()
     bad_rules.update(apiVersion="v3.1.0", tenant="t", id="Analytics.other")
     bad_rules["customProperties"] += [
-        _continuo("entity", 1),
+        _continuo("nonsense", 1),
         _continuo("provenance", 1),
     ]
     bad_schema = _kpis()
@@ -667,9 +667,9 @@ def test_provenance_is_refused_because_continuo_adds_it_to_the_published_file():
 
 def test_an_unknown_property_says_to_check_the_spelling():
     doc = _kpis()
-    doc["customProperties"].append(_continuo("entity", "Transaction"))
+    doc["customProperties"].append(_continuo("nonsense", "Transaction"))
     (issue,) = _check(doc)
-    assert "`entity`" in issue.message
+    assert "`nonsense`" in issue.message
     assert "spelling" in issue.message
 
 
@@ -758,7 +758,7 @@ def test_a_continuo_property_on_a_column_is_on_the_wrong_level_or_unknown():
     column = doc["schema"][0]["properties"][0]
     column["customProperties"] = [
         _continuo("schedule", "daily"),
-        _continuo("entity", "Day"),
+        _continuo("nonsense", "Day"),
     ]
     assert _found(_check(doc)) == [
         ("schema[0].properties[0].customProperties[0]", "refused_property"),
@@ -814,9 +814,9 @@ def test_a_continuo_property_on_the_description_is_on_the_wrong_level():
 
 def test_a_continuo_property_in_a_list_deep_in_the_contract_is_found():
     doc = _kpis()
-    doc["team"]["customProperties"] = [_continuo("entity", "x")]
+    doc["team"]["customProperties"] = [_continuo("nonsense", "x")]
     doc["roles"] = [
-        {"role": "reader", "customProperties": [_continuo("entity", "x")]}
+        {"role": "reader", "customProperties": [_continuo("nonsense", "x")]}
     ]
     assert _found(_check(doc)) == [
         ("roles[0].customProperties[0]", "unknown_property"),
@@ -826,7 +826,7 @@ def test_a_continuo_property_in_a_list_deep_in_the_contract_is_found():
 
 def test_a_value_that_looks_like_a_custom_property_list_is_not_walked():
     doc = _kpis()
-    nested = {"customProperties": [_continuo("entity", "x")]}
+    nested = {"customProperties": [_continuo("nonsense", "x")]}
     doc["customProperties"].append(_continuo("config", nested))
     column = doc["schema"][0]["properties"][0]
     column["examples"] = [nested]
@@ -847,7 +847,7 @@ def test_another_vendors_property_with_a_continuo_name_is_kept_and_ignored():
         },
         {"vendor": "lotse", "property": "schedule", "value": "weekly"},
         {"property": "provenance", "value": {}},
-        {"vendor": "Continuo", "property": "entity", "value": 1},
+        {"vendor": "Continuo", "property": "nonsense", "value": 1},
     ]
     doc["schema"][0]["customProperties"] = [
         {"vendor": "lotse", "property": "reads", "value": 1}
@@ -924,7 +924,10 @@ def test_the_same_property_on_two_lists_is_not_a_repeat():
 
 def test_an_unknown_property_written_twice_is_unknown_each_time():
     doc = _kpis()
-    doc["customProperties"] += [_continuo("entity", 1), _continuo("entity", 2)]
+    doc["customProperties"] += [
+        _continuo("nonsense", 1),
+        _continuo("nonsense", 2),
+    ]
     assert _found(_check(doc)) == [
         ("customProperties[4]", "unknown_property"),
         ("customProperties[5]", "unknown_property"),
@@ -1195,7 +1198,7 @@ def test_schema_issues_put_array_indexes_in_numeric_order():
 
 def test_rule_issues_put_array_indexes_in_numeric_order():
     doc = _kpis()
-    doc["customProperties"] += [_continuo("entity", n) for n in range(10)]
+    doc["customProperties"] += [_continuo("nonsense", n) for n in range(10)]
     assert [
         issue.path for issue in rule_issues(doc, path=KPIS_PATH, service=SERVICE)
     ] == [f"customProperties[{n}]" for n in range(4, 14)]
@@ -1204,7 +1207,7 @@ def test_rule_issues_put_array_indexes_in_numeric_order():
 def test_issues_are_in_path_order_and_then_message_order():
     doc = _kpis()
     doc.update(tenant="t", apiVersion="v3.1.0", id="Analytics.py_daily_kpis")
-    doc["customProperties"].append(_continuo("entity", 1))
+    doc["customProperties"].append(_continuo("nonsense", 1))
     issues = rule_issues(doc, path="contracts/other.odcs.yaml", service=SERVICE)
     assert [issue.path for issue in issues] == [
         "$",
@@ -1222,7 +1225,7 @@ def test_the_same_document_gives_the_same_issues_every_time():
     doc = _kpis()
     doc.update(tenant="t", servers=[])
     doc["customProperties"] += [
-        _continuo("entity", 1),
+        _continuo("nonsense", 1),
         _continuo("schedule", "x"),
     ]
     first = _check(doc)
@@ -1296,7 +1299,7 @@ def test_a_custom_properties_value_that_is_not_a_list_is_not_walked(written):
     assert rule_issues(doc, path=KPIS_PATH, service=SERVICE) == []
 
 
-@pytest.mark.parametrize("name", [7, None, ["entity"]])
+@pytest.mark.parametrize("name", [7, None, ["nonsense"]])
 def test_a_continuo_property_with_no_name_is_left_to_the_schema_check(name):
     doc = _kpis()
     doc["customProperties"].append(_continuo(name, "x"))
@@ -1308,7 +1311,7 @@ def test_a_continuo_property_with_no_name_is_left_to_the_schema_check(name):
 
 def test_a_comparison_value_of_a_quality_rule_is_data_and_not_walked():
     doc = _kpis()
-    nested = {"customProperties": [_continuo("entity", "x")]}
+    nested = {"customProperties": [_continuo("nonsense", "x")]}
     doc["schema"][0]["quality"] = [
         {"metric": "rowCount", "mustBe": nested},
         {"metric": "rowCount", "mustNotBe": [nested]},
@@ -1324,7 +1327,7 @@ def test_the_value_of_a_map_is_a_property_and_is_walked():
             "key": {"logicalType": "string"},
             "value": {
                 "logicalType": "string",
-                "customProperties": [_continuo("entity", "x")],
+                "customProperties": [_continuo("nonsense", "x")],
             },
         },
     )

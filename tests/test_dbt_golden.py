@@ -65,6 +65,13 @@ def test_the_writer_reads_every_fixture_manifest():
     assert tuple(writer.projects()) == PROJECTS
 
 
+def test_the_bound_projects_have_a_manifest_and_no_golden_file():
+    assert writer.UNGOLDEN == ("core_bound", "finance_bound")
+    for project in writer.UNGOLDEN:
+        assert (writer.MANIFESTS / f"{project}.json.gz").is_file()
+        assert not (GOLDEN / project).exists()
+
+
 def test_every_kept_node_has_a_golden_file_and_no_other_file_is_there():
     assert sorted(writer.golden_texts()) == GOLDEN_FILES
     assert {path.parent.name for path in GOLDEN_FILES} == set(PROJECTS)

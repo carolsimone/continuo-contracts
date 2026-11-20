@@ -39,6 +39,35 @@ The Open Data Contract Standard, a YAML format for a table's schema, quality rul
 This package checks contracts against the ODCS v3.2.0 JSON schema, which it ships.
 ### quality rule
 An item of a contract's `quality` list. A dbt test becomes one ([dbt contracts](dbt-contracts.md)).
+### ontology
+A YAML file that names who acts on data (domains, services, teams, roles, people) and what the data
+is about ([things](#thing)). Contracts are bound to it and checked against it
+([ontology](ontology.md)).
+### thing
+An entry under `entities` of the [ontology](#ontology): what data can be about, such as a customer,
+with an owner, a key of named parts, properties and access rules.
+### binding
+One of the seven `continuo` custom properties that tie a contract to the ontology: `entity`,
+`grain`, `fixed` and `filter` on the table, `property`, `local` and `aggregate` on a column
+([ontology](ontology.md#bind-a-contract)).
+### copy
+A contract of a service that the ontology declares, as the rules read it: the table that holds some
+rows and fields of a [thing](#thing), or an aggregate. A rule finds a copy by its physical relation,
+`<schema>.<table>`, which another contract's [`reads`](#reads) names.
+### resolution
+What `ontology.resolve` does: it fills a [stored form](#stored-form) with what the
+[ontology](#ontology) knows, such as the domain, the links, the types and the key, and never
+replaces a value ([ontology](ontology.md#resolve)).
+### ontology part
+What `ontology.strip` removes from a stored form: the seven [bindings](#binding) and the
+`authoritativeDefinitions` entries whose `url` starts with `continuo-ontology:`.
+### finding
+What an ontology rule reports: a severity (`error`, `warning` or `info`), the rule, a subject and a
+message ([ontology](ontology.md#the-rules)).
+### per-service rule
+An ontology rule that needs no other service: `contract`, `coverage`, `quality` or `privacy`. The
+[lite check](#lite-check) runs them. `access`, `order` and `drift` read the contracts of every
+service, so only the [release](#release) runs them.
 ### reads
 The tables a node reads. For dbt: those `meta.continuo.reads` declares, which the library writes,
 plus those the compiled SQL names, which the release adds. The [lite check](#lite-check) cannot

@@ -159,6 +159,23 @@ families:
       when: {condition: "sql_reads", fingerprint: "both", parts: ["compiled"]}
       why: "contract: the ontology part, written only when the install uses an ontology. Content: the compiled part, while SQL reads the value"
       inputs: []
+    - id: "ontology_bindings"
+      field: "The ontology bindings: `entity`, `grain`, `fixed` and `filter` on the schema object; `property`, `local` and `aggregate` on a column"
+      source: "`config.meta`, column `meta`"
+      fingerprint: "contract"
+      why: "the ontology part: stored only when the install uses an ontology"
+      inputs: ["odcs.schema.custom.entity", "odcs.schema.custom.grain", "odcs.schema.custom.fixed",
+               "odcs.schema.custom.filter", "odcs.schema.properties.custom.property",
+               "odcs.schema.properties.custom.local", "odcs.schema.properties.custom.aggregate"]
+    - id: "ontology_resolved"
+      field: "What the ontology fills in: the root `domain`, the links to the ontology on the schema object and on a column, and a column's `semanticType`"
+      source: "the ontology the install runs"
+      fingerprint: "contract"
+      why: "values the ontology fills in, stored only when the install uses an ontology"
+      inputs: ["odcs.domain", "odcs.schema.authoritativeDefinitions.type", "odcs.schema.authoritativeDefinitions.url",
+               "odcs.schema.properties.authoritativeDefinitions.type",
+               "odcs.schema.properties.authoritativeDefinitions.url",
+               "odcs.schema.properties.semanticType"]
     - id: "sql_reads"
       field: "Tables the compiled SQL names"
       source: "`compiled_code`, listed by topology-controller"
@@ -412,6 +429,24 @@ families:
       why: "as for a model, except that a seed has no SQL to read a `meta` value, so none of them reaches `content_hash`"
       inputs: ["odcs.team.name", "odcs.custom.criticality", "odcs.custom.timeoutMinutes",
                "odcs.schema.properties.classification"]
+    - id: "ontology_bindings"
+      field: "The ontology bindings: `entity`, `grain`, `fixed` and `filter` on the schema object; `property`, `local` and `aggregate` on a column"
+      source: "`config.meta`, column `meta`"
+      fingerprint: "contract"
+      why: "the ontology part: stored only when the install uses an ontology"
+      inputs: ["odcs.schema.custom.entity", "odcs.schema.custom.grain", "odcs.schema.custom.fixed",
+               "odcs.schema.custom.filter", "odcs.schema.properties.custom.property",
+               "odcs.schema.properties.custom.local", "odcs.schema.properties.custom.aggregate"]
+    - id: "ontology_resolved"
+      field: "What the ontology fills in: the root `domain`, the links to the ontology on the schema object and on a column, and a column's `semanticType`, `primaryKey` and `primaryKeyPosition`"
+      source: "the ontology the install runs"
+      fingerprint: "contract"
+      why: "values the ontology fills in, stored only when the install uses an ontology"
+      inputs: ["odcs.domain", "odcs.schema.authoritativeDefinitions.type", "odcs.schema.authoritativeDefinitions.url",
+               "odcs.schema.properties.authoritativeDefinitions.type",
+               "odcs.schema.properties.authoritativeDefinitions.url",
+               "odcs.schema.properties.semanticType",
+               "odcs.schema.properties.primaryKey", "odcs.schema.properties.primaryKeyPosition"]
     - id: "sql_reads"
       field: "Tables the compiled SQL names"
       source: "`compiled_code`, listed by topology-controller"
@@ -606,6 +641,24 @@ families:
       inputs: ["config.tags", "odcs.tags", "odcs.custom.schedule", "odcs.team.name",
                "odcs.custom.criticality", "odcs.custom.timeoutMinutes",
                "odcs.schema.properties.classification"]
+    - id: "ontology_bindings"
+      field: "The ontology bindings: `entity`, `grain`, `fixed` and `filter` on the schema object; `property`, `local` and `aggregate` on a column"
+      source: "`config.meta`, column `meta`"
+      fingerprint: "contract"
+      why: "the ontology part: stored only when the install uses an ontology"
+      inputs: ["odcs.schema.custom.entity", "odcs.schema.custom.grain", "odcs.schema.custom.fixed",
+               "odcs.schema.custom.filter", "odcs.schema.properties.custom.property",
+               "odcs.schema.properties.custom.local", "odcs.schema.properties.custom.aggregate"]
+    - id: "ontology_resolved"
+      field: "What the ontology fills in: the root `domain`, the links to the ontology on the schema object and on a column, and a column's `semanticType`, `primaryKey` and `primaryKeyPosition`"
+      source: "the ontology the install runs"
+      fingerprint: "contract"
+      why: "values the ontology fills in, stored only when the install uses an ontology"
+      inputs: ["odcs.domain", "odcs.schema.authoritativeDefinitions.type", "odcs.schema.authoritativeDefinitions.url",
+               "odcs.schema.properties.authoritativeDefinitions.type",
+               "odcs.schema.properties.authoritativeDefinitions.url",
+               "odcs.schema.properties.semanticType",
+               "odcs.schema.properties.primaryKey", "odcs.schema.properties.primaryKeyPosition"]
     - id: "sql_reads"
       field: "Tables the compiled SQL names"
       source: "`compiled_code`, listed by topology-controller"
@@ -639,13 +692,40 @@ families:
       inputs: ["odcs.description.purpose", "odcs.schema.description", "odcs.custom.service",
                "odcs.custom.kind", "odcs.custom.filePath"]
     - id: "declared_columns"
-      field: "Declared columns, and each column's `data_type`, description and tags"
+      field: "Declared columns: name and order"
       source: "`schema.yml`"
       fingerprint: "contract"
-      why: "`properties` in declared order, each with its `physicalType`, the `logicalType` derived from it, description and tags, as for a model's columns without an enforced dbt contract. The history columns follow them and have their own row; the content side of the snapshot config keys that name them is classified on `snapshot_config`"
-      inputs: ["odcs.schema.properties.name", "odcs.schema.properties.physicalType",
-               "odcs.schema.properties.logicalType", "odcs.schema.properties.logicalTypeOptions",
-               "odcs.schema.properties.description", "odcs.schema.properties.tags"]
+      when: {condition: "enforced", fingerprint: "both", parts: ["config"]}
+      why: "contract: `properties` in declared order; content: `hashed_config`, only when enforced. The history columns follow them and have their own row; the content side of the snapshot config keys that name them is classified on `snapshot_config`"
+      inputs: ["contract.columns", "odcs.schema.properties.name"]
+    - id: "column_data_type"
+      field: "Column `data_type`"
+      source: "`schema.yml`"
+      fingerprint: "contract"
+      when: {condition: "enforced", fingerprint: "both", parts: ["config"]}
+      why: "contract: `physicalType`, with the `logicalType` derived from it; content: `hashed_config`, only when enforced"
+      inputs: ["odcs.schema.properties.physicalType", "odcs.schema.properties.logicalType",
+               "odcs.schema.properties.logicalTypeOptions"]
+    - id: "column_description_tags"
+      field: "Column description and tags"
+      source: "`schema.yml`"
+      fingerprint: "contract"
+      why: "`properties[].description`, `tags`"
+      inputs: ["odcs.schema.properties.description", "odcs.schema.properties.tags"]
+    - id: "constraints"
+      field: "Column constraints"
+      source: "`schema.yml`"
+      fingerprint: "neither"
+      when: {condition: "enforced", fingerprint: "content", parts: ["config"]}
+      why: "`hashed_config`. No constraint reaches the contract of a snapshot: `required` and `unique` come from tests, and only a model's `primary_key` is read"
+      inputs: ["constraints"]
+    - id: "column_quote"
+      field: "Column `quote`"
+      source: "`schema.yml`"
+      fingerprint: "neither"
+      when: {condition: "enforced", fingerprint: "content", parts: ["config"]}
+      why: "`hashed_config`; it only decides how dbt quotes the name in DDL, so it has no contract field"
+      inputs: []
     - id: "tests"
       field: "Tests on the snapshot"
       source: "test nodes"
@@ -971,6 +1051,23 @@ families:
       fingerprint: "contract"
       why: "the tables the read queries name, which topology-controller lists; never authored"
       inputs: ["odcs.schema.custom.reads"]
+    - id: "ontology_bindings"
+      field: "The ontology bindings: `entity`, `grain`, `fixed` and `filter` on the schema object; `property`, `local` and `aggregate` on a column"
+      source: "authored"
+      fingerprint: "contract"
+      why: "the ontology part: stored only when the install uses an ontology"
+      inputs: ["odcs.schema.custom.entity", "odcs.schema.custom.grain", "odcs.schema.custom.fixed",
+               "odcs.schema.custom.filter", "odcs.schema.properties.custom.property",
+               "odcs.schema.properties.custom.local", "odcs.schema.properties.custom.aggregate"]
+    - id: "ontology_resolved"
+      field: "What the ontology fills in: the links to the ontology on the schema object and on a column, and a column's `semanticType`; the root `domain` is a standard field"
+      source: "the ontology the install runs"
+      fingerprint: "contract"
+      why: "values the ontology fills in, stored only when the install uses an ontology"
+      inputs: ["odcs.schema.authoritativeDefinitions.type", "odcs.schema.authoritativeDefinitions.url",
+               "odcs.schema.properties.authoritativeDefinitions.type",
+               "odcs.schema.properties.authoritativeDefinitions.url",
+               "odcs.schema.properties.semanticType"]
     - id: "quality_rules"
       field: "Quality rules"
       source: "authored"
@@ -1194,6 +1291,23 @@ families:
       fingerprint: "contract"
       why: "as for a `python-node`; this kind has no read queries, so it lists no table"
       inputs: ["odcs.schema.custom.reads"]
+    - id: "ontology_bindings"
+      field: "The ontology bindings: `entity`, `grain`, `fixed` and `filter` on the schema object; `property`, `local` and `aggregate` on a column"
+      source: "authored"
+      fingerprint: "contract"
+      why: "the ontology part: stored only when the install uses an ontology"
+      inputs: ["odcs.schema.custom.entity", "odcs.schema.custom.grain", "odcs.schema.custom.fixed",
+               "odcs.schema.custom.filter", "odcs.schema.properties.custom.property",
+               "odcs.schema.properties.custom.local", "odcs.schema.properties.custom.aggregate"]
+    - id: "ontology_resolved"
+      field: "What the ontology fills in: the links to the ontology on the schema object and on a column, and a column's `semanticType`; the root `domain` is a standard field"
+      source: "the ontology the install runs"
+      fingerprint: "contract"
+      why: "values the ontology fills in, stored only when the install uses an ontology"
+      inputs: ["odcs.schema.authoritativeDefinitions.type", "odcs.schema.authoritativeDefinitions.url",
+               "odcs.schema.properties.authoritativeDefinitions.type",
+               "odcs.schema.properties.authoritativeDefinitions.url",
+               "odcs.schema.properties.semanticType"]
     - id: "quality_rules"
       field: "Quality rules"
       source: "authored"
@@ -1422,6 +1536,23 @@ families:
       fingerprint: "contract"
       why: "as for a `python-node`; this kind has no read queries, so it lists no table"
       inputs: ["odcs.schema.custom.reads"]
+    - id: "ontology_bindings"
+      field: "The ontology bindings: `entity`, `grain`, `fixed` and `filter` on the schema object; `property`, `local` and `aggregate` on a column"
+      source: "authored"
+      fingerprint: "contract"
+      why: "the ontology part: stored only when the install uses an ontology"
+      inputs: ["odcs.schema.custom.entity", "odcs.schema.custom.grain", "odcs.schema.custom.fixed",
+               "odcs.schema.custom.filter", "odcs.schema.properties.custom.property",
+               "odcs.schema.properties.custom.local", "odcs.schema.properties.custom.aggregate"]
+    - id: "ontology_resolved"
+      field: "What the ontology fills in: the links to the ontology on the schema object and on a column, and a column's `semanticType`; the root `domain` is a standard field"
+      source: "the ontology the install runs"
+      fingerprint: "contract"
+      why: "values the ontology fills in, stored only when the install uses an ontology"
+      inputs: ["odcs.schema.authoritativeDefinitions.type", "odcs.schema.authoritativeDefinitions.url",
+               "odcs.schema.properties.authoritativeDefinitions.type",
+               "odcs.schema.properties.authoritativeDefinitions.url",
+               "odcs.schema.properties.semanticType"]
     - id: "quality_rules"
       field: "Quality rules"
       source: "authored"

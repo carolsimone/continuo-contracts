@@ -71,6 +71,11 @@ and, when there is a table, adds `{vendor: continuo, property: reads, value: <ta
 
 ## Walk
 
+`contract.canonical_form(doc)` runs this walk alone on any ODCS document and returns a new dict, for
+a caller that adds to or removes from a stored form, as `ontology.resolve` and `ontology.strip`
+([ontology](ontology.md)) do. It fills nothing and drops no `primaryKeyPosition`: those are steps 2
+and 3. A stored form comes back unchanged.
+
 Each object, or each item of a list, gets the type its parent's type names for its key:
 
 | Parent type | Key: type of the value |
@@ -108,3 +113,12 @@ Each type's defaults and free-form keys (data copied as written) follow. Other t
    `authoritativeDefinitions` is sorted by the canonical JSON bytes of each item, each item once.
    Every other list, such as `properties`, keeps its order.
 6. After the last key, a property drops its `physicalName` when it equals its `name`.
+
+```python
+>>> from continuo_contracts.contract import canonical_form
+>>> canonical_form({"id": "a.t", "tags": ["b", "a", "a"], "description": {"purpose": " x \r\n"}})
+{'id': 'a.t', 'tags': ['a', 'b'], 'description': {'purpose': 'x'}}
+>>> canonical_form(stored) == stored
+True
+
+```

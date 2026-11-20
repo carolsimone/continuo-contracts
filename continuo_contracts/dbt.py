@@ -94,12 +94,20 @@ _NODE_FIELDS: Final = (
     "deprecation_date",
     "primary_key",
 )
+# The keys of a column's `meta.continuo` that make up its `aggregate` binding, in the order the
+# `aggregate` value writes them.
+_AGGREGATE_KEYS: Final = ("agg", "from", "period", "where")
+# The bindings of a node's `config.meta.continuo`, in the order the schema object lists them.
+_NODE_BINDINGS: Final = ("entity", "grain", "fixed", "filter")
 _COLUMN_FIELDS: Final = (
     "name",
     "description",
     "data_type",
     "tags",
     "meta.continuo.classification",
+    "meta.continuo.property",
+    "meta.continuo.local",
+    *(f"meta.continuo.{key}" for key in _AGGREGATE_KEYS),
 )
 _TABLE_TEST_FIELDS: Final = ("name", "enabled", "granularity", "params")
 _CONFIG_FIELDS: Final = (
@@ -126,6 +134,7 @@ _META_FIELDS: Final = ("owner", "criticality", "timeout_minutes")
 _CONTINUO_META_FIELDS: Final = (
     "readers",
     "reads",
+    *_NODE_BINDINGS,
     *(f"tests.*.{name}" for name in _TABLE_TEST_FIELDS),
 )
 
@@ -689,6 +698,49 @@ def _root_properties(
     ]
 
 
+def _bindings(values: Mapping[str, object]) -> list[dict[str, Any]]:
+    """Return the continuo items for the bindings in `values`, leaving out each that is null.
+
+    A value is copied as the manifest holds it, whatever its shape: `validate` refuses a wrong
+    one, so a shape the generator cannot read is never silently dropped.
+    """
+    return [
+        {"vendor": VENDOR, "property": name, "value": _plain(value)}
+        for name, value in values.items()
+        if value is not None
+    ]
+
+
+def _node_bindings(continuo: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Return the bindings of a node's `config.meta.continuo`, for its schema object.
+
+    They are its `entity`, `grain`, `fixed` and `filter`, in that order.
+    """
+    return _bindings({name: continuo.get(name) for name in _NODE_BINDINGS})
+
+
+def _column_bindings(continuo: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Return the bindings of a column's `meta.continuo`, for the column.
+
+    They are its `property`, its `local` (a column that is not local, `local: false`, writes
+    none) and one `aggregate` that holds the keys of `from`, `agg`, `where` and `period` that the
+    column writes, in key order.
+    """
+    local = continuo.get("local")
+    aggregate = {
+        key: continuo[key]
+        for key in _AGGREGATE_KEYS
+        if continuo.get(key) is not None
+    }
+    return _bindings(
+        {
+            "property": continuo.get("property"),
+            "local": None if local is False else local,
+            "aggregate": aggregate or None,
+        }
+    )
+
+
 def _roles(
     node: Mapping[str, Any],
     config: Mapping[str, Any],
@@ -825,7 +877,8 @@ def _column(
     """Return the property of the declared column `value`, at `field` of `node`.
 
     Its `primaryKey`, `required`, `unique`, `relationships` and `quality` start empty, for the
-    node's key and tests to fill.
+    node's key and tests to fill. Its `customProperties` hold the bindings of its
+    `meta.continuo`, as `_column_bindings` writes them.
     """
     column = _mapping(node, field, value)
     name = _required_string(node, f"{field}.name", column.get("name"))
@@ -849,6 +902,7 @@ def _column(
             f"{field}.meta.continuo.classification",
             continuo.get("classification"),
         ),
+        "customProperties": _column_bindings(continuo),
         "primaryKey": None,
         "primaryKeyPosition": None,
         "required": None,
@@ -1501,9 +1555,18 @@ def generate(
     `logicalType` that `logical_type` gives for it, its description, tags and
     `meta.continuo.classification`, the key of a model's `primary_key`, and what the tests on it
     say; a snapshot's history columns follow. Its `quality` holds the rules of the tests that sit
-    on no declared column, then the table tests of `config.meta.continuo.tests`. A field with no
-    value is left out, and descriptions are trimmed. The result does not depend on the order of
-    the tests, of a mapping's keys other than `columns`, or on the machine's time zone.
+    on no declared column, then the table tests of `config.meta.continuo.tests`.
+
+    The ontology bindings a team declares are written as custom properties of the `continuo`
+    vendor, as the manifest holds them: `entity`, `grain`, `fixed` and `filter` of the node's
+    `config.meta.continuo` on the schema object, and `property` and `local` of a column's
+    `meta.continuo` on the column, with its `from`, `agg`, `where` and `period` that it writes as
+    one `aggregate`. A key that is absent or null writes nothing, nor does `local: false`. A value
+    of a wrong shape is written too, for `validate` to refuse.
+
+    A field with no value is left out, and descriptions are trimmed. The result does not depend on
+    the order of the tests, of a mapping's keys other than `columns`, or on the machine's time
+    zone.
 
     `source_sha256` covers only the fields of the node, of its tests and of the nodes and sources
     its `relationships` tests point to that the generator reads, with the order of the columns.
@@ -1539,10 +1602,13 @@ def generate(
         "physicalType": _PHYSICAL_TYPES.get(materialized, "table"),
         "description": description,
         "customProperties": [
-            {"vendor": VENDOR, "property": "reads", "value": reads}
-        ]
-        if reads
-        else [],
+            *(
+                [{"vendor": VENDOR, "property": "reads", "value": reads}]
+                if reads
+                else []
+            ),
+            *_node_bindings(continuo),
+        ],
         "properties": properties,
         "quality": quality,
     }

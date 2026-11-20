@@ -5,8 +5,68 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+No hash of this library moves for a contract that writes no binding key: the vector files of 0.3.1
+are byte for byte the same, and `ontology.json` is new.
+
+### Added
+
+- `continuo_contracts.ontology` and `continuo_contracts.ontology_check`, which hold the ontology
+  loading and the ontology rules that moved here from continuo-governance. `ontology.load` reads an
+  ontology file with the strict YAML reader, checks its keys and the type of each value, and
+  returns an `Ontology` (`declares`, `domain_of`, `services`, the parsed `document` and the
+  `sha256` of the text); a file it refuses raises the new `errors.OntologyError`, whose message is
+  `<path>: <reason>`. `ontology.resolve(stored, ontology)` fills a stored contract with the domain
+  of its service, the links to the ontology (`LINK_PREFIX`), the bindings and the key that the
+  columns' names imply, the `logicalType` of each bound property, `classification: personal` and
+  the `semanticType` of an aggregate, never replacing a value, and writes the result in the
+  canonical form. `ontology.strip` removes the ontology part, the seven bindings and the links,
+  and `ontology.has_bindings` says whether a stored contract writes one.
+  `ontology_check.check` runs the rules `contract`, `coverage`, `access`, `order`, `drift`,
+  `quality` and `privacy` over stored contracts in memory, and `ontology_findings` runs the
+  `ontology` rule over the file alone. Each gives `Finding`s of the severity `error`, `warning` or
+  `info`. `PER_SERVICE_RULES` are the rules that need no other service and `RELEASE_RULES` adds the
+  rules that read the whole estate (`access`, `order` and `drift`). A service the ontology does not
+  declare gets one information line, and a warning for each of its contracts that writes a binding.
+- The seven binding properties, `vendor: continuo`: `entity`, `grain`, `fixed` and `filter` on the
+  schema object, and `property`, `local` and `aggregate` on a column. A Python contract writes
+  them as custom properties. In a dbt node they are the `meta.continuo` keys `entity`, `grain`,
+  `fixed` and `filter` on the node and `property`, `local`, and `from`, `agg`, `where` and `period`,
+  which become one `aggregate` value, on a column. `vocabulary.PROPERTIES` lists them, and
+  `ContinuoProperty.sits_on` may be `column`.
+- `contract.canonical_form`, the walk that `normalise_python` and `normalise_dbt` end with, for a
+  caller that adds to or removes from a stored form.
+- The command `continuo-contracts ontology check FILE [--json]`, which checks an ontology file
+  alone: exit 0 for no error, 1 for an error finding, 2 for a file that cannot be read or does not
+  load. With `--json` it prints `{"ok", "findings": [{severity, rule, subject, message}]}`.
+- `continuo-contracts dbt check --ontology FILE` and `lite.check_manifest(..., ontology=)`: the
+  lite check also reads the bindings of the contracts against the ontology, with
+  `PER_SERVICE_RULES`. A file that does not load exits 2 before dbt runs, and a file with errors of
+  its own gives one `error` line. The two rows of the banner that name the ontology say what only
+  the release does.
+- The level `warning` of a lite check line, logged at WARNING: it never changes the exit status.
+- The test vector `vectors/ontology.json`, which pins the first resolved forms, their
+  `contract_hash` and their findings.
+- `vocabulary.is_name`, the rule for the name of a thing or of a field: a string with no
+  whitespace, control character, dot or slash, since `<Thing>.<field>` cannot carry one.
+  `validate` reads the names of a binding with it, and `ontology.load` refuses a thing, key part or
+  property name it rejects, so a column named `display name` is bound by hand or not at all. The
+  `quality` rule reads the data-quality tests on each column as well as those on the table, and
+  reports a `params` that is not a mapping.
+
 ### Changed
 
+- An enforced snapshot's columns and constraints are classified in `fingerprints.yaml` as a
+  model's are, so a consumer that hashes them moves the `content_hash` of such a snapshot once.
+- A binding key of the wrong shape in a dbt node's `meta.continuo` or in a Python contract is now
+  refused with a `value` issue, at the `value` of its item in both families, whatever any install
+  setting says. A dbt project with such a key, which 0.3.1 ignored, now fails the lite check.
+- The message of a `refused_property` issue for a continuo property on a column ends `not on a
+  column`, where 0.3.1 ended it `not on this object`. The issue's `path` and `reason` are the same.
+- A dbt node that writes binding keys in `meta.continuo` moves its `source_sha256` once, because
+  those ten paths are now read. Its stored form holds the bindings now, so the `contract_hash` of
+  that form moves once too, for a caller that hashes it as it is: `ontology.strip` of the stored
+  form gives back the stored form and the `contract_hash` of 0.3.1, and a resolved form hashes
+  differently again. A node with no binding key keeps both hashes.
 - The documentation is a short README and one page per topic in `docs/`: glossary, walkthrough, dbt
   mapping, lite check, Python contracts, validation, hashing (three pages), vectors, errors,
   stability. Its examples run as tests; docstrings are the API reference, so name lists are gone.

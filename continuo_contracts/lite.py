@@ -8,10 +8,14 @@ skips, writes the contract of each node it keeps (`dbt.generate`), checks it
 service, the service the team deploys under, as the release does, and the columns a seed declares
 with the header of its CSV file, which `read_header` gives. The result is a `LiteReport`.
 
+Given an `Ontology`, the check also reads the bindings of the contracts against it, with the
+rules that need no other service (`ontology_check.PER_SERVICE_RULES`). It never runs the rules
+that read another service, `access`, `order` and `drift`: the lite check sees one service.
+
 The check reads no file, runs no program, logs nothing and prints nothing: the caller reads the
-manifest and the CSV headers and prints the report. It is a lite check because the release does
-more than it does (`RELEASE_ONLY`), so a report with no error does not guarantee that the release
-creates the service's contracts (`BANNER`).
+manifest, the ontology file and the CSV headers and prints the report. It is a lite check because
+the release does more than it does (`RELEASE_ONLY`), so a report with no error does not guarantee
+that the release creates the service's contracts (`BANNER`).
 """
 
 from collections.abc import Callable, Mapping, Sequence
@@ -19,8 +23,9 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Final
 
-from continuo_contracts import contract, dbt, validate
+from continuo_contracts import contract, dbt, ontology_check, validate
 from continuo_contracts.errors import DbtNodeError, HashInputError
+from continuo_contracts.ontology import Ontology, resolve
 
 BANNER: Final = (
     "LITE CHECK. Passing it does not guarantee that continuo will create this "
@@ -36,9 +41,9 @@ RELEASE_ONLY: Final[tuple[tuple[str, str], ...]] = (
     ),
     (
         "the whole estate is parsed",
-        "the estate-wide checks, such as duplicate relations and the ontology's "
-        "rules across services, need the contracts of every service, and the "
-        "lite check sees one service.",
+        "the estate-wide checks, such as duplicate relations and the ontology "
+        "rules `access`, `order` and `drift`, need the contracts of every "
+        "service, and the lite check sees one service.",
     ),
     (
         "the tables a node reads",
@@ -57,9 +62,9 @@ RELEASE_ONLY: Final[tuple[tuple[str, str], ...]] = (
     ),
     (
         "the install's ontology",
-        "the release checks the bindings of a contract against the ontology the "
-        "install runs, and the lite check reads no ontology, so it checks no "
-        "binding.",
+        "the release checks bindings against the ontology the install runs; the "
+        "lite check reads the file --ontology names, which can differ, and "
+        "without --ontology it checks no binding.",
     ),
 )
 
@@ -102,17 +107,21 @@ _UNREADABLE: Final = "the CSV file cannot be read, so its header is not checked 
 _INSTALLED_SEED: Final = (
     "a seed of an installed package: its CSV header is not checked"
 )
+# What the check says, once and for the whole service, about an ontology file with an error of its
+# own: the file is checked alone by `continuo-contracts ontology check`, so no contract is read
+# against it. `{}` is the number of errors.
+_BROKEN_ONTOLOGY: Final = "the ontology file has {} error(s): run continuo-contracts ontology check <file>"
 
 
 @dataclass(frozen=True)
 class Line:
     """One thing the lite check says about a node.
 
-    `level` is `info` for a node the check leaves out, a dormant node or a seed of an installed
-    package, and `error` for a problem that fails the check. `node_id` is the node's key in the
-    manifest, such as
-    `model.shop.orders`, or the empty string for a line about the whole service. `message` does
-    not repeat the node.
+    `level` is `info` for a node the check leaves out, a dormant node, a seed of an installed
+    package or a service the ontology does not declare, `warning` for something the ontology
+    check finds that does not fail the check, and `error` for a problem that fails the check.
+    `node_id` is the node's key in the manifest, such as `model.shop.orders`, or the empty string
+    for a line about the whole service. `message` does not repeat the node.
     """
 
     level: str
@@ -188,11 +197,12 @@ def _check_kept_node(
     manifest: Mapping[str, Any],
     declared_service: str,
     read_header: Callable[[Mapping[str, Any]], Sequence[str] | None],
-) -> tuple[list[Line], str | None, str | None]:
-    """Return the lines of a node that continuo keeps, the id of its contract and its hash.
+) -> tuple[list[Line], str | None, str | None, dict[str, Any] | None]:
+    """Return what the check finds in a node that continuo keeps.
 
-    The id is `None` unless the contract is generated, and the hash is `None` unless the contract
-    is generated, has no validation issue and can be stored.
+    The result is the node's lines, the id of its contract, its hash and its stored form. The id
+    is `None` unless the contract is generated, and the hash and the stored form are `None`
+    unless the contract is generated, has no validation issue and can be stored.
     """
     lines: list[Line] = []
     # The gates have read the node's `fqn`, so its service can be read.
@@ -209,11 +219,12 @@ def _check_kept_node(
             lines.append(Line(_INFO, node_id, _DORMANT))
         generated = dbt.generate(node, tests, manifest=manifest)
     except DbtNodeError as error:
-        return [*lines, _refusal(node_id, error)], None, None
+        return [*lines, _refusal(node_id, error)], None, None, None
     document = generated.document
     issues = validate.validate_dbt_contract(document)
     lines.extend(Line(_ERROR, node_id, str(issue)) for issue in issues)
     digest: str | None = None
+    stored: dict[str, Any] | None = None
     if not issues:
         try:
             stored = contract.normalise_dbt(document, reads=[])
@@ -226,7 +237,45 @@ def _check_kept_node(
             lines.append(Line(_INFO, node_id, _INSTALLED_SEED))
         else:
             lines.extend(_header_lines(node_id, node, document, read_header))
-    return lines, document["id"], digest
+    return lines, document["id"], digest, stored
+
+
+def _ontology_lines(
+    onto: Ontology, stored: Mapping[str, Mapping[str, Any]]
+) -> tuple[dict[str, list[Line]], list[Line]]:
+    """Return the lines of the ontology check by node id, and the lines of the whole service.
+
+    `stored` maps a node id to the stored form of its contract. An ontology file with an error of
+    its own gives the one error line of the whole service and no other: `ontology_check.check`
+    reads contracts against a file that `ontology_findings` accepts. Otherwise each contract is
+    resolved against the ontology, and `check` runs over them with the rules that need no other
+    service. The severity of a finding is the level of its line: a finding about a contract is a
+    line of its node, and any other finding, the one about a service the ontology does not
+    declare, is a line of the whole service.
+    """
+    broken = sum(
+        finding.severity == _ERROR
+        for finding in ontology_check.ontology_findings(onto)
+    )
+    if broken:
+        return {}, [Line(_ERROR, "", _BROKEN_ONTOLOGY.format(broken))]
+    node_of = {contract["id"]: node_id for node_id, contract in stored.items()}
+    findings = ontology_check.check(
+        onto,
+        [resolve(contract, onto) for contract in stored.values()],
+        rules=ontology_check.PER_SERVICE_RULES,
+    )
+    by_node: dict[str, list[Line]] = {}
+    service: list[Line] = []
+    for finding in findings:
+        if finding.contract_id is None:
+            service.append(Line(finding.severity, "", finding.message))
+        else:
+            node_id = node_of[finding.contract_id]
+            by_node.setdefault(node_id, []).append(
+                Line(finding.severity, node_id, finding.message)
+            )
+    return by_node, service
 
 
 def check_manifest(
@@ -234,6 +283,7 @@ def check_manifest(
     *,
     declared_service: str,
     read_header: Callable[[Mapping[str, Any]], Sequence[str] | None],
+    ontology: Ontology | None = None,
 ) -> LiteReport:
     """Return the lite check's report of the dbt `manifest`.
 
@@ -244,7 +294,10 @@ def check_manifest(
     compared with it, as the release compares none when its request declares no service.
     `read_header` gives the column names in the first row of a seed's CSV file, from the seed's
     manifest node, and `None` when the file cannot be read; it is called once for each seed of
-    the project that gets a contract, and an exception it raises is not caught.
+    the project that gets a contract, and an exception it raises is not caught. `ontology` is
+    the ontology to read the bindings of the contracts against, or `None`, the default, to read
+    none: the check then reads the shape of the bindings, as `validate` does, and nothing else of
+    them, and its report is the one it gives without the parameter.
 
     The models, seeds and snapshots of the manifest are taken by node id, in code point order,
     whatever the order of the manifest. For each node, in this order:
@@ -281,6 +334,25 @@ def check_manifest(
        `contract id <id> is also the id of <the other node ids, in id order>: the release rejects
        it as duplicate_table`, and the id has no entry in `contracts`. The release rejects such a
        manifest whatever the services, and its bundle of contracts holds none of them.
+    9. With an `ontology`, a contract is read against it when it has a hash (steps 4 to 6), is
+       the contract of no other node (step 8) and, when `declared_service` is not empty, is of
+       that service. It is stored with its declared reads alone, since the check has no compiled
+       SQL, and resolved against the ontology (`ontology.resolve`), and `ontology_check.check`
+       runs over these contracts with `PER_SERVICE_RULES`, so no rule reads another service. An
+       error finding gives an `error` line, a warning a `warning` line and an information
+       finding an `info` line, each with the finding's message, after the lines of steps 1 to 8
+       of the node of its contract. The one finding that has no contract is about a service the
+       ontology does not declare, `not declared in the ontology: none of this service's
+       contracts is checked`: it gives an `info` line of the whole service, after the lines of
+       the nodes. A contract of such a service that writes bindings gives a `warning` line,
+       `writes bindings, but its service is not declared in the ontology: they are kept as
+       written and not checked`.
+    10. An ontology with an error of its own, which `ontology_check.ontology_findings` reports,
+        gives instead of step 9 the one `error` line of the whole service `the ontology file has
+        <n> error(s): run continuo-contracts ontology check <file>`, with the number of errors,
+        and no contract is read against it. The line comes after the lines of the nodes and
+        before the line about skipped nodes. Neither step changes `contracts`, which holds the
+        hashes of the stored forms, never those of the resolved contracts.
 
     The message of an `error` line from a `DbtNodeError` does not repeat the node id. When every
     model, seed and snapshot is skipped, or there is none, the last line is an `error` that the
@@ -295,6 +367,9 @@ def check_manifest(
     nodes = manifest.get("nodes") or {}
     found: dict[str, list[Line]] = {}
     claims: dict[str, list[tuple[str, str | None]]] = {}
+    # The stored form of each contract that the ontology is read against, by node id: kept only
+    # when there is an ontology, so a check without one lets each form go once it is hashed.
+    stored_forms: dict[str, dict[str, Any]] = {}
     unskipped = 0
     for node_id in sorted(nodes):
         node = nodes[node_id]
@@ -310,7 +385,7 @@ def check_manifest(
             found[node_id] = [Line(_INFO, node_id, _SKIPS[reason])]
             continue
         unskipped += 1
-        found[node_id], contract_id, digest = _check_kept_node(
+        found[node_id], contract_id, digest, stored = _check_kept_node(
             node_id,
             node,
             tests.get(node_id, []),
@@ -320,6 +395,14 @@ def check_manifest(
         )
         if contract_id is not None:
             claims.setdefault(contract_id, []).append((node_id, digest))
+        if (
+            ontology is not None
+            and stored is not None
+            and (
+                not declared_service or dbt.node_service(node) == declared_service
+            )
+        ):
+            stored_forms[node_id] = stored
     contracts: dict[str, str] = {}
     for contract_id, claimed in claims.items():
         if len(claimed) == 1:
@@ -331,7 +414,20 @@ def check_manifest(
             found[node_id].append(
                 Line(_ERROR, node_id, _SHARED_ID.format(contract_id, others))
             )
+    service_lines: list[Line] = []
+    if ontology is not None:
+        by_node, service_lines = _ontology_lines(
+            ontology,
+            {
+                node_id: stored
+                for node_id, stored in stored_forms.items()
+                if len(claims[stored["id"]]) == 1
+            },
+        )
+        for node_id, node_lines in by_node.items():
+            found[node_id].extend(node_lines)
     lines = [line for node_lines in found.values() for line in node_lines]
+    lines.extend(service_lines)
     if not unskipped:
         lines.append(Line(_ERROR, "", _ALL_SKIPPED))
     return LiteReport(service, tuple(lines), contracts)

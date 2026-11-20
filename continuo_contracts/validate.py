@@ -19,6 +19,7 @@ document always gives the same list.
 
 import ast
 import functools
+import math
 import re
 
 from collections import Counter
@@ -53,7 +54,7 @@ from continuo_contracts.python import (
     _key_position,
     canonical_sql_type,
 )
-from continuo_contracts.vocabulary import PROPERTIES, VENDOR
+from continuo_contracts.vocabulary import PROPERTIES, VENDOR, is_name
 
 REASONS: Final = (
     "strict_yaml",
@@ -84,8 +85,13 @@ _REFUSED_FIELDS: Final = {
 }
 
 # The level of the `customProperties` list of an object, by the ODCS type of the object that
-# `contract` walks: the contract, its schema object, a quality rule, or any other object.
-_LEVELS: Final = {"root": "root", "schema_object": "schema", "quality": "quality"}
+# `contract` walks: the contract, its schema object, a quality rule, a column, or any other object.
+_LEVELS: Final = {
+    "root": "root",
+    "schema_object": "schema",
+    "quality": "quality",
+    "property": "column",
+}
 
 # The fields a column may not carry: the column of a contract, Python or dbt, nests nothing.
 _NESTED_COLUMN_FIELDS: Final = ("items", "map", "properties")
@@ -194,6 +200,7 @@ _PLACES: Final = {
     "root": "the contract",
     "schema": "the schema object",
     "quality": "a quality rule",
+    "column": "a column",
     "other": "this object",
 }
 
@@ -703,7 +710,7 @@ def _custom_property_lists(
     type `shape`.
 
     The level says which object the list belongs to: `root` (the contract), `schema` (a schema
-    object), `quality` (a quality rule) or `other`. The object types and their free-form values
+    object), `quality` (a quality rule), `column` (a column) or `other`. The object types and their free-form values
     are those of the canonical form in `contract`, so both read the same keys as data. The items
     of a `customProperties` list are not walked into, and neither is a free-form value.
     """
@@ -956,6 +963,162 @@ def _check_assets(value: object) -> Iterator[str]:
         yield f"`assets` lists {_shown(asset)} twice, a path is listed once"
 
 
+def _is_reference(value: object, *, with_field: bool) -> bool:
+    """Say whether `value` is `<Thing>.<field>`, or `<Thing>` alone when `with_field` is false."""
+    if not isinstance(value, str):
+        return False
+    parts = value.split(".")
+    wanted = (2,) if with_field else (1, 2)
+    return len(parts) in wanted and all(is_name(part) for part in parts)
+
+
+def _is_scalar(value: object) -> bool:
+    """Say whether `value` is a string, a number or a boolean.
+
+    A number is finite, as a JSON number is.
+    """
+    if isinstance(value, float):
+        return math.isfinite(value)
+    return isinstance(value, str | int)
+
+
+def _check_entity(value: object) -> Iterator[str]:
+    if not is_name(value):
+        yield (
+            f"`entity` is {_shown(value)}, it must be the name of a thing, a string with no "
+            "whitespace, dot or slash"
+        )
+
+
+def _check_grain(value: object) -> Iterator[str]:
+    if not isinstance(value, list) or not value:
+        yield f"`grain` is {_shown(value)}, it must be a list of strings with text, at least one"
+        return
+    for entry in value:
+        if not _is_text(entry):
+            yield f"`grain` lists {_shown(entry)}, each entry must be a string with text"
+
+
+def _scalar_mapping_faults(name: str, value: object, key: str) -> Iterator[str]:
+    """Yield what is wrong with `value` as `name`, a mapping of `key` to a scalar."""
+    if not isinstance(value, Mapping):
+        yield (
+            f"`{name}` is {_shown(value)}, it must be a mapping of {key} names to a string, a "
+            "number or a boolean"
+        )
+        return
+    for part, entry in value.items():
+        if not _is_text(part):
+            yield (
+                f"`{name}` has the {key} name {_shown(part)}, it must be a string with text"
+            )
+        if not _is_scalar(entry):
+            yield (
+                f"`{name}` has {_shown(entry)} for {_shown(part)}, it must be a string, a "
+                "number or a boolean"
+            )
+
+
+def _check_fixed(value: object) -> Iterator[str]:
+    yield from _scalar_mapping_faults("fixed", value, "key part")
+
+
+def _check_filter(value: object) -> Iterator[str]:
+    yield from _scalar_mapping_faults("filter", value, "field")
+
+
+def _check_property(value: object) -> Iterator[str]:
+    if not _is_reference(value, with_field=True):
+        yield (
+            f"`property` is {_shown(value)}, it must be `<Thing>.<field>`: the name of a thing, "
+            "a dot and the name of one of its fields"
+        )
+
+
+def _check_local(value: object) -> Iterator[str]:
+    if value is not True:
+        yield (
+            f"`local` is {_shown(value)}, it must be true to mark a column that no thing owns, "
+            "and a column that is not local leaves it out"
+        )
+
+
+_AGGREGATE_KEYS: Final = ("from", "agg", "where", "period")
+
+
+def _check_aggregate(value: object) -> Iterator[str]:
+    if not isinstance(value, Mapping):
+        yield (
+            f"`aggregate` is {_shown(value)}, it must be a mapping with the keys "
+            f"{_one_of(_AGGREGATE_KEYS)}"
+        )
+        return
+    for key in value:
+        if key not in _AGGREGATE_KEYS:
+            yield (
+                f"`aggregate` has the key {_shown(key)}, the keys are "
+                f"{_one_of(_AGGREGATE_KEYS)}"
+            )
+    if "from" not in value and "period" not in value:
+        yield "`aggregate` has neither `from` nor `period`, it needs at least one of them"
+    if "from" in value and not _is_reference(value["from"], with_field=False):
+        yield (
+            f"`aggregate` has `from` {_shown(value['from'])}, it must be `<Thing>` or "
+            "`<Thing>.<field>`"
+        )
+    for key in ("agg", "period"):
+        if key in value and not _is_text(value[key]):
+            yield (
+                f"`aggregate` has `{key}` {_shown(value[key])}, it must be a string with text"
+            )
+    if "where" in value and not isinstance(value["where"], Mapping):
+        yield (
+            f"`aggregate` has `where` {_shown(value['where'])}, it must be a mapping of "
+            "field names to values"
+        )
+
+
+# The ontology bindings, each with the check of its value. Both families share them.
+_BINDING_CHECKS: Final[dict[str, Callable[[object], Iterator[str]]]] = {
+    "entity": _check_entity,
+    "grain": _check_grain,
+    "fixed": _check_fixed,
+    "filter": _check_filter,
+    "property": _check_property,
+    "local": _check_local,
+    "aggregate": _check_aggregate,
+}
+
+
+def _binding_values(contract: _Contract) -> Iterator[Issue]:
+    """Yield the `value` issues of the ontology bindings, at the `value` of each item.
+
+    A binding is read where it sits: `entity`, `grain`, `fixed` and `filter` in the list of the
+    schema object, `property`, `local` and `aggregate` in the list of a column. One at another
+    place is already a `refused_property` issue and has no second one. A binding written twice in
+    a list is checked at its first copy, the one that counts. Both families call this, so one
+    check reads the value of each binding.
+    """
+    for path, level, items in _custom_property_lists(contract.doc, "", "root"):
+        seen: set[str] = set()
+        for index, item in enumerate(items):
+            if (
+                not isinstance(item, Mapping)
+                or item.get("vendor") != VENDOR
+                or "value" not in item
+            ):
+                continue
+            name = item.get("property")
+            if not isinstance(name, str) or name in seen:
+                continue
+            seen.add(name)
+            check = _BINDING_CHECKS.get(name)
+            if check is None or PROPERTIES[name].sits_on != level:
+                continue
+            for message in check(item["value"]):
+                yield _issue(f"{path}[{index}].value", "value", message)
+
+
 # The properties whose value is checked, each with its check, whatever the kind of the node.
 _VALUE_CHECKS: Final[dict[str, Callable[[object], Iterator[str]]]] = {
     "schedule": _check_schedule,
@@ -1003,6 +1166,7 @@ def _property_values(contract: _Contract) -> Iterator[Issue]:
             continue
         for message in check(prop.value):
             yield _issue(prop.path, "value", message)
+    yield from _binding_values(contract)
 
 
 def _kind_rules(contract: _Contract) -> Iterator[Issue]:
@@ -1287,7 +1451,12 @@ def rule_issues(
     used once and a `physicalType` that `canonical_sql_type` accepts with a length from 1 to
     2**53 - 1, and no column has a `physicalName` other than its name, is partitioned, nests
     `properties`, `items` or a `map`, or writes `logicalTypeOptions`. A custom quality rule has an
-    `implementation` that is not empty. The key of an `upsert` node is the
+    `implementation` that is not empty. The ontology bindings have a value of their own shape,
+    each a `value` issue at the `value` of its item: `entity` is the name of a thing, `grain` a
+    list of strings with text, at least one, `fixed` and `filter` mappings of names to a string,
+    a number or a boolean, `property` is `<Thing>.<field>`, `local` is `true`, and `aggregate` is
+    a mapping with the keys `from`, `agg`, `where` and `period` and with a `from` (`<Thing>` or
+    `<Thing>.<field>`) or a `period`. The key of an `upsert` node is the
     columns with `primaryKey: true`: there is one, each is `required: true` and not
     `DOUBLE PRECISION`, and each column of a key of several has its own whole-number
     `primaryKeyPosition` from 1. A python-csv node is not checked for its key.
@@ -1497,6 +1666,7 @@ def _dbt_values(contract: _Contract) -> Iterator[Issue]:
             continue
         for message in check(prop.value):
             yield _issue(f"{prop.path}.value", "value", message)
+    yield from _binding_values(contract)
 
 
 _DBT_RULES: Final[tuple[_Rule, ...]] = (
@@ -1532,7 +1702,7 @@ def dbt_rule_issues(doc: Mapping[str, Any]) -> list[Issue]:
     `REGULATORY`, `CORE` or `SECONDARY`, `schedule` is a name with no whitespace at most 50
     characters long, and `timeoutMinutes` is an integer from 1 to 10080, each a `value` issue at
     the `value` of the property (at `value.materialized` for the `materialized` of the mapping).
-    A dormant node writes no `schedule`.
+    A dormant node writes no `schedule`. The ontology bindings are checked as in `rule_issues`.
 
     A document with no issue is one that `dbt.run_facts` reads: the properties and the fields it
     reads are all checked.

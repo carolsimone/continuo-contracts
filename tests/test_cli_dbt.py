@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from dbt_fixtures import MANIFESTS, load_manifest
+from ontology_fixtures import BROKEN_TEXT, CORE_ONLY_TEXT, DEMO_PATH
 
 from continuo_contracts import lite
 from continuo_contracts.cli import main
@@ -839,7 +840,7 @@ def test_the_help_of_the_program_lists_the_dbt_command(capsys):
 
     assert exit_.value.code == 0
     out = capsys.readouterr().out
-    assert "{validate,hash,dbt}" in out
+    assert "{validate,hash,dbt,ontology}" in out
     assert "the producer's lite check of a dbt project" in out
 
 
@@ -856,10 +857,12 @@ def test_the_help_of_the_command_names_its_flags(capsys):
         "--target",
         "--manifest",
         "--service",
+        "--ontology",
         "--json",
     ):
         assert flag in out
     assert "exit status" in out and "dbt parse" in out
+    assert "does not load" in out
 
 
 def test_the_service_is_the_folder_name_with_underscores_written_as_dashes(
@@ -1555,3 +1558,242 @@ def test_the_help_calls_dbt_check_a_lite_check(argv, capsys):
     out = " ".join(capsys.readouterr().out.split())
     assert "lite check of a dbt project" in out
     assert "the way continuo does at release time" not in out
+
+
+# The lite check against an ontology.
+
+FINANCE_BOUND = FIXTURES / "dbt" / "projects" / "finance_bound"
+FX = "model.finance.fx_transactions_eur"
+FX_WARNING = (
+    "column rate_to_eur comes from FxRate, which Transaction does not reach "
+    "through any reference: the join is not a declared relationship"
+)
+FX_SEED_RATES = "seed.finance.seed_fx_rates_eur"
+GHOST = "entity Ghost is not a thing in the ontology"
+UNDECLARED_SERVICE = (
+    "not declared in the ontology: none of this service's contracts is checked"
+)
+BROKEN_ONTOLOGY = "the ontology file has 2 error(s): run continuo-contracts ontology check <file>"
+
+
+def _bind(manifest, node_id, **continuo):
+    """Return a copy of `manifest` whose node `node_id` writes `continuo` in `meta.continuo`."""
+    changed = copy.deepcopy(manifest)
+    changed["nodes"][node_id]["config"]["meta"]["continuo"].update(continuo)
+    return changed
+
+
+def _check_bound(tmp_path, *flags, manifest=None, ontology=DEMO_PATH):
+    """Run `dbt check` on the bound finance project from its manifest, and the demo ontology."""
+    path = _write_json(
+        tmp_path / "manifest.json", manifest or load_manifest("finance_bound")
+    )
+    flags = ["--ontology", ontology, *flags] if ontology else flags
+    return _check(
+        FINANCE_BOUND, "--manifest", path, "--service", "finance", *flags
+    )
+
+
+def _put(tmp_path, text, name="ontology.yaml"):
+    path = tmp_path / name
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def _above_information(caplog):
+    return [
+        (r.levelno, r.getMessage())
+        for r in caplog.records
+        if r.levelno > logging.INFO
+    ]
+
+
+def test_dbt_check_with_the_ontology_fails_on_a_per_service_error(
+    tmp_path, caplog
+):
+    manifest = _bind(
+        load_manifest("finance_bound"),
+        "seed.finance.seed_fx_rates_eur",
+        entity="Ghost",
+    )
+
+    assert _check_bound(tmp_path, manifest=manifest) == 1
+
+    assert f"{FX_SEED_RATES}: {GHOST}" in _errors(caplog)
+    assert all(m.startswith(f"{FX_SEED_RATES}: ") for m in _errors(caplog))
+
+
+def test_dbt_check_with_the_ontology_passes_on_warnings(tmp_path, caplog):
+    assert _check_bound(tmp_path) == 0
+
+    assert _above_information(caplog) == [
+        (logging.WARNING, f"{FX}: {FX_WARNING}")
+    ]
+
+
+def test_dbt_check_on_an_undeclared_service_prints_one_information_line(
+    tmp_path, caplog
+):
+    # The finance project binds nothing, and the ontology declares core alone.
+    path = _write_json(tmp_path / "manifest.json", _without_costs_seed())
+
+    status = _check(
+        FINANCE,
+        "--manifest",
+        path,
+        "--service",
+        "finance",
+        "--ontology",
+        _put(tmp_path, CORE_ONLY_TEXT),
+    )
+
+    assert status == 0
+    assert _above_information(caplog) == []
+    assert _infos(caplog).count(UNDECLARED_SERVICE) == 1
+    # The two banners, that line, the heading and the table: no other line.
+    assert len(_infos(caplog)) == 2 + 1 + 1 + len(lite.RELEASE_ONLY)
+
+
+def test_a_service_the_ontology_does_not_declare_warns_for_each_binding_and_passes(
+    tmp_path, caplog
+):
+    status = _check_bound(tmp_path, ontology=_put(tmp_path, CORE_ONLY_TEXT))
+
+    assert status == 0
+    warnings = [m for level, m in _above_information(caplog)]
+    assert len(warnings) == 7
+    assert all(
+        m.endswith("they are kept as written and not checked") for m in warnings
+    )
+    assert UNDECLARED_SERVICE in _infos(caplog)
+
+
+def test_dbt_check_never_reads_another_service(tmp_path, caplog):
+    # `core` grants nobody its `seed_users`: in the whole estate this read is an error, and the
+    # table `not_in_any_service` is a warning, and the ontology's things that no contract of this
+    # service holds are information. The lite check sees one service, so none of it shows.
+    manifest = _bind(
+        load_manifest("finance_bound"),
+        "model.finance.operational_cost_per_user",
+        reads=["analytics.seed_users", "analytics.not_in_any_service"],
+    )
+
+    assert _check_bound(tmp_path, manifest=manifest) == 0
+
+    assert _above_information(caplog) == [
+        (logging.WARNING, f"{FX}: {FX_WARNING}")
+    ]
+    # The banner, the one warning, the heading, the table and the banner: no line of the rules
+    # `access`, `order` and `drift`, which write information about the layers and the things.
+    assert len(caplog.records) == 1 + 1 + 1 + len(lite.RELEASE_ONLY) + 1
+
+
+def test_dbt_check_with_a_broken_ontology_fails_with_one_line(tmp_path, caplog):
+    status = _check_bound(tmp_path, ontology=_put(tmp_path, BROKEN_TEXT))
+
+    assert status == 1
+    assert _above_information(caplog) == [(logging.ERROR, BROKEN_ONTOLOGY)]
+
+
+def test_the_banner_lists_the_ontology_rows(tmp_path, caplog):
+    _check_bound(tmp_path)
+
+    rows = [m for m in _infos(caplog) if m.startswith("  ")]
+    assert (
+        "  the install's ontology: the release checks bindings against the "
+        "ontology the install runs; the lite check reads the file --ontology "
+        "names, which can differ, and without --ontology it checks no binding."
+    ) in rows
+    [estate] = [m for m in rows if m.startswith("  the whole estate is parsed: ")]
+    assert "`access`, `order` and `drift`" in estate
+    assert rows == [f"  {what}: {why}" for what, why in lite.RELEASE_ONLY]
+
+
+def test_dbt_check_without_the_ontology_flag_checks_no_binding(tmp_path, caplog):
+    manifest = _bind(
+        load_manifest("finance_bound"), FX_SEED_RATES, entity="Ghost"
+    )
+
+    assert _check_bound(tmp_path, manifest=manifest, ontology=None) == 0
+
+    assert _above_information(caplog) == []
+
+
+def test_a_binding_of_the_wrong_shape_is_an_error_without_the_ontology_flag(
+    tmp_path, caplog
+):
+    manifest = _bind(load_manifest("finance_bound"), FX_SEED_RATES, entity=3)
+
+    assert _check_bound(tmp_path, manifest=manifest, ontology=None) == 1
+
+    [message] = _errors(caplog)
+    assert message.startswith(f"{FX_SEED_RATES}: ")
+    assert "entity" in message
+
+
+def test_the_json_document_has_the_warning_lines_and_the_same_keys(
+    tmp_path, capsys
+):
+    assert _check_bound(tmp_path, "--json") == 0
+
+    out = capsys.readouterr().out
+    document = json.loads(out)
+    assert out == json.dumps(document, indent=2) + "\n"
+    assert list(document) == ["lite", "ok", "service", "lines", "contracts"]
+    assert document["ok"] is True
+    assert document["lines"] == [
+        {"level": "warning", "node_id": FX, "message": FX_WARNING}
+    ]
+    assert len(document["contracts"]) == 7
+
+
+def test_an_ontology_that_does_not_load_is_a_usage_error_and_dbt_does_not_run(
+    fake_dbt, tmp_path, capsys, caplog
+):
+    path = _put(tmp_path, "entities:\n  Thing:\n    owners: x\n")
+
+    assert _check(FINANCE, "--dbt", fake_dbt.executable, "--ontology", path) == 2
+
+    assert capsys.readouterr().out == ""
+    assert not fake_dbt.ran
+    [message] = _errors(caplog)
+    assert message.startswith(
+        f"{path.as_posix()}: entities.Thing.owners: unknown key"
+    )
+
+
+def test_an_ontology_file_that_cannot_be_read_is_a_usage_error(
+    fake_dbt, tmp_path, capsys, caplog
+):
+    path = tmp_path / "nothing.yaml"
+
+    assert (
+        _check(
+            FINANCE, "--dbt", fake_dbt.executable, "--ontology", path, "--json"
+        )
+        == 2
+    )
+
+    assert capsys.readouterr().out == ""
+    assert not fake_dbt.ran
+    assert _errors(caplog) == [
+        f"{path.as_posix()}: cannot read the ontology file: No such file or directory"
+    ]
+
+
+def test_the_ontology_is_read_before_dbt_runs_and_the_flag_is_optional(
+    fake_dbt, tmp_path
+):
+    # With a good file the check goes on and runs dbt as before.
+    assert (
+        _check(
+            FINANCE,
+            "--dbt",
+            fake_dbt.executable,
+            "--ontology",
+            _put(tmp_path, CORE_ONLY_TEXT),
+        )
+        == 1
+    )
+
+    assert fake_dbt.ran

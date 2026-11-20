@@ -58,6 +58,15 @@ class FingerprintsFileError(ContractsError):
     """
 
 
+class OntologyError(ContractsError):
+    """An ontology file that `ontology.load` refuses.
+
+    The message starts with the dotted path of the offending value, such as
+    `entities.User.personnal`, then ``: `` and the reason. The path is `<root>` for the document
+    itself, which is also where a text that strict YAML refuses is reported.
+    """
+
+
 class SchemaFileError(ContractsError):
     """The packaged ODCS JSON schema does not have the bytes this package pins.
 

@@ -9,3 +9,6 @@ License in the LICENSE file at the root of this repository, or at:
 
 This product includes third-party software. See `uv.lock` for the full
 dependency inventory and each dependency's declared license.
+
+The ontology loading and checking code of continuo-governance, written by the same owner, is
+included under the Apache License 2.0.

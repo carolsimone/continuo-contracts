@@ -4,10 +4,12 @@ Run it with `uv run python scripts/write_dbt_goldens.py` after a change to the g
 the fixture manifests, and read the difference before committing it.
 
 For every model, seed and snapshot of every fixture manifest under `tests/fixtures/dbt/manifests`
-that `dbt.skip_reason` keeps, it writes `tests/fixtures/dbt/golden/<project>/<id>.json`: the
-document `dbt.generate` writes (`generated`), its `flags`, its `source_sha256`, its stored form
-`contract.normalise_dbt(generated, reads=[])` (`stored`) and the `contract_hash` of that form. It
-removes a golden file that belongs to no kept node.
+that `dbt.skip_reason` keeps, except the manifests of `UNGOLDEN` (the bound projects, which the
+ontology tests read and whose contracts they pin), it writes
+`tests/fixtures/dbt/golden/<project>/<id>.json`: the document `dbt.generate` writes (`generated`),
+its `flags`, its `source_sha256`, its stored form `contract.normalise_dbt(generated, reads=[])`
+(`stored`) and the `contract_hash` of that form. It removes a golden file that belongs to no kept
+node.
 
 It also writes `continuo_contracts/vectors/dbt_contracts.json`, one case for each rule in
 `CONTRACT_CASES`, then one for each node in `ISSUES_CASES`, then one for each case of
@@ -47,6 +49,10 @@ ROOT: Final = Path(__file__).resolve().parents[1]
 MANIFESTS: Final = ROOT / "tests" / "fixtures" / "dbt" / "manifests"
 GOLDEN: Final = ROOT / "tests" / "fixtures" / "dbt" / "golden"
 VECTOR: Final = ROOT / "continuo_contracts" / "vectors" / "dbt_contracts.json"
+
+# The fixture projects whose manifests the ontology tests read: their contracts have no golden
+# file here.
+UNGOLDEN: Final = ("core_bound", "finance_bound")
 
 # The mapping under this key of a node lists its columns in the order the node declares them.
 DECLARED_ORDER_KEY: Final = "columns"
@@ -212,9 +218,14 @@ EDITED_CASES: Final[
 
 
 def projects() -> list[str]:
-    """Return the names of the fixture projects that have a manifest, in name order."""
+    """Return the names of the fixture projects that have a manifest and golden files, in name order.
+
+    The projects of `UNGOLDEN` have a manifest and no golden file.
+    """
     return sorted(
-        path.name.removesuffix(".json.gz") for path in MANIFESTS.glob("*.json.gz")
+        name
+        for path in MANIFESTS.glob("*.json.gz")
+        if (name := path.name.removesuffix(".json.gz")) not in UNGOLDEN
     )
 
 

@@ -71,6 +71,10 @@ READ_FIELDS = (
     ("config.meta.timeout_minutes", 30),
     ("config.meta.continuo.readers", ["marketing"]),
     ("config.meta.continuo.reads", ["analytics.orders"]),
+    ("config.meta.continuo.entity", "Transaction"),
+    ("config.meta.continuo.grain", ["transaction_id"]),
+    ("config.meta.continuo.fixed", {"currency": "EUR"}),
+    ("config.meta.continuo.filter", {"status": "booked"}),
     ("primary_key", ["id"]),
     ("config.column_types", {"id": "bigint"}),
     ("config.meta.continuo.tests.*.name", "rows"),
@@ -82,6 +86,12 @@ READ_FIELDS = (
     ("columns.*.data_type", "text"),
     ("columns.*.tags", ["sensitive"]),
     ("columns.*.meta.continuo.classification", "restricted"),
+    ("columns.*.meta.continuo.property", "Customer.email"),
+    ("columns.*.meta.continuo.local", True),
+    ("columns.*.meta.continuo.from", "Order.amount"),
+    ("columns.*.meta.continuo.agg", "sum"),
+    ("columns.*.meta.continuo.where", {"status": "paid"}),
+    ("columns.*.meta.continuo.period", "day"),
 )
 
 
@@ -579,7 +589,8 @@ def test_source_sha256_moves_with_each_field_it_reads(field, value):
         ("config.freshness.build_after.updates_on", "all"),
         ("config.meta.unrelated", "a note"),
         ("config.meta.ticket", 2**70),
-        ("config.meta.continuo.entity", "Transaction"),
+        ("config.meta.continuo.note", "a note"),
+        ("columns.*.meta.continuo.note", "a note"),
         ("checksum", {"name": "sha256", "checksum": "0" * 64}),
         ("unrendered_config", {"materialized": "view"}),
     ],
@@ -1091,7 +1102,20 @@ def test_the_read_tree_of_a_node_holds_every_declared_path():
         for key in path.split("."):
             branch = branch[key]
         assert branch == {} or "*" in branch or set(branch), path
-    assert tree["columns"]["*"]["meta"] == {"continuo": {"classification": {}}}
+    assert tree["columns"]["*"]["meta"] == {
+        "continuo": {
+            key: {}
+            for key in (
+                "classification",
+                "property",
+                "local",
+                "agg",
+                "from",
+                "period",
+                "where",
+            )
+        }
+    }
     assert tree["config"]["contract"] == {"enforced": {}}
     assert "unique_id" not in tree
 

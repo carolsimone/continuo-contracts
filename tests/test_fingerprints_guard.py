@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from continuo_contracts import dbt, fingerprints, yaml_strict
+from continuo_contracts import dbt, fingerprints, ontology, yaml_strict
 from continuo_contracts.contract import normalise_dbt, normalise_python
 from continuo_contracts.fingerprints import (
     DBT_FAMILIES,
@@ -545,6 +545,101 @@ def test_the_reads_of_a_dbt_contract_are_classified_once_as_a_contract_fact(
     ] == ["sql_reads"]
 
 
+# The ontology part and what an ontology fills in. A binding is a `continuo` custom property: on the
+# schema object it is `odcs.schema.custom.<name>`, on a column `odcs.schema.properties.custom.<name>`.
+# A link to the ontology is an `authoritativeDefinitions` entry, which the input names take down to
+# its `type` and `url`.
+BINDINGS = {
+    "schema": ("entity", "grain", "fixed", "filter"),
+    "column": ("property", "local", "aggregate"),
+}
+BINDING_PATHS = (
+    *(f"odcs.schema.custom.{name}" for name in BINDINGS["schema"]),
+    *(f"odcs.schema.properties.custom.{name}" for name in BINDINGS["column"]),
+)
+LINK_PATHS = (
+    "odcs.schema.authoritativeDefinitions.type",
+    "odcs.schema.authoritativeDefinitions.url",
+    "odcs.schema.properties.authoritativeDefinitions.type",
+    "odcs.schema.properties.authoritativeDefinitions.url",
+)
+PRIMARY_KEY_PATHS = (
+    "odcs.schema.properties.primaryKey",
+    "odcs.schema.properties.primaryKeyPosition",
+)
+CONTRACT_FAMILIES = ("dbt-model", "dbt-seed", "dbt-snapshot", *PYTHON_FAMILIES)
+DBT_CONTRACT_FAMILIES = CONTRACT_FAMILIES[:3]
+
+
+def _continuo(name, value):
+    return {"vendor": "continuo", "property": name, "value": value}
+
+
+def _link(url):
+    return [{"type": "ontology", "url": url}]
+
+
+DEMO_ONTOLOGY = ontology.load(
+    (FIXTURES / "ontology" / "demo.yaml").read_text(encoding="utf-8")
+)
+
+
+def _bound_stored():
+    """Return the stored form of a contract of the `core` service that binds a thing.
+
+    It writes every binding a team can write and none of what an ontology fills in: the column
+    `source` is left to the implicit binding, and no column declares a key.
+    """
+    return {
+        "customProperties": [
+            _continuo("service", "core"),
+            _continuo("kind", "dbt-model"),
+        ],
+        "schema": [
+            {
+                "name": "transactions_monthly",
+                "customProperties": [
+                    _continuo("entity", "Transaction"),
+                    _continuo("grain", ["month"]),
+                    _continuo("fixed", {"source": "card"}),
+                    _continuo("filter", {"currency": "EUR"}),
+                ],
+                "properties": [
+                    {"name": "source"},
+                    {
+                        "name": "transaction_id",
+                        "customProperties": [
+                            _continuo("property", "Transaction.transaction_id")
+                        ],
+                    },
+                    {
+                        "name": "buyer_email",
+                        "customProperties": [_continuo("property", "User.email")],
+                    },
+                    {
+                        "name": "note",
+                        "customProperties": [_continuo("local", True)],
+                    },
+                    {
+                        "name": "total",
+                        "customProperties": [
+                            _continuo(
+                                "aggregate",
+                                {"from": "Transaction.amount_eur", "agg": "sum"},
+                            )
+                        ],
+                    },
+                ],
+            }
+        ],
+    }
+
+
+def _ontology_stored():
+    """Return the stored form of a contract that binds a thing, as the demo ontology fills it in."""
+    return ontology.resolve(_bound_stored(), DEMO_ONTOLOGY)
+
+
 # The goldens and the vector do not exercise every field the generator writes: a composite primary
 # key, a column type with a length, and the settings of a test on a column or on the schema object.
 # `_full_dbt_stored` generates the contract of one vector node of each dbt kind with all of them set.
@@ -599,11 +694,27 @@ def _full_dbt_stored(case_name):
     node["description"] = "A node."
     node["tags"] = ["daily"]
     node["columns"] = {
-        "id": {"name": "id", "data_type": "varchar(10)", "tags": ["key"]},
+        "id": {
+            "name": "id",
+            "data_type": "varchar(10)",
+            "tags": ["key"],
+            "meta": {"continuo": {"property": "Order.id"}},
+        },
         "ref_id": {
             "name": "ref_id",
             "description": "A reference.",
-            "meta": {"continuo": {"classification": "personal"}},
+            "meta": {"continuo": {"classification": "personal", "local": True}},
+        },
+        "total": {
+            "name": "total",
+            "meta": {
+                "continuo": {
+                    "from": "Order.amount",
+                    "agg": "sum",
+                    "where": {"status": "open"},
+                    "period": "day",
+                }
+            },
         },
     }
     config = node["config"]
@@ -617,6 +728,10 @@ def _full_dbt_stored(case_name):
         "continuo": {
             "readers": ["reader"],
             "reads": ["raw.orders"],
+            "entity": "Order",
+            "grain": ["id"],
+            "fixed": {"region": "eu"},
+            "filter": {"status": "open"},
             "tests": [
                 {"name": "rows", "granularity": "daily", "params": {"min": 1}}
             ],
@@ -685,6 +800,7 @@ def test_every_field_a_dbt_contract_can_hold_is_classified(case, family):
         "odcs.schema.quality.metric",
         "odcs.schema.quality.engine",
         "odcs.roles.access",
+        *BINDING_PATHS,
     } <= names
     missing = [
         name for name in sorted(names) if not _in_the_contract_hash(family, name)
@@ -709,6 +825,9 @@ def test_every_odcs_input_a_dbt_family_names_is_written_by_a_contract(
     for _, stored in DBT_STORED_FORMS:
         if _kind(stored) == family:
             written |= _odcs_inputs(stored)
+    # The generator does not write what an ontology fills in, so what `ontology.resolve` writes
+    # into a bound contract stands for it.
+    written |= _odcs_inputs(_ontology_stored())
     declared = {
         name
         for entry in FP.entries(family)
@@ -824,6 +943,8 @@ def test_each_authored_continuo_property_is_classified_as_validate_allows_it(
             continue
         paths = {
             "root": [f"odcs.custom.{name}"],
+            "schema": [f"odcs.schema.custom.{name}"],
+            "column": [f"odcs.schema.properties.custom.{name}"],
             "quality": _quality_paths(name),
         }[prop.sits_on]
         for path in paths:
@@ -871,7 +992,6 @@ def test_a_continuo_property_no_entry_names_stays_unclassified(family, path):
         "odcs.schema.properties.enum",
         "odcs.schema.properties.criticalDataElement",
         "odcs.schema.properties.transformLogic",
-        "odcs.schema.properties.authoritativeDefinitions.url",
         "odcs.slaProperties.element",
     ],
 )
@@ -898,6 +1018,9 @@ def test_a_standard_field_no_entry_names_is_contract_by_rule(family, path):
         "odcs.schema.properties.classification",
         "odcs.schema.properties.relationships.to",
         "odcs.schema.properties.quality.metric",
+        "odcs.schema.authoritativeDefinitions.url",
+        "odcs.schema.properties.authoritativeDefinitions.url",
+        "odcs.schema.properties.semanticType",
     ],
 )
 def test_a_contract_field_with_an_entry_of_its_own_is_not_left_to_the_rule(
@@ -1052,15 +1175,156 @@ def test_every_fixed_name_in_the_rendered_input_names_is_a_fixed_input_name():
     assert [token for token in fixed if token not in FIXED_INPUT_NAMES] == []
 
 
+def test_the_bindings_are_the_authored_properties_of_the_schema_object_and_a_column():
+    assert {
+        place: tuple(
+            name
+            for name, prop in PROPERTIES.items()
+            if prop.python == "authored" and prop.sits_on == place
+        )
+        for place in BINDINGS
+    } == BINDINGS
+
+
+@pytest.mark.parametrize("family", CONTRACT_FAMILIES)
+def test_every_binding_and_resolved_field_is_classified_contract(family):
+    for path in BINDING_PATHS:
+        entry = fingerprints.classify(family, path)
+        assert entry is not None, path
+        assert (entry.id, entry.fingerprint, entry.parts, entry.when) == (
+            "ontology_bindings",
+            "contract",
+            (),
+            None,
+        ), path
+    for path in (*LINK_PATHS, "odcs.schema.properties.semanticType"):
+        entry = fingerprints.classify(family, path)
+        assert entry is not None, path
+        assert (entry.id, entry.fingerprint, entry.parts, entry.when) == (
+            "ontology_resolved",
+            "contract",
+            (),
+            None,
+        ), path
+
+
+@pytest.mark.parametrize("family", DBT_CONTRACT_FAMILIES)
+def test_the_domain_an_ontology_fills_in_is_classified_in_a_dbt_family(family):
+    entry = fingerprints.classify(family, "odcs.domain")
+    assert entry is not None and entry.fingerprint == "contract"
+    assert entry.id == "ontology_resolved" and entry.rule is None
+
+
+@pytest.mark.parametrize("family", ["dbt-seed", "dbt-snapshot"])
+def test_the_key_an_ontology_fills_in_is_classified_in_a_seed_and_a_snapshot(
+    family,
+):
+    for path in PRIMARY_KEY_PATHS:
+        entry = fingerprints.classify(family, path)
+        assert entry is not None, path
+        assert (entry.id, entry.fingerprint, entry.parts) == (
+            "ontology_resolved",
+            "contract",
+            (),
+        ), path
+
+
+@pytest.mark.parametrize("family", PYTHON_FAMILIES)
+def test_the_domain_an_ontology_fills_in_is_left_to_the_rule_in_a_python_family(
+    family,
+):
+    entry = fingerprints.classify(family, "odcs.domain")
+    assert entry is not None and entry.rule == "standard_field"
+
+
+@pytest.mark.parametrize("family", CONTRACT_FAMILIES)
+def test_a_contract_with_the_ontology_part_and_what_it_fills_in_is_classified(
+    family,
+):
+    names = _odcs_inputs(_ontology_stored())
+    assert {
+        *BINDING_PATHS,
+        *LINK_PATHS,
+        *PRIMARY_KEY_PATHS,
+        "odcs.domain",
+        "odcs.schema.properties.semanticType",
+    } <= names
+    missing = [
+        name for name in sorted(names) if not _in_the_contract_hash(family, name)
+    ]
+    assert not missing, (
+        f"{family}: not classified as contract or both: " + ", ".join(missing)
+    )
+
+
+def test_the_dbt_test_family_classifies_no_ontology_input():
+    names = _odcs_inputs(_ontology_stored())
+    assert FP.unclassified("dbt-test", names) == sorted(names)
+
+
+SNAPSHOT_COLUMN_ENTRIES = (
+    "declared_columns",
+    "column_data_type",
+    "column_description_tags",
+    "constraints",
+    "column_quote",
+)
+
+
+def _entry(family, entry_id):
+    return next(e for e in FP.entries(family) if e.id == entry_id)
+
+
+@pytest.mark.parametrize("entry_id", SNAPSHOT_COLUMN_ENTRIES)
+def test_a_snapshot_classifies_its_columns_like_a_model(entry_id):
+    model, snapshot = (
+        _entry("dbt-model", entry_id),
+        _entry("dbt-snapshot", entry_id),
+    )
+    assert (
+        snapshot.fingerprint,
+        snapshot.parts,
+        snapshot.when,
+        snapshot.inputs,
+    ) == (
+        model.fingerprint,
+        model.parts,
+        model.when,
+        model.inputs,
+    )
+
+
+def test_an_enforced_snapshot_classifies_its_columns_and_constraints_like_a_model():
+    assert fingerprints.classify("dbt-snapshot", "contract.columns") is not None
+    constraints = fingerprints.classify("dbt-snapshot", "constraints")
+    assert constraints.fingerprint == "neither"
+    assert constraints.when.fingerprint == "content"
+    assert constraints.moves("config")
+    for name in (
+        "contract.columns",
+        "odcs.schema.properties.name",
+        "odcs.schema.properties.physicalType",
+        "odcs.schema.properties.logicalType",
+        "odcs.schema.properties.logicalTypeOptions",
+    ):
+        assert fingerprints.classify("dbt-snapshot", name).moves("config"), name
+    for name in (
+        "odcs.schema.properties.description",
+        "odcs.schema.properties.tags",
+    ):
+        entry = fingerprints.classify("dbt-snapshot", name)
+        assert entry.fingerprint == "contract" and not entry.moves("config"), name
+
+
 ENTRY_COUNTS = {
     "every": 3,
-    "dbt-model": 39,
-    "dbt-seed": 27,
-    "dbt-snapshot": 24,
+    "dbt-model": 41,
+    "dbt-seed": 29,
+    "dbt-snapshot": 30,
     "dbt-test": 18,
-    "python-node": 39,
-    "python-csv": 32,
-    "python-api": 33,
+    "python-node": 41,
+    "python-csv": 34,
+    "python-api": 35,
 }
 
 

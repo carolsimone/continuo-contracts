@@ -1,0 +1,533 @@
+{
+ "contract_hash": "sha256:6f1a930a41e8d14c16497652558a185137009c1bd8d05f55e5b530fee90b2bd3",
+ "resolved": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/fx_transactions_eur.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "daily",
+    "vendor": "continuo"
+   },
+   {
+    "property": "service",
+    "value": "finance",
+    "vendor": "continuo"
+   }
+  ],
+  "description": {
+   "purpose": "FX transactions with amount restated in EUR via seed_fx_rates_eur."
+  },
+  "domain": "finance",
+  "id": "analytics.fx_transactions_eur",
+  "kind": "DataContract",
+  "name": "fx_transactions_eur",
+  "roles": [
+   {
+    "access": "read",
+    "role": "core"
+   }
+  ],
+  "schema": [
+   {
+    "authoritativeDefinitions": [
+     {
+      "type": "ontology",
+      "url": "continuo-ontology:Transaction"
+     }
+    ],
+    "customProperties": [
+     {
+      "property": "entity",
+      "value": "Transaction",
+      "vendor": "continuo"
+     },
+     {
+      "property": "filter",
+      "value": {
+       "source": "fx"
+      },
+      "vendor": "continuo"
+     },
+     {
+      "property": "reads",
+      "value": [
+       "analytics.seed_fx_rates_eur",
+       "analytics.seed_fx_transactions"
+      ],
+      "vendor": "continuo"
+     }
+    ],
+    "description": "FX transactions with amount restated in EUR via seed_fx_rates_eur.",
+    "name": "fx_transactions_eur",
+    "physicalName": "fx_transactions_eur",
+    "physicalType": "table",
+    "properties": [
+     {
+      "authoritativeDefinitions": [
+       {
+        "type": "ontology",
+        "url": "continuo-ontology:Transaction.transaction_id"
+       }
+      ],
+      "customProperties": [
+       {
+        "property": "property",
+        "value": "Transaction.transaction_id",
+        "vendor": "continuo"
+       }
+      ],
+      "logicalType": "integer",
+      "name": "transaction_id",
+      "primaryKey": true,
+      "quality": [
+       {
+        "id": "not_null_fx_transactions_eur_transaction_id",
+        "metric": "nullValues",
+        "mustBe": 0
+       },
+       {
+        "id": "unique_fx_transactions_eur_transaction_id",
+        "metric": "duplicateValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true,
+      "unique": true
+     },
+     {
+      "authoritativeDefinitions": [
+       {
+        "type": "ontology",
+        "url": "continuo-ontology:Transaction.user_id"
+       }
+      ],
+      "customProperties": [
+       {
+        "property": "property",
+        "value": "Transaction.user_id",
+        "vendor": "continuo"
+       }
+      ],
+      "logicalType": "integer",
+      "name": "user_id"
+     },
+     {
+      "customProperties": [
+       {
+        "property": "local",
+        "value": true,
+        "vendor": "continuo"
+       }
+      ],
+      "name": "amount"
+     },
+     {
+      "customProperties": [
+       {
+        "property": "local",
+        "value": true,
+        "vendor": "continuo"
+       }
+      ],
+      "description": "Fee the company earned, denominated in currency_from.",
+      "name": "fee_amount",
+      "quality": [
+       {
+        "id": "not_null_fx_transactions_eur_fee_amount",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "customProperties": [
+       {
+        "property": "local",
+        "value": true,
+        "vendor": "continuo"
+       }
+      ],
+      "name": "currency_from"
+     },
+     {
+      "customProperties": [
+       {
+        "property": "local",
+        "value": true,
+        "vendor": "continuo"
+       }
+      ],
+      "name": "currency_to"
+     },
+     {
+      "customProperties": [
+       {
+        "property": "local",
+        "value": true,
+        "vendor": "continuo"
+       }
+      ],
+      "name": "rate"
+     },
+     {
+      "authoritativeDefinitions": [
+       {
+        "type": "ontology",
+        "url": "continuo-ontology:Transaction.created_at"
+       }
+      ],
+      "customProperties": [
+       {
+        "property": "property",
+        "value": "Transaction.created_at",
+        "vendor": "continuo"
+       }
+      ],
+      "logicalType": "timestamp",
+      "name": "created_at"
+     },
+     {
+      "authoritativeDefinitions": [
+       {
+        "type": "ontology",
+        "url": "continuo-ontology:FxRate.rate_to_eur"
+       }
+      ],
+      "customProperties": [
+       {
+        "property": "property",
+        "value": "FxRate.rate_to_eur",
+        "vendor": "continuo"
+       }
+      ],
+      "description": "Multiplier applied to amount; NULL means an uncovered (currency, date) pair.",
+      "logicalType": "number",
+      "name": "rate_to_eur",
+      "quality": [
+       {
+        "id": "not_null_fx_transactions_eur_rate_to_eur",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "authoritativeDefinitions": [
+       {
+        "type": "ontology",
+        "url": "continuo-ontology:Transaction.amount_eur"
+       }
+      ],
+      "customProperties": [
+       {
+        "property": "property",
+        "value": "Transaction.amount_eur",
+        "vendor": "continuo"
+       }
+      ],
+      "logicalType": "number",
+      "name": "amount_eur",
+      "quality": [
+       {
+        "id": "not_null_fx_transactions_eur_amount_eur",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "authoritativeDefinitions": [
+       {
+        "type": "ontology",
+        "url": "continuo-ontology:Transaction.fee_amount_eur"
+       }
+      ],
+      "customProperties": [
+       {
+        "property": "property",
+        "value": "Transaction.fee_amount_eur",
+        "vendor": "continuo"
+       }
+      ],
+      "description": "fee_amount converted to EUR on the same rate_to_eur join as amount_eur.",
+      "logicalType": "number",
+      "name": "fee_amount_eur",
+      "quality": [
+       {
+        "id": "not_null_fx_transactions_eur_fee_amount_eur",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     }
+    ],
+    "quality": [
+     {
+      "engine": "dbt",
+      "id": "assert_fx_transactions_eur_amount",
+      "implementation": "assert_fx_transactions_eur_amount",
+      "name": "assert_fx_transactions_eur_amount",
+      "type": "custom"
+     }
+    ]
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "daily"
+  ],
+  "team": {
+   "name": "finance"
+  },
+  "version": "0"
+ },
+ "stored": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "models/fx_transactions_eur.sql",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-model",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "table"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "daily",
+    "vendor": "continuo"
+   },
+   {
+    "property": "service",
+    "value": "finance",
+    "vendor": "continuo"
+   }
+  ],
+  "description": {
+   "purpose": "FX transactions with amount restated in EUR via seed_fx_rates_eur."
+  },
+  "id": "analytics.fx_transactions_eur",
+  "kind": "DataContract",
+  "name": "fx_transactions_eur",
+  "roles": [
+   {
+    "access": "read",
+    "role": "core"
+   }
+  ],
+  "schema": [
+   {
+    "customProperties": [
+     {
+      "property": "entity",
+      "value": "Transaction",
+      "vendor": "continuo"
+     },
+     {
+      "property": "filter",
+      "value": {
+       "source": "fx"
+      },
+      "vendor": "continuo"
+     },
+     {
+      "property": "reads",
+      "value": [
+       "analytics.seed_fx_rates_eur",
+       "analytics.seed_fx_transactions"
+      ],
+      "vendor": "continuo"
+     }
+    ],
+    "description": "FX transactions with amount restated in EUR via seed_fx_rates_eur.",
+    "name": "fx_transactions_eur",
+    "physicalName": "fx_transactions_eur",
+    "physicalType": "table",
+    "properties": [
+     {
+      "name": "transaction_id",
+      "primaryKey": true,
+      "quality": [
+       {
+        "id": "not_null_fx_transactions_eur_transaction_id",
+        "metric": "nullValues",
+        "mustBe": 0
+       },
+       {
+        "id": "unique_fx_transactions_eur_transaction_id",
+        "metric": "duplicateValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true,
+      "unique": true
+     },
+     {
+      "name": "user_id"
+     },
+     {
+      "customProperties": [
+       {
+        "property": "local",
+        "value": true,
+        "vendor": "continuo"
+       }
+      ],
+      "name": "amount"
+     },
+     {
+      "customProperties": [
+       {
+        "property": "local",
+        "value": true,
+        "vendor": "continuo"
+       }
+      ],
+      "description": "Fee the company earned, denominated in currency_from.",
+      "name": "fee_amount",
+      "quality": [
+       {
+        "id": "not_null_fx_transactions_eur_fee_amount",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "customProperties": [
+       {
+        "property": "local",
+        "value": true,
+        "vendor": "continuo"
+       }
+      ],
+      "name": "currency_from"
+     },
+     {
+      "customProperties": [
+       {
+        "property": "local",
+        "value": true,
+        "vendor": "continuo"
+       }
+      ],
+      "name": "currency_to"
+     },
+     {
+      "customProperties": [
+       {
+        "property": "local",
+        "value": true,
+        "vendor": "continuo"
+       }
+      ],
+      "name": "rate"
+     },
+     {
+      "name": "created_at"
+     },
+     {
+      "customProperties": [
+       {
+        "property": "property",
+        "value": "FxRate.rate_to_eur",
+        "vendor": "continuo"
+       }
+      ],
+      "description": "Multiplier applied to amount; NULL means an uncovered (currency, date) pair.",
+      "name": "rate_to_eur",
+      "quality": [
+       {
+        "id": "not_null_fx_transactions_eur_rate_to_eur",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "name": "amount_eur",
+      "quality": [
+       {
+        "id": "not_null_fx_transactions_eur_amount_eur",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     },
+     {
+      "description": "fee_amount converted to EUR on the same rate_to_eur join as amount_eur.",
+      "name": "fee_amount_eur",
+      "quality": [
+       {
+        "id": "not_null_fx_transactions_eur_fee_amount_eur",
+        "metric": "nullValues",
+        "mustBe": 0
+       }
+      ],
+      "required": true
+     }
+    ],
+    "quality": [
+     {
+      "engine": "dbt",
+      "id": "assert_fx_transactions_eur_amount",
+      "implementation": "assert_fx_transactions_eur_amount",
+      "name": "assert_fx_transactions_eur_amount",
+      "type": "custom"
+     }
+    ]
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "daily"
+  ],
+  "team": {
+   "name": "finance"
+  },
+  "version": "0"
+ }
+}

@@ -55,6 +55,27 @@ INFO 2 contracts checked, 1 with issues
 In the first line, "release" is the command's word for this package's version. The wheel is pure
 Python (`py3-none-any`), and its two runtime dependencies are PyYAML and jsonschema.
 
+## Check contracts against an ontology
+
+An [ontology][g-ontology] file names your services, things and their properties. A contract's
+[bindings][g-binding] tie each table and column to it. `ontology check` checks the file alone, and
+`dbt check --ontology` also reads a project's bindings against it, with the rules that need no
+other service. A `WARNING` line never fails the run, and an `ERROR` line exits 1:
+
+```bash
+$ continuo-contracts ontology check ontology.yaml
+ERROR principals.services.web: domain 'web' is not declared
+INFO 1 error in the ontology file
+$ continuo-contracts dbt check shop --service shop --ontology ontology.yaml
+INFO LITE CHECK. Passing it does not guarantee that continuo will create this service's contracts at release time.
+WARNING model.shop.orders: column rate comes from FxRate, which Order does not reach through any reference: the join is not a declared relationship
+INFO What only the release does:
+...
+```
+
+Exit 2 means the command could not run, such as an ontology file it cannot read or that does not
+load.
+
 ## How it works
 
 ```text
@@ -88,6 +109,12 @@ Every reader can start with the [walkthrough][walk]: What happens to one dbt mod
 | [Python contracts][py] | How do I write and check the contract of a Python node? |
 | [Validation][val] | Which rules does `validate` apply, and what does each issue mean? |
 
+### Bind contracts to an ontology
+
+| Page | Question it answers |
+|---|---|
+| [Ontology][onto] | How do I describe my data in an ontology file, bind each contract to it and check the bindings? |
+
 ### Build on it or change it
 
 | Page | Question it answers |
@@ -112,6 +139,7 @@ Apache License 2.0: see [LICENSE][lic] and [NOTICE][notice]. Report a vulnerabil
 [check]: https://github.com/carolsimone/continuo-contracts/blob/main/docs/check-your-project.md
 [py]: https://github.com/carolsimone/continuo-contracts/blob/main/docs/python-contracts.md
 [val]: https://github.com/carolsimone/continuo-contracts/blob/main/docs/validation.md
+[onto]: https://github.com/carolsimone/continuo-contracts/blob/main/docs/ontology.md
 [hash]: https://github.com/carolsimone/continuo-contracts/blob/main/docs/hashing.md
 [chash]: https://github.com/carolsimone/continuo-contracts/blob/main/docs/contract-hash.md
 [src]: https://github.com/carolsimone/continuo-contracts/blob/main/docs/source-sha256.md
@@ -138,3 +166,5 @@ Apache License 2.0: see [LICENSE][lic] and [NOTICE][notice]. Report a vulnerabil
 [g-odcs]: https://github.com/carolsimone/continuo-contracts/blob/main/docs/glossary.md#odcs
 [g-manifest]: https://github.com/carolsimone/continuo-contracts/blob/main/docs/glossary.md#manifest
 [g-dbt]: https://github.com/carolsimone/continuo-contracts/blob/main/docs/glossary.md#dbt-words
+[g-ontology]: https://github.com/carolsimone/continuo-contracts/blob/main/docs/glossary.md#ontology
+[g-binding]: https://github.com/carolsimone/continuo-contracts/blob/main/docs/glossary.md#binding
