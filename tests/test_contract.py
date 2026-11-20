@@ -9,6 +9,7 @@ import pytest
 from continuo_contracts import fingerprints, yaml_strict
 from continuo_contracts.canonical import canonical_json
 from continuo_contracts.contract import (
+    canonical_form,
     contract_hash,
     logical_type,
     normalise_python,
@@ -1132,3 +1133,56 @@ def test_a_set_like_item_that_canonical_json_cannot_write_is_refused():
     doc = _with_property(_kpis(), _custom("term", float("nan"), "atlan"))
     with pytest.raises(CanonicalJsonError):
         normalise_python(doc, service="service-py", reads=KPIS_READS)
+
+
+# the canonical form
+
+
+def test_the_canonical_form_of_a_stored_form_is_itself():
+    for name in FULL_NAMES:
+        stored = _full_stored(name)
+        assert canonical_json(canonical_form(stored)) == canonical_json(stored)
+
+
+def test_the_canonical_form_writes_a_document_in_the_canonical_shape():
+    doc = {
+        "apiVersion": "v3.2.0",
+        "description": {"purpose": "  a purpose\r\n"},
+        "tags": ["b", "a", "b"],
+        "customProperties": [
+            {"vendor": "continuo", "property": "modeType", "value": "replace"},
+            {"vendor": "continuo", "property": "service", "value": "core"},
+            {"vendor": "acme", "property": "empty", "value": ""},
+            {"vendor": "acme", "property": "a", "value": 2.0},
+        ],
+        "roles": [],
+        "schema": [
+            {
+                "name": "t",
+                "deprecated": False,
+                "properties": [{"name": "a", "required": False}, {"name": "b"}],
+            }
+        ],
+    }
+
+    assert canonical_form(doc) == {
+        "apiVersion": "v3.2.0",
+        "description": {"purpose": "a purpose"},
+        "tags": ["a", "b"],
+        "customProperties": [
+            {"vendor": "acme", "property": "a", "value": 2},
+            {"vendor": "continuo", "property": "service", "value": "core"},
+        ],
+        "schema": [{"name": "t", "properties": [{"name": "a"}, {"name": "b"}]}],
+    }
+
+
+def test_the_canonical_form_is_a_new_dict_and_leaves_its_input_alone():
+    doc = _full("python_node")
+    before = copy.deepcopy(doc)
+
+    canonical = canonical_form(doc)
+    canonical["customProperties"].clear()
+    canonical["schema"][0]["properties"][0]["name"] = "changed"
+
+    assert doc == before

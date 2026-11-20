@@ -7,6 +7,7 @@ stored labels, the table's names, the kind, the service, the tables the node rea
 `logicalType` per column) and then writes the result in the canonical form. `normalise_dbt`
 builds it from a contract that `dbt.generate` wrote: it joins the tables the node's compiled SQL
 names with the ones the node declares and then writes the result in the canonical form.
+`canonical_form` runs that walk on any ODCS document, for a caller that changes a stored form.
 
 The canonical form walks the ODCS structure: the contract, its schema object, the columns, the
 quality rules, the relationships, the custom properties and every other ODCS object. On each
@@ -316,8 +317,7 @@ def normalise_python(
         table_object.setdefault("customProperties", []).append(
             {"vendor": VENDOR, "property": "reads", "value": tables}
         )
-    canonical: dict[str, Any] = _clean(stored, "root")
-    return canonical
+    return canonical_form(stored)
 
 
 def normalise_dbt(
@@ -355,7 +355,22 @@ def normalise_dbt(
             {"vendor": VENDOR, "property": "reads", "value": tables}
         )
     _drop_single_key_position(table_object.get("properties", []))
-    canonical: dict[str, Any] = _clean(stored, "root")
+    return canonical_form(stored)
+
+
+def canonical_form(doc: Mapping[str, Any]) -> dict[str, Any]:
+    """Return `doc` in the canonical form that the module describes, a new dict.
+
+    `doc` is an ODCS contract and it is not changed. This is the walk that `normalise_python`
+    and `normalise_dbt` end with, so a caller that adds to or removes from a stored form calls it
+    to get the stored form of the result. The walk gives a stored form back unchanged, and any
+    other document its canonical shape: null and empty values and ODCS defaults are dropped, the
+    set-like lists are sorted and hold each item once, and description text is trimmed.
+
+    Raises `CanonicalJsonError` when an item of a set-like list holds a value that canonical
+    JSON cannot write, which a document that `yaml_strict.load` read never holds.
+    """
+    canonical: dict[str, Any] = _clean(doc, "root")
     return canonical
 
 

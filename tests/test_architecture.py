@@ -148,7 +148,21 @@ def test_lite_sits_between_cli_and_validate() -> None:
     [graph] = [c for c in _contracts() if c["type"] == "layers"]
     top_three = [_layer_modules(layer) for layer in graph["layers"][:3]]
 
-    assert top_three == [["cli"], ["lite"], ["validate"]]
+    assert top_three == [["cli"], ["lite"], ["validate", "ontology"]]
+
+
+def test_the_layers_place_ontology_beside_validate() -> None:
+    """Both read a stored contract and neither imports the other: one layer, joined by `|`."""
+    [graph] = [c for c in _contracts() if c["type"] == "layers"]
+    [beside] = [
+        layer for layer in graph["layers"] if "ontology" in _layer_modules(layer)
+    ]
+    above = graph["layers"].index(beside) - 1
+    below = graph["layers"].index(beside) + 1
+
+    assert re.split(r"\s*\|\s*", beside) == ["validate", "ontology"]
+    assert _layer_modules(graph["layers"][above]) == ["lite"]
+    assert _layer_modules(graph["layers"][below]) == ["contract"]
 
 
 def test_cli_is_the_top_layer_and_the_bottom_layer_imports_nothing() -> None:
@@ -370,6 +384,30 @@ OFFENCES = {
         "from continuo_contracts import lite\n",
         "import-graph",
         "continuo_contracts.dbt is not allowed to import",
+    ),
+    "ontology imports validate, which sits in its layer": (
+        "ontology",
+        "from continuo_contracts import validate\n",
+        "import-graph",
+        "continuo_contracts.ontology is not allowed to import",
+    ),
+    "validate imports ontology, which sits in its layer": (
+        "validate",
+        "from continuo_contracts import ontology\n",
+        "import-graph",
+        "continuo_contracts.validate is not allowed to import",
+    ),
+    "ontology imports lite, a higher layer": (
+        "ontology",
+        "from continuo_contracts import lite\n",
+        "import-graph",
+        "continuo_contracts.ontology is not allowed to import",
+    ),
+    "yaml in ontology": (
+        "ontology",
+        "import yaml\n",
+        "yaml-is-confined-to-fingerprints-and-yaml-strict",
+        "continuo_contracts.ontology is not allowed to import yaml",
     ),
     "jsonschema in lite": (
         "lite",

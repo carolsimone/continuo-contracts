@@ -47,6 +47,7 @@ REQUIRED_MEMBERS: tuple[str, ...] = tuple(
         "hashing.py",
         "lite.py",
         "odcs-json-schema-v3.2.0.json",
+        "ontology.py",
         "python.py",
         "py.typed",
         "schema.py",
