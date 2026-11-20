@@ -181,15 +181,48 @@ def test_an_estate_with_no_copy_has_no_layers():
     ] == []
 
 
-def test_a_contract_that_reads_its_own_relation_is_a_cycle_of_one():
+@pytest.mark.parametrize("read", ["analytics.incr", "Analytics.INCR"])
+def test_a_contract_that_reads_its_own_relation_has_no_order_edge(read):
+    # An incremental model names itself, and a Python node may read its own previous output: a
+    # read of the contract's own relation orders nothing and is no cycle.
+    state = {"incr": contract("core", "incr", reads=[read])}
+
+    findings = estate_run(state, without_birth_copy())
+
+    assert problems(findings) == []
+    assert layers_of(findings) == [["analytics.incr"]]
+
+
+def test_a_self_reading_copy_is_placed_after_what_it_reads_like_any_other():
+    state = base()
+    set_custom(
+        table(state["txns"]),
+        "reads",
+        ["analytics.events_sink", "analytics.txns"],
+    )
+
+    findings = estate_run(state)
+
+    assert problems(findings) == []
+    assert layers_of(findings) == layers_of(estate_run(base()))
+
+
+def test_a_self_read_beside_a_real_cycle_reports_only_the_cycle():
     state = {
-        "ouroboros": contract("core", "ouroboros", reads=["analytics.ouroboros"])
+        "ping": contract(
+            "core", "ping", reads=["analytics.ping", "analytics.pong"]
+        ),
+        "pong": contract("core", "pong", reads=["analytics.ping"]),
+        "incr": contract("core", "incr", reads=["analytics.incr"]),
     }
 
-    [found] = errors_of(estate_run(state))
+    found = errors_of(estate_run(state))
 
-    assert found.subject == found.contract_id == "analytics.ouroboros"
-    assert "cycle among ['analytics.ouroboros']" in found.message
+    assert {f.subject: f.message for f in found} == {
+        "analytics.ping": "cycle among ['analytics.ping', 'analytics.pong']",
+        "analytics.pong": "cycle among ['analytics.ping', 'analytics.pong']",
+    }
+    assert all(f.contract_id == f.subject for f in found)
 
 
 # The cycles.

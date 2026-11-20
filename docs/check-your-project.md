@@ -112,6 +112,13 @@ compiled SQL names. The library writes the declared ones and the release adds th
 lite check cannot. So the release's hash differs from the lite check's when the SQL reads a table
 `reads` does not declare.
 
+The bindings of a node can make the hashes differ too. The hash that the lite check reports is the
+hash of the stored form as it is, bindings included, and it never resolves the contract. A release
+that uses no ontology stores the form that `ontology.strip` gives, without the bindings, and a
+release that uses one stores the resolved form of a contract whose service the ontology declares,
+which holds more. So, `reads` aside, the two hashes of a node that writes bindings agree only
+when the release uses an ontology that does not declare the node's service.
+
 ## Bindings
 
 With `--ontology FILE` the check also reads each contract's [bindings](glossary.md#binding) against

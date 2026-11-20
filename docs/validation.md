@@ -147,7 +147,7 @@ more than one binding, is for the [rules](ontology.md#the-rules), not for `valid
 
 ```python
 >>> from continuo_contracts import dbt
->>> good = yaml_strict.load("""
+>>> malformed = yaml_strict.load("""
 ... apiVersion: v3.2.0
 ... kind: DataContract
 ... id: analytics.kpis
@@ -168,7 +168,7 @@ more than one binding, is for the [rules](ontology.md#the-rules), not for `valid
 ...         physicalType: int
 ...         customProperties: [{vendor: continuo, property: local, value: false}]
 ... """)
->>> for issue in validate.validate_python_contract(good, path="kpis.odcs.yaml", service=None):
+>>> for issue in validate.validate_python_contract(malformed, path="kpis.odcs.yaml", service=None):
 ...     print(issue.path, issue.reason)
 schema[0].customProperties[0].value value
 schema[0].properties[0].customProperties[0].value value

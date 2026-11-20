@@ -18,9 +18,12 @@ hash once:
 
 - A dbt node that already writes binding keys under `meta.continuo` (`entity`, `grain`, `fixed` and
   `filter` on the node, `property`, `local`, `from`, `agg`, `where` and `period` on a column),
-  which 0.3.1 ignored. Its `source_sha256` moves once, because those paths are now read, and so
-  does the `contract_hash` of its contract, which now holds the bindings. A node with none keeps
-  both.
+  which 0.3.1 ignored. Its `source_sha256` moves once, because those paths are now read. The
+  stored form of its contract holds the bindings now, so the `contract_hash` of that form moves
+  once too, for a caller that hashes it as it is. `ontology.strip` of the stored form gives back
+  the stored form and the `contract_hash` that 0.3.1 gave, which is what a release that uses no
+  ontology stores, and a [resolved form](ontology.md#resolve) hashes differently again. A node
+  with no binding key keeps both hashes.
 - An enforced snapshot. Its columns and constraints are classified in `fingerprints.yaml` as a
   model's are, so a consumer that hashes them moves the `content_hash` of such a snapshot once.
   This package hashes none of it.

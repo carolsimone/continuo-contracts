@@ -6,8 +6,11 @@ same thing store the same document. `normalise_python` builds it from a Python c
 stored labels, the table's names, the kind, the service, the tables the node reads and a
 `logicalType` per column) and then writes the result in the canonical form. `normalise_dbt`
 builds it from a contract that `dbt.generate` wrote: it joins the tables the node's compiled SQL
-names with the ones the node declares and then writes the result in the canonical form.
-`canonical_form` runs that walk on any ODCS document, for a caller that changes a stored form.
+names with the ones the node declares and then writes the result in the canonical form. Both also
+drop the `primaryKeyPosition` of a column when it is the only column with `primaryKey: true`,
+because a position orders the columns of a key and a key of one column has no order, before the
+walk. `canonical_form` runs the walk alone on any ODCS document, for a caller that changes a
+stored form: it fills nothing and drops no `primaryKeyPosition`.
 
 The canonical form walks the ODCS structure: the contract, its schema object, the columns, the
 quality rules, the relationships, the custom properties and every other ODCS object. On each
@@ -24,8 +27,6 @@ object it
   `semanticType: column` on a column, `type: library` on a quality rule and `type: foreignKey`
   on a relationship;
 - drops the `physicalName` of a column when it equals the column's `name`;
-- drops the `primaryKeyPosition` of a column when it is the only column with `primaryKey: true`,
-  because a position orders the columns of a key and a key of one column has no order;
 - drops a custom property whose value is null or empty, and a `continuo` property that says
   continuo's default: `modeType: replace` or `extraColumns: raise`;
 - sorts the set-like lists `customProperties`, `tags`, `roles`, `quality`, `relationships` and
@@ -359,13 +360,15 @@ def normalise_dbt(
 
 
 def canonical_form(doc: Mapping[str, Any]) -> dict[str, Any]:
-    """Return `doc` in the canonical form that the module describes, a new dict.
+    """Return `doc` after the walk of the canonical form that the module describes, a new dict.
 
     `doc` is an ODCS contract and it is not changed. This is the walk that `normalise_python`
     and `normalise_dbt` end with, so a caller that adds to or removes from a stored form calls it
     to get the stored form of the result. The walk gives a stored form back unchanged, and any
     other document its canonical shape: null and empty values and ODCS defaults are dropped, the
-    set-like lists are sorted and hold each item once, and description text is trimmed.
+    set-like lists are sorted and hold each item once, and description text is trimmed. It fills
+    nothing and drops no `primaryKeyPosition`: `normalise_python` and `normalise_dbt` drop the
+    position of a lone key column before they call it.
 
     Raises `CanonicalJsonError` when an item of a set-like list holds a value that canonical
     JSON cannot write, which a document that `yaml_strict.load` read never holds.

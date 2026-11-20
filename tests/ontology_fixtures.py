@@ -6,6 +6,8 @@ with the tables its SQL reads, and `resolved` fills the stored contracts in agai
 ontology.
 """
 
+import copy
+
 from pathlib import Path
 from typing import Any
 
@@ -97,13 +99,44 @@ READS: dict[str, dict[str, list[str]]] = {
 }
 
 
+# The binding keys of `meta.continuo`: on a node, then on a column.
+NODE_BINDING_KEYS = ("entity", "grain", "fixed", "filter")
+COLUMN_BINDING_KEYS = ("property", "local", "from", "agg", "where", "period")
+
+
+def _unbound(manifest: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy of `manifest` whose nodes and columns write no binding key."""
+    reduced = copy.deepcopy(manifest)
+    for node in reduced["nodes"].values():
+        continuo = node.get("config", {}).get("meta", {}).get("continuo", {})
+        for key in NODE_BINDING_KEYS:
+            continuo.pop(key, None)
+        for column in node.get("columns", {}).values():
+            continuo = column.get("meta", {}).get("continuo", {})
+            for key in COLUMN_BINDING_KEYS:
+                continuo.pop(key, None)
+    return reduced
+
+
 def stored(project: str) -> dict[str, dict[str, Any]]:
     """Return the stored contract of each kept node of `project`, by contract id.
 
     Each is what `dbt.generate` writes for the node, stored with the tables of `READS`. A node
     that `READS` does not list raises `KeyError`, so that a new model is read on purpose.
     """
-    manifest = load_manifest(project)
+    return _stored(project, load_manifest(project))
+
+
+def stored_without_bindings(project: str) -> dict[str, dict[str, Any]]:
+    """Return what `stored` returns for `project` if no node or column wrote a binding key.
+
+    The nodes and columns are the same: only the ten keys of `meta.continuo` that are bindings
+    are taken out of the manifest before the contracts are generated.
+    """
+    return _stored(project, _unbound(load_manifest(project)))
+
+
+def _stored(project: str, manifest: dict[str, Any]) -> dict[str, dict[str, Any]]:
     service = dbt.project_service(manifest, "")
     joined = dbt.tests_by_node(manifest)
     contracts: dict[str, dict[str, Any]] = {}

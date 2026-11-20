@@ -69,7 +69,6 @@ RELEASE_ONLY: Final[tuple[tuple[str, str], ...]] = (
 )
 
 _INFO: Final = "info"
-_WARNING: Final = "warning"
 _ERROR: Final = "error"
 
 _NO_OWNER, _LOCAL_STUB, _INSTALLED_PACKAGE = dbt.SKIP_REASONS

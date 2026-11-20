@@ -851,6 +851,18 @@ def test_a_domain_reads_the_copies_of_its_own_services():
     assert_no_finding(run(state), "error", "access")
 
 
+def test_a_contract_that_reads_its_own_relation_needs_no_grant_and_is_no_unbound_read():
+    state = base()
+    set_custom(
+        table(state["txns"]),
+        "reads",
+        ["analytics.events_sink", "Analytics.TXNS"],
+    )
+
+    assert run(state, ("access",)) == []
+    assert problems(run(state)) == []
+
+
 def test_read_of_an_unbound_table_is_a_warning():
     state = base()
     set_custom(

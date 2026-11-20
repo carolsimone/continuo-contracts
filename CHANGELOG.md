@@ -54,9 +54,13 @@ are byte for byte the same, and `ontology.json` is new.
 - A binding key of the wrong shape in a dbt node's `meta.continuo` or in a Python contract is now
   refused with a `value` issue, at the `value` of its item in both families, whatever any install
   setting says. A dbt project with such a key, which 0.3.1 ignored, now fails the lite check.
+- The message of a `refused_property` issue for a continuo property on a column ends `not on a
+  column`, where 0.3.1 ended it `not on this object`. The issue's `path` and `reason` are the same.
 - A dbt node that writes binding keys in `meta.continuo` moves its `source_sha256` once, because
-  those ten paths are now read, and its contract holds the bindings now, so its `contract_hash`
-  moves once too. A node with no binding key keeps both.
+  those ten paths are now read. Its stored form holds the bindings now, so the `contract_hash` of
+  that form moves once too, for a caller that hashes it as it is: `ontology.strip` of the stored
+  form gives back the stored form and the `contract_hash` of 0.3.1, and a resolved form hashes
+  differently again. A node with no binding key keeps both hashes.
 - The documentation is a short README and one page per topic in `docs/`: glossary, walkthrough, dbt
   mapping, lite check, Python contracts, validation, hashing (three pages), vectors, errors,
   stability. Its examples run as tests; docstrings are the API reference, so name lists are gone.

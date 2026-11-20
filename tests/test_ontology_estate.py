@@ -21,6 +21,7 @@ from ontology_fixtures import (
     READS,
     resolved,
     stored,
+    stored_without_bindings,
     without_filled,
 )
 
@@ -146,6 +147,27 @@ def test_the_reads_of_a_model_are_tables_its_sql_names(project):
 def test_a_stored_contract_keeps_the_reads_it_was_given(project):
     for contract_id, contract in stored(project).items():
         assert _reads_of(contract) == sorted(READS[project][contract_id])
+
+
+# What `strip` gives back: the stored form of a release that runs no ontology.
+
+
+@pytest.mark.parametrize("project", PROJECTS)
+def test_strip_of_a_bound_stored_form_is_the_stored_form_with_no_binding_key(
+    project,
+):
+    bound = stored(project)
+    unbound = stored_without_bindings(project)
+
+    assert sorted(bound) == sorted(unbound)
+    for contract_id, contract in bound.items():
+        assert ontology.has_bindings(contract), contract_id
+        assert not ontology.has_bindings(unbound[contract_id]), contract_id
+        stripped = ontology.strip(contract)
+        assert stripped == unbound[contract_id], contract_id
+        assert contract_hash(stripped) == contract_hash(unbound[contract_id])
+        # Hashed as written, without `strip`, the bound form hashes differently.
+        assert contract_hash(contract) != contract_hash(unbound[contract_id])
 
 
 # Where the contracts come after the models they read.

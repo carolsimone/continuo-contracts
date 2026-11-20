@@ -221,7 +221,7 @@ run, except `ontology`; any other name raises `ValueError` before a rule runs.
 | `quality` | a data-quality test's `*_attribute` parameter names a column | errors |
 | `privacy` | a column that holds a personal property is classified `personal`, and no other column is | an error for the first, a warning for the second |
 | `access` | a contract reads a table only when its service's domain is the table's domain or its thing's owner, or the table's contract lists that domain as a reader | an error for a read without a grant, a warning for a table no checked contract holds |
-| `order` | the copies fall into layers by what they read, none in a cycle, and a thing's copies follow its birth copy, the one `born_in` names | errors for a cycle, a copy upstream of the birth copy or a `born_in` that names a copy of another thing, warnings for a copy with no path from the birth copy or a `born_in` no contract holds, and one `info` finding with the layers |
+| `order` | the copies fall into layers by what they read, none in a cycle (a contract's read of its own relation, as an incremental model makes, is no edge), and a thing's copies follow its birth copy, the one `born_in` names | errors for a cycle, a copy upstream of the birth copy or a `born_in` that names a copy of another thing, warnings for a copy with no path from the birth copy or a `born_in` no contract holds, and one `info` finding with the layers |
 | `drift` | each property of a thing is held by a copy | a warning for a property no copy holds, an `info` finding for a thing that no contract binds, when its owner is a domain of the checked services |
 
 `ontology_check.ontology_findings(ontology)` runs the `ontology` rule, which needs no contract. The

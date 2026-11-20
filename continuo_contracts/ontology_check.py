@@ -30,7 +30,7 @@ rule                  what it checks
 
 `PER_SERVICE_RULES` are the rules that need no other service: run over one service's contracts,
 they give the findings that the same rules give over the whole estate. `RELEASE_RULES` adds the
-rules that need the estate, `access` and `drift` among them.
+rules that need the whole estate: `access`, `order` and `drift`.
 
 Only the contracts of a service that the ontology declares are copies, and the rules read only
 those. A service with contracts that the ontology does not declare gets one `info` finding of
@@ -42,14 +42,15 @@ resolve them.
 A copy is a contract of a declared service. Copies are found by their physical relation, the
 `id` of the contract without its last name part, then `.` and the `physicalName` of its schema
 object, which is what another contract's `reads` names. The case of the `id`, of the names and of
-a read does not matter: all are compared in lower case. When two contracts hold one relation, the
-one with the lower `id` is the copy. `check` gives the same findings whatever
-the order of `contracts`.
+a read does not matter: all are compared in lower case. When two contracts hold one relation,
+both are copies, and a read of that relation finds the one with the lower `id`. `check` gives the
+same findings whatever the order of `contracts`.
 
 The `order` rule reads the `reads` of each copy, whatever its kind: a copy that reads nothing,
 as a Python node does, is in the first layer. A read that no checked contract holds adds no edge
-and no finding of this rule, because the `access` rule warns about it. A copy that is in a
-cycle is an error. When a thing names its birth copy in `born_in`, the other copies of the
+and no finding of this rule, because the `access` rule warns about it, and neither does a read of
+the contract's own relation, which an incremental model makes. A copy that is in a cycle of two
+or more copies is an error. When a thing names its birth copy in `born_in`, the other copies of the
 thing must be downstream of it: one upstream of it is an error and one with no path from it is
 a warning. A `born_in` that no checked contract holds is one warning on the thing, and the
 copies of that thing are not ordered against a birth copy. The layers are one `info` finding,
@@ -686,7 +687,9 @@ def _access_rule(estate: _Estate, copy: _Copy) -> list[Finding]:
 
 
 # The `order` rule: copies are placed from the copies they read, never from the thing. It reads
-# the whole graph, so `progress` is called as each copy's reads are resolved to edges.
+# the whole graph, so `progress` is called as each copy's reads are resolved to edges. A read of
+# the copy's own relation is no edge: an incremental model names itself, and dbt itself refuses
+# a `ref` that closes a cycle.
 
 
 def _closure(start: str, step: Mapping[str, set[str]]) -> set[str]:
@@ -745,6 +748,7 @@ def _order_rule(estate: _Estate, progress: Callable[[], None]) -> list[Finding]:
             target.id
             for relation in copy.reads
             if (target := estate.by_relation.get(relation.lower()))
+            and target.id != copy.id
         }
         progress()
     layers = _layers(edges)
