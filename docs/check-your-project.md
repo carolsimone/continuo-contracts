@@ -184,6 +184,7 @@ loaded `Ontology` instead of a file, and a `Line` has the level `info`, `warning
 | `local stub, continuo skips it`, `from an installed package and has no tag, continuo skips it`, `a seed of an installed package: its CSV header is not checked` | INFO | Nothing to fix. The tag `local_stub` marks a node that stands in for a table another service owns. |
 | `no tag: a dormant node, it runs only by hand` | INFO | Add a tag: the first tag is its [schedule](glossary.md#schedule). A seed with no tag is not dormant: it runs on the `seed` schedule. |
 | `<path>: <message>` | ERROR | A contract issue, such as ``customProperties[3].value: `criticality` is 'HIGH', ...``: see the [reasons](validation.md#reasons). |
+| ``<path>: a dbt-snapshot node does not take `contractEnforced`: dbt does not support contracts on snapshots, ...`` | ERROR | Remove `contract.enforced` from the [snapshot](glossary.md#dbt-words)'s config: dbt does not support a contract on a snapshot. |
 | `<message of a rule>` | ERROR, WARNING or INFO | A binding the ontology refuses or doubts, such as `entity Custmer is not a thing in the ontology`: see the [rules](ontology.md#the-rules). |
 | `not declared in the ontology: none of this service's contracts is checked` | INFO | The ontology does not declare your service. Add it under `principals.services` to have its contracts checked. |
 | `writes bindings, but its service is not declared in the ontology: they are kept as written and not checked` | WARNING | The same cause, said of a contract that writes a binding. |

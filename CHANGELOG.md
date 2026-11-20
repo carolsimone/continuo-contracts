@@ -5,6 +5,15 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- The dbt validation refuses an enforced contract on a dbt snapshot, because dbt does not support
+  contracts on snapshots: a `dbt-snapshot` node that writes `contractEnforced: true` gives a
+  `kind_rule` issue, and the lite check fails on it. Remove `contract.enforced` from the snapshot.
+  This refuses a contract that 0.4.0 accepted. A model or a seed with an enforced contract is
+  accepted as before, `dbt.generate` still writes `contractEnforced`, and no hash moves. The dbt
+  contract vector gains one case, `enforced_snapshot_contract`.
+
 ## [0.4.0] - 2026-11-20
 
 **TL;DR**

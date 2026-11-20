@@ -21,6 +21,7 @@
       "model.cases_pkg.pkg_untagged": "installed_package",
       "seed.cases.typed_seed": null,
       "seed.cases.untyped_seed": null,
+      "snapshot.cases.enforced_contract_snapshot": null,
       "snapshot.cases.orders_snapshot": null
     },
     "core": {

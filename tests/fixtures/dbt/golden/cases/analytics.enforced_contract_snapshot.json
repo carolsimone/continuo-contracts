@@ -1,0 +1,173 @@
+{
+ "contract_hash": "sha256:030b09c621b3399f8e8ec8fbaf491a44efefc066865519c50c25d19e7fd4a43b",
+ "flags": [],
+ "generated": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "service",
+    "value": "cases",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-snapshot",
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "project_tag",
+    "vendor": "continuo"
+   },
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "snapshots/enforced_contract_snapshot.yml",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "snapshot",
+     "uniqueKey": "id"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "contractEnforced",
+    "value": true,
+    "vendor": "continuo"
+   },
+   {
+    "property": "snapshot",
+    "value": {
+     "strategy": "timestamp",
+     "uniqueKey": "id",
+     "updatedAt": "updated_at"
+    },
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.enforced_contract_snapshot",
+  "kind": "DataContract",
+  "name": "enforced_contract_snapshot",
+  "schema": [
+   {
+    "name": "enforced_contract_snapshot",
+    "physicalName": "enforced_contract_snapshot",
+    "physicalType": "table",
+    "properties": [
+     {
+      "name": "dbt_scd_id"
+     },
+     {
+      "name": "dbt_updated_at"
+     },
+     {
+      "name": "dbt_valid_from"
+     },
+     {
+      "name": "dbt_valid_to"
+     }
+    ]
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "project_tag"
+  ],
+  "team": {
+   "name": "cases"
+  },
+  "version": "0"
+ },
+ "source_sha256": "4a0404fb8c00820e5d71d0952cec63de84ae36958c915f88db7d0406b4a73df8",
+ "stored": {
+  "apiVersion": "v3.2.0",
+  "customProperties": [
+   {
+    "property": "contractEnforced",
+    "value": true,
+    "vendor": "continuo"
+   },
+   {
+    "property": "criticality",
+    "value": "CORE",
+    "vendor": "continuo"
+   },
+   {
+    "property": "filePath",
+    "value": "snapshots/enforced_contract_snapshot.yml",
+    "vendor": "continuo"
+   },
+   {
+    "property": "kind",
+    "value": "dbt-snapshot",
+    "vendor": "continuo"
+   },
+   {
+    "property": "materialization",
+    "value": {
+     "materialized": "snapshot",
+     "uniqueKey": "id"
+    },
+    "vendor": "continuo"
+   },
+   {
+    "property": "schedule",
+    "value": "project_tag",
+    "vendor": "continuo"
+   },
+   {
+    "property": "service",
+    "value": "cases",
+    "vendor": "continuo"
+   },
+   {
+    "property": "snapshot",
+    "value": {
+     "strategy": "timestamp",
+     "uniqueKey": "id",
+     "updatedAt": "updated_at"
+    },
+    "vendor": "continuo"
+   }
+  ],
+  "id": "analytics.enforced_contract_snapshot",
+  "kind": "DataContract",
+  "name": "enforced_contract_snapshot",
+  "schema": [
+   {
+    "name": "enforced_contract_snapshot",
+    "physicalName": "enforced_contract_snapshot",
+    "physicalType": "table",
+    "properties": [
+     {
+      "name": "dbt_scd_id"
+     },
+     {
+      "name": "dbt_updated_at"
+     },
+     {
+      "name": "dbt_valid_from"
+     },
+     {
+      "name": "dbt_valid_to"
+     }
+    ]
+   }
+  ],
+  "status": "active",
+  "tags": [
+   "project_tag"
+  ],
+  "team": {
+   "name": "cases"
+  },
+  "version": "0"
+ }
+}

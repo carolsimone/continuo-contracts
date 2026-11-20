@@ -9,8 +9,8 @@ continuo's own rules on a document that the first stage accepted. For a Python c
 Python contract may not carry, the custom properties of the `continuo` vendor, the rules of each
 kind of node, the columns and the key of an upsert node, and `validate_python_contract` runs both
 stages. For a dbt contract, `dbt_rule_issues` checks the envelope, the identity, the team, the
-custom properties of the `continuo` vendor and the values of the ones a dbt node needs, and
-`validate_dbt_contract` runs both stages.
+custom properties of the `continuo` vendor, the values of the ones a dbt node needs and the
+contract of a snapshot, which may not be enforced, and `validate_dbt_contract` runs both stages.
 
 Every problem is an `Issue` with the path of the place it is found at, one of the closed reason
 codes of `REASONS` and a sentence for a person. The issues come in path order, so the same
@@ -1659,6 +1659,24 @@ def _dbt_materialization(contract: _Contract) -> Iterator[Issue]:
         )
 
 
+def _dbt_snapshot_contract(contract: _Contract) -> Iterator[Issue]:
+    prop = contract.properties.get("contractEnforced")
+    kind = contract.properties.get("kind")
+    if (
+        prop is not None
+        and prop.value is True
+        and kind is not None
+        and kind.value == "dbt-snapshot"
+    ):
+        yield _issue(
+            prop.path,
+            "kind_rule",
+            "a dbt-snapshot node does not take `contractEnforced`: dbt does not "
+            "support contracts on snapshots, remove `contract.enforced` from the "
+            "snapshot",
+        )
+
+
 def _dbt_values(contract: _Contract) -> Iterator[Issue]:
     for name, check in _DBT_VALUE_CHECKS.items():
         prop = contract.properties.get(name)
@@ -1677,6 +1695,7 @@ _DBT_RULES: Final[tuple[_Rule, ...]] = (
     _dbt_needed,
     _dbt_kind,
     _dbt_materialization,
+    _dbt_snapshot_contract,
     _dbt_values,
 )
 
@@ -1702,7 +1721,9 @@ def dbt_rule_issues(doc: Mapping[str, Any]) -> list[Issue]:
     `REGULATORY`, `CORE` or `SECONDARY`, `schedule` is a name with no whitespace at most 50
     characters long, and `timeoutMinutes` is an integer from 1 to 10080, each a `value` issue at
     the `value` of the property (at `value.materialized` for the `materialized` of the mapping).
-    A dormant node writes no `schedule`. The ontology bindings are checked as in `rule_issues`.
+    A dormant node writes no `schedule`. A `dbt-snapshot` node that writes `contractEnforced: true`
+    is a `kind_rule` issue at the item of the property, because dbt does not support contracts on
+    snapshots. The ontology bindings are checked as in `rule_issues`.
 
     A document with no issue is one that `dbt.run_facts` reads: the properties and the fields it
     reads are all checked.

@@ -43,9 +43,10 @@ uv run pytest -q --cov --cov-report=term-missing
 
 ## Where to add a validation rule
 
-A rule that would refuse a contract an earlier version accepted is not added
-([stability](docs/stability.md)). So a rule checks what a version adds: 0.3.0 added the dbt rules
-together with dbt contracts.
+A rule that would refuse a contract an earlier version accepted is not added, except the
+exceptions listed in [stability](docs/stability.md), each of which needs the owner's decision and an
+entry there. So a rule checks what a version adds: 0.3.0 added the dbt rules together with dbt
+contracts.
 
 1. In `continuo_contracts/validate.py`, add a function to `_RULES` (run by `rule_issues`, Python)
    or `_DBT_RULES` (run by `dbt_rule_issues`, dbt). A new reason extends `REASONS`, which

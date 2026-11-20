@@ -74,7 +74,7 @@ shape the generator cannot read raises an error, `DbtNodeError`, that names the 
 | property `timeoutMinutes` | `config.meta.timeout_minutes` |
 | property `filePath` | `original_file_path` |
 | property `materialization` | `{materialized, uniqueKey, incrementalStrategy, onSchemaChange}` |
-| property `contractEnforced` | `true` when `config.contract.enforced` is `true` |
+| property `contractEnforced` | `true` when `config.contract.enforced` is `true`; [validation](validation.md#dbt-contract-rules) refuses it on a snapshot |
 | property `access` | a model's `config.access`, left out when `protected` |
 | property `group` | `config.group` |
 | property `deprecationDate` | the `YYYY-MM-DD` that starts `deprecation_date`, else an error |

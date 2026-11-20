@@ -84,6 +84,12 @@ CONTRACT_CASES: Final[tuple[tuple[str, str, str, tuple[str, ...]], ...]] = (
 # case, the fixture project, the manifest key of the node and the tables its compiled SQL names.
 ISSUES_CASES: Final[tuple[tuple[str, str, str, tuple[str, ...]], ...]] = (
     ("bad_criticality", "cases", "model.cases.bad_criticality", ()),
+    (
+        "enforced_snapshot_contract",
+        "cases",
+        "snapshot.cases.enforced_contract_snapshot",
+        (),
+    ),
 )
 
 # The tested node of the edited cases, and its tests that the edits change.
