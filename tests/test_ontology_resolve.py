@@ -377,20 +377,55 @@ entities:
     ]
 
 
-def test_a_part_alone_gets_the_position_it_has_in_the_key():
+def test_a_part_alone_is_a_primary_key_with_no_position():
     stored = _contract([_column("transaction_id")], entity="Transaction")
 
     column = _columns(_resolve(stored))["transaction_id"]
 
-    assert (column["primaryKey"], column["primaryKeyPosition"]) == (True, 2)
+    assert column["primaryKey"] is True
+    assert "primaryKeyPosition" not in column
 
 
-def test_a_key_of_one_part_is_a_primary_key_of_position_one():
+def test_a_key_of_one_part_is_a_primary_key_with_no_position():
     column = _columns(_resolve(_contract([_column("user_id")], entity="User")))[
         "user_id"
     ]
 
-    assert (column["primaryKey"], column["primaryKeyPosition"]) == (True, 1)
+    assert column["primaryKey"] is True
+    assert "primaryKeyPosition" not in column
+
+
+def test_a_lone_ontology_key_and_a_declared_lone_key_resolve_to_the_same_form():
+    filled = _resolve(
+        _contract([_column("user_id"), _column("name")], entity="User")
+    )
+    declared = _resolve(
+        _contract(
+            [
+                _column("user_id", primaryKey=True, primaryKeyPosition=1),
+                _column("name"),
+            ],
+            entity="User",
+        )
+    )
+
+    assert filled == declared
+    assert contract_hash(filled) == contract_hash(declared)
+    assert "primaryKeyPosition" not in _columns(filled)["user_id"]
+    assert _resolve(filled) == filled
+
+
+def test_a_key_of_two_columns_keeps_the_position_of_each_part():
+    stored = _contract(
+        [_column("transaction_id"), _column("source")], entity="Transaction"
+    )
+
+    columns = _columns(_resolve(stored))
+
+    assert [
+        (columns[name]["primaryKey"], columns[name]["primaryKeyPosition"])
+        for name in ("source", "transaction_id")
+    ] == [(True, 1), (True, 2)]
 
 
 def test_the_key_fills_only_for_a_key_part_of_the_entity_of_the_contract():
@@ -482,16 +517,22 @@ def test_declared_values_win_over_the_ontology():
 def test_a_declared_position_stays_when_the_ontology_makes_the_key():
     stored = _contract(
         [
-            _column(
-                "user_id", _p("property", "User.user_id"), primaryKeyPosition=4
-            )
+            _column("source", primaryKeyPosition=4),
+            _column("transaction_id"),
         ],
-        entity="User",
+        entity="Transaction",
     )
 
-    column = _columns(_resolve(stored))["user_id"]
+    columns = _columns(_resolve(stored))
 
-    assert (column["primaryKey"], column["primaryKeyPosition"]) == (True, 4)
+    assert (
+        columns["source"]["primaryKey"],
+        columns["source"]["primaryKeyPosition"],
+    ) == (True, 4)
+    assert (
+        columns["transaction_id"]["primaryKey"],
+        columns["transaction_id"]["primaryKeyPosition"],
+    ) == (True, 2)
 
 
 def test_a_link_the_contract_holds_is_not_added_twice():

@@ -42,7 +42,7 @@ from types import MappingProxyType
 from typing import Any, Final, cast
 
 from continuo_contracts import yaml_strict
-from continuo_contracts.contract import canonical_form
+from continuo_contracts.contract import _drop_single_key_position, canonical_form
 from continuo_contracts.errors import OntologyError, StrictYamlError
 from continuo_contracts.hashing import sha256_hex
 from continuo_contracts.vocabulary import VENDOR, continuo_values
@@ -395,7 +395,8 @@ def resolve(stored: Mapping[str, Any], ontology: Ontology) -> dict[str, Any]:
       `personal: true`; and, when `<Thing>` is the entity of the schema object, `<field>` is a
       part of its key and no column of the schema object has `primaryKey: true`,
       `primaryKey: true` with the `primaryKeyPosition` of the part, its place in the thing's
-      key counted from 1 in file order;
+      key counted from 1 in file order (a contract that ends with one key column, whatever
+      filled it, holds no position, as every stored form does);
     - on each column with an `aggregate` whose `from` exists (when it has one): `semanticType:
       measure` and the `logicalType` of `from` when it has an `agg` (`integer` for `count`), and
       `semanticType: dimension` and `logicalType: date` when it has a `period` and no `agg`.
@@ -448,6 +449,9 @@ def _resolve_table(table: dict[str, Any], entities: Mapping[str, Any]) -> None:
             _resolve_property(column, bound["property"], entities, entity, keyed)
         elif "aggregate" in bound:
             _resolve_aggregate(column, bound["aggregate"], entities)
+    # A position orders the columns of a key, and a key of one column, declared or filled in by
+    # the ontology, has none: the form is the one the `normalise_*` functions give.
+    _drop_single_key_position(columns)
 
 
 def _resolve_property(
