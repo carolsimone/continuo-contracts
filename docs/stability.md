@@ -26,7 +26,8 @@ hash once:
   with no binding key keeps both hashes.
 - An enforced snapshot. Its columns and constraints are classified in `fingerprints.yaml` as a
   model's are, so a consumer that hashes them moves the `content_hash` of such a snapshot once.
-  This package hashes none of it.
+  This package hashes none of it. 0.4.1 refuses the contract of such a snapshot, so it is not a
+  supported case: see [Contracts](#contracts).
 
 ## Contracts
 

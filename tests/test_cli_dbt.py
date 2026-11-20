@@ -1799,27 +1799,81 @@ def test_the_ontology_is_read_before_dbt_runs_and_the_flag_is_optional(
     assert fake_dbt.ran
 
 
+ORDERS_SNAPSHOT = "snapshot.cases.orders_snapshot"
+SNAPSHOT = "snapshot.finance.orders_snapshot"
 ENFORCED_SNAPSHOT_ISSUE = (
     "a dbt-snapshot node does not take `contractEnforced`: dbt does not support "
     "contracts on snapshots, remove `contract.enforced` from the snapshot"
 )
 
 
+def _finance_with_snapshot(*, enforced):
+    """The finance manifest with no other fault, and a daily snapshot that has `enforced` set."""
+    manifest = _without_costs_seed()
+    node = copy.deepcopy(load_manifest("cases")["nodes"][ORDERS_SNAPSHOT])
+    node.update(
+        unique_id=SNAPSHOT,
+        fqn=["finance", "orders_snapshot"],
+        tags=["daily"],
+    )
+    node["config"]["contract"]["enforced"] = enforced
+    manifest["nodes"][SNAPSHOT] = node
+    return manifest
+
+
+def test_an_enforced_contract_on_a_snapshot_alone_fails_the_check(
+    tmp_path, capsys, caplog
+):
+    path = _write_json(
+        tmp_path / "manifest.json", _finance_with_snapshot(enforced=True)
+    )
+
+    status = _check(FINANCE, "--manifest", path, "--json")
+
+    assert status == 1
+    document = json.loads(capsys.readouterr().out)
+    messages = _lines(document, SNAPSHOT)
+    assert len(messages) == 1
+    assert messages[0].endswith(f": {ENFORCED_SNAPSHOT_ISSUE}")
+    assert messages[0].startswith("customProperties[")
+    assert f"{SNAPSHOT}: {messages[0]}" in _errors(caplog)
+    # The snapshot is the only node with an error, and its contract has no hash.
+    assert [
+        line["node_id"] for line in document["lines"] if line["level"] == "error"
+    ] == [SNAPSHOT]
+    assert "analytics.orders_snapshot" not in document["contracts"]
+
+
+def test_the_same_snapshot_without_an_enforced_contract_passes_the_check(
+    tmp_path, capsys
+):
+    path = _write_json(
+        tmp_path / "manifest.json", _finance_with_snapshot(enforced=False)
+    )
+
+    status = _check(FINANCE, "--manifest", path, "--json")
+
+    assert status == 0
+    document = json.loads(capsys.readouterr().out)
+    assert document["ok"] is True
+    assert [line for line in document["lines"] if line["level"] == "error"] == []
+    assert "analytics.orders_snapshot" in document["contracts"]
+
+
 def test_a_snapshot_with_an_enforced_contract_fails_the_check(
     tmp_path, capsys, caplog
 ):
     manifest = copy.deepcopy(load_manifest("cases"))
-    node_id = "snapshot.cases.orders_snapshot"
-    manifest["nodes"][node_id]["config"]["contract"] = {"enforced": True}
+    manifest["nodes"][ORDERS_SNAPSHOT]["config"]["contract"] = {"enforced": True}
     path = _write_json(tmp_path / "manifest.json", manifest)
 
     status = _check(CASES, "--manifest", path, "--json")
 
     assert status == 1
     document = json.loads(capsys.readouterr().out)
-    messages = _lines(document, node_id)
+    messages = _lines(document, ORDERS_SNAPSHOT)
     assert len(messages) == 1
     assert messages[0].endswith(f": {ENFORCED_SNAPSHOT_ISSUE}")
     assert messages[0].startswith("customProperties[")
-    assert f"{node_id}: {messages[0]}" in _errors(caplog)
+    assert f"{ORDERS_SNAPSHOT}: {messages[0]}" in _errors(caplog)
     assert "analytics.orders_snapshot" not in document["contracts"]
