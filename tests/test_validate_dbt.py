@@ -395,7 +395,7 @@ def test_a_property_on_a_column_is_on_the_wrong_object():
     issue = _only(validate_dbt_contract(doc))
     assert issue.reason == "refused_property"
     assert issue.path.endswith(".customProperties[0]")
-    assert "not on this object" in issue.message
+    assert "`schedule` sits on the contract, not on a column" in issue.message
 
 
 def test_the_reads_of_the_schema_object_are_accepted():

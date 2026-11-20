@@ -65,17 +65,10 @@ NOT_USED_BY_DBT = [
     "assets",
     "provenance",
 ]
-ONTOLOGY = [
-    "entity",
-    "grain",
-    "fixed",
-    "filter",
-    "property",
-    "local",
-    "from",
-    "agg",
-    "period",
-]
+SCHEMA_BINDINGS = ["entity", "grain", "fixed", "filter"]
+COLUMN_BINDINGS = ["property", "local", "aggregate"]
+# The keys of an aggregate binding are one `aggregate` value, never properties of their own.
+AGGREGATE_KEYS = ["from", "agg", "period"]
 
 
 def _named(sits_on, python):
@@ -110,7 +103,7 @@ def test_each_row_is_filed_under_its_own_name():
 
 def test_sits_on_and_python_use_the_closed_words():
     for prop in PROPERTIES.values():
-        assert prop.sits_on in {"root", "schema", "quality"}, prop
+        assert prop.sits_on in {"root", "schema", "quality", "column"}, prop
         assert prop.python in {"authored", "filled", "refused"}, prop
 
 
@@ -120,9 +113,16 @@ def test_the_properties_are_exactly_the_rows_of_this_release():
         *ROOT_REFUSED,
         "reads",
         *QUALITY_AUTHORED,
+        *SCHEMA_BINDINGS,
+        *COLUMN_BINDINGS,
     }
-    assert len(PROPERTIES) == len(ROOT_AUTHORED) + len(ROOT_REFUSED) + 1 + len(
-        QUALITY_AUTHORED
+    assert len(PROPERTIES) == (
+        len(ROOT_AUTHORED)
+        + len(ROOT_REFUSED)
+        + 1
+        + len(QUALITY_AUTHORED)
+        + len(SCHEMA_BINDINGS)
+        + len(COLUMN_BINDINGS)
     )
 
 
@@ -148,6 +148,13 @@ def test_reads_is_filled_by_continuo():
 
 def test_the_quality_properties_an_author_may_write():
     assert _named("quality", "authored") == set(QUALITY_AUTHORED)
+
+
+def test_the_bindings_an_author_may_write_sit_on_the_schema_object_and_on_a_column():
+    assert _named("schema", "authored") == set(SCHEMA_BINDINGS)
+    assert _named("column", "authored") == set(COLUMN_BINDINGS)
+    assert _named_dbt("schema", "written") == set(SCHEMA_BINDINGS)
+    assert _named_dbt("column", "written") == set(COLUMN_BINDINGS)
 
 
 def test_the_dbt_root_properties():
@@ -181,7 +188,12 @@ def test_every_property_has_a_dbt_answer():
     for prop in PROPERTIES.values():
         assert prop.dbt in {"written", "filled", "not_used"}, prop
     written = {name for name, prop in PROPERTIES.items() if prop.dbt == "written"}
-    assert written == {*DBT_ROOT_WRITTEN, *QUALITY_AUTHORED}
+    assert written == {
+        *DBT_ROOT_WRITTEN,
+        *QUALITY_AUTHORED,
+        *SCHEMA_BINDINGS,
+        *COLUMN_BINDINGS,
+    }
     filled = {name for name, prop in PROPERTIES.items() if prop.dbt == "filled"}
     not_used = {
         name for name, prop in PROPERTIES.items() if prop.dbt == "not_used"
@@ -196,8 +208,8 @@ def test_the_dbt_answer_does_not_move_a_python_answer():
         assert PROPERTIES[name].python == expected, name
 
 
-def test_no_ontology_property_is_in_this_release():
-    assert not set(ONTOLOGY) & set(PROPERTIES)
+def test_the_keys_of_an_aggregate_binding_are_not_properties():
+    assert not set(AGGREGATE_KEYS) & set(PROPERTIES)
 
 
 def test_a_row_is_frozen():

@@ -20,7 +20,8 @@ class ContinuoProperty:
     """One custom property of the `continuo` vendor.
 
     `sits_on` is the object of the contract whose `customProperties` list carries it: `root`
-    (the contract), `schema` (the schema object of the table) or `quality` (a quality check).
+    (the contract), `schema` (the schema object of the table), `quality` (a quality check) or
+    `column` (a column of the table).
     `python` says who may write it in a Python contract: `authored` (the author writes it),
     `filled` (continuo writes it and the author may not) or `refused` (no Python contract
     carries it).
@@ -65,6 +66,9 @@ _ROWS: Final = (
     *_rows("root", "refused", "not_used", "provenance"),
     *_rows("schema", "filled", "filled", "reads"),
     *_rows("quality", "authored", "written", "where warnIf errorIf failCalc"),
+    # The ontology bindings: which thing the table stands for, and what each column is of it.
+    *_rows("schema", "authored", "written", "entity grain fixed filter"),
+    *_rows("column", "authored", "written", "property local aggregate"),
 )
 
 PROPERTIES: Final[Mapping[str, ContinuoProperty]] = MappingProxyType(

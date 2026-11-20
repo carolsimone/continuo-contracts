@@ -820,7 +820,8 @@ def test_each_authored_continuo_property_is_classified_as_validate_allows_it(
 ):
     refused = _KIND_RULES[family].refused
     for name, prop in PROPERTIES.items():
-        if prop.python != "authored":
+        # The bindings sit on the schema object and on a column, which this test does not read.
+        if prop.python != "authored" or prop.sits_on in ("schema", "column"):
             continue
         paths = {
             "root": [f"odcs.custom.{name}"],
