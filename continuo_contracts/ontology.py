@@ -30,18 +30,22 @@ which a team writes (`entity`, `grain`, `fixed` and `filter` on the schema objec
 `local` and `aggregate` on a column), and the links that point at the ontology, which are
 `authoritativeDefinitions` entries whose `url` starts with `LINK_PREFIX`. `has_bindings` says
 whether a stored contract writes any binding, and `strip` returns the stored contract without
-the whole ontology part.
+the whole ontology part. `resolve` goes the other way: it fills a stored contract with what the
+ontology knows.
 """
+
+import re
 
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Any, Final, cast
 
 from continuo_contracts import yaml_strict
 from continuo_contracts.contract import canonical_form
 from continuo_contracts.errors import OntologyError, StrictYamlError
 from continuo_contracts.hashing import sha256_hex
-from continuo_contracts.vocabulary import VENDOR
+from continuo_contracts.vocabulary import VENDOR, continuo_values
 
 # The `url` of an `authoritativeDefinitions` entry that links a contract to the ontology.
 LINK_PREFIX: Final = "continuo-ontology:"
@@ -328,3 +332,232 @@ def _strip_items(key: str, value: Any, bindings: tuple[str, ...]) -> Any:
     if key == "authoritativeDefinitions":
         return [item for item in value if not _is_link(item)]
     return value
+
+
+# What an ontology fills into a stored contract.
+
+# The ODCS `logicalType` of each ontology type that has one besides `enum[...]` and `ref <Thing>`.
+_LOGICAL_TYPES: Final = MappingProxyType(
+    {
+        "int": "integer",
+        "string": "string",
+        "timestamp": "timestamp",
+        "date": "date",
+        "money": "number",
+        "decimal": "number",
+        "bool": "boolean",
+    }
+)
+_REF: Final = re.compile(r"ref\s+(\S+)")
+
+
+@dataclass(frozen=True)
+class _Field:
+    """A key part or a property of a thing.
+
+    `type` is the type text of the field, `ref <Thing>` for a property that names a `ref`.
+    `position` is the place of a key part in the thing's key, counted from 1 in file order, and
+    `None` for a property.
+    """
+
+    type: str | None
+    personal: bool
+    position: int | None
+
+
+def resolve(stored: Mapping[str, Any], ontology: Ontology) -> dict[str, Any]:
+    """Return the stored contract `stored` filled with what `ontology` knows, a new dict.
+
+    The contract's `service` property (the `continuo` custom property of the contract) must be
+    a service that `ontology` declares. For any other contract, one with no `service` included,
+    the result is `stored` in the canonical form and nothing more. The result is always in the
+    canonical form, so the caller hashes it as it hashes any stored form. `stored` is not
+    changed.
+
+    A value fills a gap and never replaces a value the contract holds, so `resolve` run on its
+    own result gives the same result. Stored forms are in the canonical form, where a default such
+    as `semanticType: column` or `primaryKey: false` is not written, so a gap is a value that
+    the form does not hold. What `resolve` fills:
+
+    - the root `domain`: the domain of the service;
+    - on a schema object whose `entity` names a thing of the ontology: a link to the thing, an
+      `authoritativeDefinitions` entry of `type` `ontology` and the `url` `continuo-ontology:<Thing>`;
+    - on each column with no binding (no `property`, `local` or `aggregate`), when the entity
+      is a thing that has a key part or a property of the column's name: the binding
+      `property: <Thing>.<column>`;
+    - on each column whose `property` is `<Thing>.<field>`, where the thing and the field
+      exist: a link `continuo-ontology:<Thing>.<field>`; the `logicalType` of the field's type
+      (`int` is `integer`, `string` is `string`, `timestamp` is `timestamp`, `date` is `date`,
+      `money` and `decimal` are `number`, `bool` is `boolean`, `enum[...]` is `string`, and
+      `ref <Thing>` is the type of the key of that thing when its key has one part, so the
+      type of a part is read from the key before a property of the same name, and any other
+      type gives no `logicalType`); `classification: personal` for a property with
+      `personal: true`; and, when `<Thing>` is the entity of the schema object, `<field>` is a
+      part of its key and no column of the schema object has `primaryKey: true`,
+      `primaryKey: true` with the `primaryKeyPosition` of the part, its place in the thing's
+      key counted from 1 in file order;
+    - on each column with an `aggregate` whose `from` exists (when it has one): `semanticType:
+      measure` and the `logicalType` of `from` when it has an `agg` (`integer` for `count`), and
+      `semanticType: dimension` and `logicalType: date` when it has a `period` and no `agg`.
+
+    A binding that does not resolve (a thing or a field the ontology does not have, or a value
+    of the wrong shape) is left as written and nothing is filled for it, and so is a column that
+    holds more than one of `property`, `local` and `aggregate`. Whether a binding resolves is for
+    `ontology_check`. Only top-level columns are read.
+    """
+    resolved = canonical_form(stored)
+    service = continuo_values(resolved.get("customProperties")).get("service")
+    if not isinstance(service, str) or not ontology.declares(service):
+        return resolved
+    entities: Mapping[str, Mapping[str, Any]] = ontology.document.get(
+        "entities", {}
+    )
+    domain = ontology.domain_of(service)
+    if domain is not None:
+        resolved.setdefault("domain", domain)
+    for table in resolved.get("schema", []):
+        _resolve_table(table, entities)
+    return canonical_form(resolved)
+
+
+def _resolve_table(table: dict[str, Any], entities: Mapping[str, Any]) -> None:
+    """Fill the schema object `table`, and its columns, from `entities`."""
+    entity = continuo_values(table.get("customProperties")).get("entity")
+    thing = entities.get(entity) if isinstance(entity, str) else None
+    if thing is not None:
+        _add_link(table, f"{LINK_PREFIX}{entity}")
+    columns = table.get("properties", [])
+    keyed = any(column.get("primaryKey") is True for column in columns)
+    for column in columns:
+        bound = continuo_values(column.get("customProperties"))
+        kinds = [name for name in _COLUMN_BINDINGS if name in bound]
+        if len(kinds) > 1:
+            continue
+        if not kinds and thing is not None:
+            name = column.get("name")
+            if _field(thing, name) is not None:
+                bound = {"property": f"{entity}.{name}"}
+                column.setdefault("customProperties", []).append(
+                    {
+                        "vendor": VENDOR,
+                        "property": "property",
+                        "value": bound["property"],
+                    }
+                )
+        if "property" in bound:
+            _resolve_property(column, bound["property"], entities, entity, keyed)
+        elif "aggregate" in bound:
+            _resolve_aggregate(column, bound["aggregate"], entities)
+
+
+def _resolve_property(
+    column: dict[str, Any],
+    value: object,
+    entities: Mapping[str, Any],
+    entity: object,
+    keyed: bool,
+) -> None:
+    """Fill `column` from the `<Thing>.<field>` that `value` names, when it resolves."""
+    if not isinstance(value, str):
+        return
+    name, _, field_name = value.partition(".")
+    found = _field(entities.get(name), field_name)
+    if found is None:
+        return
+    _add_link(column, f"{LINK_PREFIX}{value}")
+    logical = _logical_type(entities, found.type, ())
+    if logical is not None:
+        column.setdefault("logicalType", logical)
+    if found.personal:
+        column.setdefault("classification", "personal")
+    if found.position is not None and name == entity and not keyed:
+        column.setdefault("primaryKey", True)
+        column.setdefault("primaryKeyPosition", found.position)
+
+
+def _resolve_aggregate(
+    column: dict[str, Any], value: object, entities: Mapping[str, Any]
+) -> None:
+    """Fill `column` from the `aggregate` mapping `value`, when its `from` resolves."""
+    if not isinstance(value, Mapping):
+        return
+    source = value.get("from")
+    logical = None
+    if source is not None:
+        if not isinstance(source, str):
+            return
+        name, _, field_name = source.partition(".")
+        thing = entities.get(name)
+        if thing is None:
+            return
+        if field_name:
+            found = _field(thing, field_name)
+            if found is None:
+                return
+            logical = _logical_type(entities, found.type, ())
+    agg = value.get("agg")
+    if agg and isinstance(agg, str):
+        semantic = "measure"
+        if agg == "count":
+            logical = "integer"
+    elif value.get("period") and isinstance(value["period"], str):
+        semantic, logical = "dimension", "date"
+    else:
+        return
+    column.setdefault("semanticType", semantic)
+    if logical is not None:
+        column.setdefault("logicalType", logical)
+
+
+def _add_link(obj: dict[str, Any], url: str) -> None:
+    """Add the ontology link `url` to the `authoritativeDefinitions` of `obj`, once."""
+    links = obj.setdefault("authoritativeDefinitions", [])
+    if not any(
+        isinstance(link, Mapping) and link.get("url") == url for link in links
+    ):
+        links.append({"type": "ontology", "url": url})
+
+
+def _field(thing: Mapping[str, Any] | None, name: object) -> _Field | None:
+    """Return the key part or property `name` of `thing`, or `None` when it has none.
+
+    A key part is looked up before a property of the same name.
+    """
+    if thing is None or not isinstance(name, str):
+        return None
+    key: Mapping[str, str] = thing.get("key", {})
+    if name in key:
+        return _Field(key[name], False, list(key).index(name) + 1)
+    properties: Mapping[str, Mapping[str, Any]] = thing.get("properties", {})
+    declared = properties.get(name)
+    if declared is None:
+        return None
+    ref = declared.get("ref")
+    return _Field(
+        f"ref {ref}" if ref is not None else declared.get("type"),
+        declared.get("personal") is True,
+        None,
+    )
+
+
+def _logical_type(
+    entities: Mapping[str, Any], type_text: str | None, seen: tuple[str, ...]
+) -> str | None:
+    """Return the ODCS `logicalType` of the ontology type `type_text`, or `None` when it has none.
+
+    `seen` lists the things whose key the walk has read, so a `ref` cycle ends with `None`.
+    """
+    if type_text is None:
+        return None
+    text = type_text.strip()
+    if text in _LOGICAL_TYPES:
+        return _LOGICAL_TYPES[text]
+    if text.startswith("enum[") and text.endswith("]"):
+        return "string"
+    ref = _REF.fullmatch(text)
+    if ref is None or (target := ref.group(1)) in seen:
+        return None
+    key: Mapping[str, str] = entities.get(target, {}).get("key", {})
+    if len(key) != 1:
+        return None
+    return _logical_type(entities, next(iter(key.values())), (*seen, target))

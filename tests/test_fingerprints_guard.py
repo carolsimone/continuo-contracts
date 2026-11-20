@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from continuo_contracts import dbt, fingerprints, yaml_strict
+from continuo_contracts import dbt, fingerprints, ontology, yaml_strict
 from continuo_contracts.contract import normalise_dbt, normalise_python
 from continuo_contracts.fingerprints import (
     DBT_FAMILIES,
@@ -579,31 +579,42 @@ def _link(url):
     return [{"type": "ontology", "url": url}]
 
 
-def _ontology_stored():
-    """Return the stored form of a contract that binds a thing, as an ontology fills it in."""
+DEMO_ONTOLOGY = ontology.load(
+    (FIXTURES / "ontology" / "demo.yaml").read_text(encoding="utf-8")
+)
+
+
+def _bound_stored():
+    """Return the stored form of a contract of the `core` service that binds a thing.
+
+    It writes every binding a team can write and none of what an ontology fills in: the column
+    `source` is left to the implicit binding, and no column declares a key.
+    """
     return {
-        "domain": "finance",
+        "customProperties": [
+            _continuo("service", "core"),
+            _continuo("kind", "dbt-model"),
+        ],
         "schema": [
             {
-                "name": "orders",
-                "authoritativeDefinitions": _link("continuo-ontology:Order"),
+                "name": "transactions_monthly",
                 "customProperties": [
-                    _continuo("entity", "Order"),
-                    _continuo("grain", ["id"]),
-                    _continuo("fixed", {"region": "eu"}),
-                    _continuo("filter", {"status": "open"}),
+                    _continuo("entity", "Transaction"),
+                    _continuo("grain", ["month"]),
+                    _continuo("fixed", {"source": "card"}),
+                    _continuo("filter", {"currency": "EUR"}),
                 ],
                 "properties": [
+                    {"name": "source"},
                     {
-                        "name": "id",
-                        "logicalType": "integer",
-                        "primaryKey": True,
-                        "primaryKeyPosition": 1,
-                        "classification": "personal",
-                        "authoritativeDefinitions": _link(
-                            "continuo-ontology:Order.id"
-                        ),
-                        "customProperties": [_continuo("property", "Order.id")],
+                        "name": "transaction_id",
+                        "customProperties": [
+                            _continuo("property", "Transaction.transaction_id")
+                        ],
+                    },
+                    {
+                        "name": "buyer_email",
+                        "customProperties": [_continuo("property", "User.email")],
                     },
                     {
                         "name": "note",
@@ -611,15 +622,22 @@ def _ontology_stored():
                     },
                     {
                         "name": "total",
-                        "semanticType": "measure",
                         "customProperties": [
-                            _continuo("aggregate", {"from": "Order.amount"})
+                            _continuo(
+                                "aggregate",
+                                {"from": "Transaction.amount_eur", "agg": "sum"},
+                            )
                         ],
                     },
                 ],
             }
         ],
     }
+
+
+def _ontology_stored():
+    """Return the stored form of a contract that binds a thing, as the demo ontology fills it in."""
+    return ontology.resolve(_bound_stored(), DEMO_ONTOLOGY)
 
 
 # The goldens and the vector do not exercise every field the generator writes: a composite primary
@@ -807,8 +825,8 @@ def test_every_odcs_input_a_dbt_family_names_is_written_by_a_contract(
     for _, stored in DBT_STORED_FORMS:
         if _kind(stored) == family:
             written |= _odcs_inputs(stored)
-    # The generator does not write what an ontology fills in, so the form of a contract that an
-    # ontology has filled in stands for it.
+    # The generator does not write what an ontology fills in, so what `ontology.resolve` writes
+    # into a bound contract stands for it.
     written |= _odcs_inputs(_ontology_stored())
     declared = {
         name
