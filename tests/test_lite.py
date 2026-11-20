@@ -11,10 +11,16 @@ from pathlib import Path
 import pytest
 
 from dbt_fixtures import load_manifest
+from ontology_fixtures import (
+    BROKEN_TEXT,
+    CORE_ONLY_TEXT,
+    DEMO,
+)
 
-from continuo_contracts import dbt, lite
+from continuo_contracts import dbt, lite, ontology, ontology_check
 from continuo_contracts.contract import contract_hash, normalise_dbt
 from continuo_contracts.lite import Line, LiteReport
+from continuo_contracts.vocabulary import continuo_values
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "dbt"
 PROJECTS = ("cases", "core", "finance", "marketing", "service_1")
@@ -1128,3 +1134,451 @@ def test_no_fixture_project_has_a_shared_id(project):
     assert not [
         line for line in report.lines if line.message.endswith("duplicate_table")
     ]
+
+
+# The lite check against an ontology.
+
+UNDECLARED_SERVICE = (
+    "not declared in the ontology: none of this service's contracts is checked"
+)
+UNDECLARED_BINDINGS = (
+    "writes bindings, but its service is not declared in the ontology: they are "
+    "kept as written and not checked"
+)
+BROKEN_ONTOLOGY = "the ontology file has 2 error(s): run continuo-contracts ontology check <file>"
+FX = "model.finance.fx_transactions_eur"
+FX_WARNING = (
+    "column rate_to_eur comes from FxRate, which Transaction does not reach "
+    "through any reference: the join is not a declared relationship"
+)
+SERVICES = {"core_bound": "core", "finance_bound": "finance"}
+# The ontology of the `shop` nodes that the tests below write: one thing, which no node binds
+# unless a test says so.
+SHOP = ontology.load(
+    """\
+principals:
+  domains:
+    shop: {owner_team: shop-data}
+  services:
+    shop: {domain: shop, kind: dbt}
+entities:
+  Order:
+    owner: shop
+    key: {order_id: int}
+"""
+)
+GHOST = "entity Ghost is not a thing in the ontology"
+
+
+def _bound(project, onto=DEMO, manifest=None):
+    """The lite check of a bound fixture project, with its own seed headers."""
+    return lite.check_manifest(
+        manifest or load_manifest(project),
+        declared_service=SERVICES[project],
+        read_header=_csv_header(project),
+        ontology=onto,
+    )
+
+
+def _bind(node, **continuo):
+    """Write `continuo` into the `meta.continuo` of a manifest node, and return the node."""
+    node["config"]["meta"].setdefault("continuo", {}).update(continuo)
+    return node
+
+
+def _messages(report, level="error"):
+    return [
+        (line.node_id, line.message)
+        for line in report.lines
+        if line.level == level
+    ]
+
+
+def test_a_warning_line_does_not_fail_the_check():
+    report = LiteReport(
+        "shop", (Line("warning", "model.shop.orders", "a warning"),), {}
+    )
+
+    assert report.ok is True
+    assert (
+        LiteReport(
+            "shop",
+            (
+                Line("warning", "", "a warning"),
+                Line("error", "", "an error"),
+            ),
+            {},
+        ).ok
+        is False
+    )
+
+
+def test_the_default_is_no_ontology_and_no_binding_is_checked():
+    node = _bind(_model(), entity="Ghost", grain=["nothing"])
+    manifest = _manifest(node)
+
+    report = _check(manifest)
+
+    assert report == lite.check_manifest(
+        manifest,
+        declared_service="",
+        read_header=_declared_header,
+        ontology=None,
+    )
+    assert report.lines == ()
+    assert list(report.contracts) == ["analytics.orders"]
+
+
+@pytest.mark.parametrize("project", SERVICES)
+def test_a_bound_project_has_no_line_when_no_ontology_is_given(project):
+    report = lite.check_manifest(
+        load_manifest(project),
+        declared_service=SERVICES[project],
+        read_header=_csv_header(project),
+    )
+
+    assert report.lines == ()
+
+
+def test_a_binding_of_the_wrong_shape_is_an_error_whatever_the_ontology():
+    node = _bind(_model(), entity=3)
+
+    without = _check(_manifest(node))
+    with_one = lite.check_manifest(
+        _manifest(node),
+        declared_service="",
+        read_header=_declared_header,
+        ontology=SHOP,
+    )
+
+    assert [line.level for line in without.lines] == ["error"]
+    assert "entity" in without.lines[0].message
+    assert with_one.lines == without.lines
+    assert with_one.contracts == {}
+
+
+def test_the_core_project_has_no_finding_against_the_demo_ontology():
+    report = _bound("core_bound")
+
+    assert report.lines == ()
+    assert report.ok is True
+
+
+def test_a_warning_of_the_ontology_is_a_warning_line_and_the_check_passes():
+    report = _bound("finance_bound")
+
+    assert report.lines == (Line("warning", FX, FX_WARNING),)
+    assert report.ok is True
+
+
+@pytest.mark.parametrize("project", SERVICES)
+def test_the_hashes_do_not_depend_on_the_ontology(project):
+    manifest = load_manifest(project)
+    plain = lite.check_manifest(
+        manifest,
+        declared_service=SERVICES[project],
+        read_header=_csv_header(project),
+    )
+
+    assert plain.contracts
+    assert _bound(project).contracts == plain.contracts
+
+
+def test_an_entity_that_is_not_a_thing_is_an_error_line_of_its_node():
+    manifest = copy.deepcopy(load_manifest("finance_bound"))
+    _bind(manifest["nodes"]["seed.finance.seed_fx_rates_eur"], entity="Ghost")
+
+    report = _bound("finance_bound", manifest=manifest)
+
+    assert report.ok is False
+    assert ("seed.finance.seed_fx_rates_eur", GHOST) in _messages(report)
+    # Each line is about the node it names and the other nodes keep their lines.
+    assert {line.node_id for line in report.lines} == {
+        "seed.finance.seed_fx_rates_eur",
+        FX,
+    }
+    assert Line("warning", FX, FX_WARNING) in report.lines
+
+
+def test_the_lines_of_a_node_come_before_the_ontology_lines_of_the_node():
+    node = _bind(_model(tags=()), entity="Ghost")
+
+    report = lite.check_manifest(
+        _manifest(node),
+        declared_service="shop",
+        read_header=_declared_header,
+        ontology=SHOP,
+    )
+
+    assert report.lines[0] == Line("info", "model.shop.orders", DORMANT)
+    assert {line.node_id for line in report.lines} == {"model.shop.orders"}
+    assert Line("error", "model.shop.orders", GHOST) in report.lines
+    levels = [line.level for line in report.lines]
+    assert levels[1:] == sorted(
+        levels[1:], key=("error", "warning", "info").index
+    )
+
+
+def test_an_undeclared_service_is_one_information_line_for_the_service():
+    report = _bound("finance_bound", ontology.load(CORE_ONLY_TEXT))
+
+    assert report.ok is True
+    assert report.lines[-1] == Line("info", "", UNDECLARED_SERVICE)
+    assert [line for line in report.lines if line.level == "info"] == [
+        report.lines[-1]
+    ]
+
+
+def test_each_contract_with_bindings_in_an_undeclared_service_is_a_warning():
+    report = _bound("finance_bound", ontology.load(CORE_ONLY_TEXT))
+
+    assert [line.node_id for line in report.lines[:-1]] == [
+        "model.finance.fx_transactions_eur",
+        "model.finance.ltv_per_user",
+        "model.finance.operation_cost_per_user_view",
+        "model.finance.operational_cost_per_user",
+        "model.finance.operational_costs_monthly",
+        "seed.finance.seed_fx_rates_eur",
+        "seed.finance.seed_operational_costs",
+    ]
+    assert {(line.level, line.message) for line in report.lines[:-1]} == {
+        ("warning", UNDECLARED_BINDINGS)
+    }
+
+
+def test_an_undeclared_service_whose_nodes_bind_nothing_has_only_the_information_line():
+    report = lite.check_manifest(
+        _manifest(_model()),
+        declared_service="shop",
+        read_header=_declared_header,
+        ontology=ontology.load(CORE_ONLY_TEXT),
+    )
+
+    assert report.lines == (Line("info", "", UNDECLARED_SERVICE),)
+
+
+def test_a_broken_ontology_is_one_error_line_for_the_service():
+    node = _bind(_model(), entity="Ghost")
+
+    report = lite.check_manifest(
+        _manifest(node),
+        declared_service="shop",
+        read_header=_declared_header,
+        ontology=ontology.load(BROKEN_TEXT),
+    )
+
+    assert report.lines == (Line("error", "", BROKEN_ONTOLOGY),)
+    assert report.ok is False
+    # The rest of the lite check is the same, so the contract is hashed.
+    assert list(report.contracts) == ["analytics.orders"]
+
+
+def test_a_broken_ontology_checks_no_contract_of_the_estate():
+    report = _bound("finance_bound", ontology.load(BROKEN_TEXT))
+
+    assert report.lines == (Line("error", "", BROKEN_ONTOLOGY),)
+
+
+def test_a_broken_ontology_line_comes_before_the_line_for_skipped_nodes():
+    node = _model(owner="")
+
+    report = lite.check_manifest(
+        _manifest(node),
+        declared_service="shop",
+        read_header=_declared_header,
+        ontology=ontology.load(BROKEN_TEXT),
+    )
+
+    assert [line.message for line in report.lines] == [
+        NO_OWNER,
+        BROKEN_ONTOLOGY,
+        ALL_SKIPPED,
+    ]
+
+
+def test_the_error_count_of_a_broken_ontology_is_the_number_of_findings():
+    one = ontology.load(BROKEN_TEXT.replace("owner: nobody", "owner: core"))
+
+    report = lite.check_manifest(
+        _manifest(_model()),
+        declared_service="shop",
+        read_header=_declared_header,
+        ontology=one,
+    )
+
+    assert report.lines == (
+        Line(
+            "error",
+            "",
+            "the ontology file has 1 error(s): run continuo-contracts ontology check <file>",
+        ),
+    )
+
+
+def test_only_the_rules_that_need_no_other_service_run(monkeypatch):
+    calls = []
+    real = ontology_check.check
+
+    def spy(onto, contracts, *, rules, **kwargs):
+        calls.append((onto, list(contracts), tuple(rules)))
+        return real(onto, contracts, rules=rules, **kwargs)
+
+    monkeypatch.setattr(ontology_check, "check", spy)
+
+    _bound("finance_bound")
+
+    [(onto, contracts, rules)] = calls
+    assert onto is DEMO
+    assert rules == ontology_check.PER_SERVICE_RULES
+    assert not {"access", "order", "drift"} & set(rules)
+    assert len(contracts) == 7
+
+
+def test_a_read_of_another_services_table_is_no_error_and_no_warning():
+    manifest = copy.deepcopy(load_manifest("finance_bound"))
+    # core grants nobody its `seed_users`, and finance reads it.
+    _bind(
+        manifest["nodes"]["model.finance.operational_cost_per_user"],
+        reads=["analytics.seed_users", "analytics.not_in_any_service"],
+    )
+
+    report = _bound("finance_bound", manifest=manifest)
+
+    assert report.lines == (Line("warning", FX, FX_WARNING),)
+    assert report.ok is True
+
+
+def test_the_contracts_are_resolved_and_hold_the_declared_reads_alone(
+    monkeypatch,
+):
+    manifest = copy.deepcopy(load_manifest("finance_bound"))
+    _bind(
+        manifest["nodes"]["model.finance.ltv_per_user"],
+        reads=["analytics.Revenue_Per_User"],
+    )
+    seen = []
+    real = ontology_check.check
+
+    def spy(onto, contracts, **kwargs):
+        seen.extend(contracts)
+        return real(onto, contracts, **kwargs)
+
+    monkeypatch.setattr(ontology_check, "check", spy)
+    tests = dbt.tests_by_node(manifest)
+    expected = {}
+    for key, node in manifest["nodes"].items():
+        if node["resource_type"] in ("model", "seed"):
+            stored = normalise_dbt(
+                dbt.generate(
+                    node, tests.get(key, []), manifest=manifest
+                ).document,
+                reads=[],
+            )
+            expected[stored["id"]] = ontology.resolve(stored, DEMO)
+
+    _bound("finance_bound", manifest=manifest)
+
+    assert {c["id"]: c for c in seen} == expected
+    ltv = expected["analytics.ltv_per_user"]
+    assert ltv["domain"] == "finance"
+    assert continuo_values(ltv["schema"][0]["customProperties"])["reads"] == [
+        "analytics.revenue_per_user"
+    ]
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        lambda node: node["config"]["meta"].update(criticality="high"),
+        lambda node: _bind(node, reads=["nodot"]),
+    ],
+    ids=["a contract with an issue", "a read that is not a table"],
+)
+def test_a_node_with_no_stored_contract_is_not_checked_against_the_ontology(
+    change,
+):
+    node = _bind(_model(), entity="Ghost")
+    change(node)
+
+    report = lite.check_manifest(
+        _manifest(node),
+        declared_service="shop",
+        read_header=_declared_header,
+        ontology=SHOP,
+    )
+
+    assert [line.level for line in report.lines] == ["error"]
+    assert GHOST not in report.lines[0].message
+
+
+def test_a_node_of_another_service_is_not_checked_against_the_ontology():
+    own = _bind(_model("orders"), entity="Ghost")
+    other = _bind(_model("sales", project="other"), entity="Ghost")
+
+    report = lite.check_manifest(
+        _manifest(own, other),
+        declared_service="shop",
+        read_header=_declared_header,
+        ontology=SHOP,
+    )
+
+    assert [
+        line.message
+        for line in report.lines
+        if line.node_id == "model.other.sales"
+    ] == [
+        "the node's service is other, the declared service is shop: the release "
+        "rejects a manifest that holds a node of another service as invalid_artifact"
+    ]
+    assert ("model.shop.orders", GHOST) in _messages(report)
+    assert not [line for line in report.lines if line.level == "info"]
+
+
+def test_every_node_is_checked_when_no_service_is_declared():
+    own = _bind(_model("orders"), entity="Ghost")
+    other = _bind(_model("sales", project="other"), entity="Ghost")
+
+    report = lite.check_manifest(
+        _manifest(own, other),
+        declared_service="",
+        read_header=_declared_header,
+        ontology=SHOP,
+    )
+
+    assert ("model.shop.orders", GHOST) in _messages(report)
+    # The service `other` is not the ontology's, so its contract is not checked and says so.
+    assert ("model.other.sales", GHOST) not in _messages(report)
+    assert (
+        Line("warning", "model.other.sales", UNDECLARED_BINDINGS) in report.lines
+    )
+    assert Line("info", "", UNDECLARED_SERVICE) in report.lines
+
+
+def test_nodes_that_share_a_contract_id_are_not_checked_against_the_ontology():
+    first = _bind(_aliased("orders", "orders_a"), entity="Ghost")
+    second = _bind(_aliased("orders", "orders_b", project="pkg"), entity="Ghost")
+
+    report = lite.check_manifest(
+        _manifest(first, second),
+        declared_service="",
+        read_header=_declared_header,
+        ontology=SHOP,
+    )
+
+    assert {line.message for line in report.lines} == {
+        _SHARED.format("analytics.orders", "model.shop.orders"),
+        _SHARED.format("analytics.orders", "model.pkg.orders"),
+    }
+
+
+def test_release_only_texts_name_the_ontology_the_install_runs_and_the_release_rules():
+    rows = dict(lite.RELEASE_ONLY)
+
+    assert rows["the install's ontology"] == (
+        "the release checks bindings against the ontology the install runs; the "
+        "lite check reads the file --ontology names, which can differ, and without "
+        "--ontology it checks no binding."
+    )
+    estate = rows["the whole estate is parsed"]
+    assert "`access`, `order` and `drift`" in estate
+    assert estate.endswith(".")

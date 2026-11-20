@@ -1,6 +1,6 @@
 """The `continuo-contracts` command: check the ODCS contract of a node and print its hash.
 
-The command has three subcommands. `validate` reads one or more contract files and reports every
+The command has four subcommands. `validate` reads one or more contract files and reports every
 problem each has. `hash` checks one contract file and prints its `contract_hash`. Both read a
 file as `yaml_strict.load` does and check it as `validate.validate_python_contract` does, so a
 producer's CI and a person at a terminal see what continuo's topology-controller sees. Both log
@@ -13,7 +13,13 @@ the CSV file of each seed, and logs the report of `lite.check_manifest`. With `-
 reads a manifest that already exists and runs nothing. The files the command reads are the files
 its arguments name, the profiles file in the profiles folder of `dbt check`, the manifest, the
 project's `dbt_project.yml` and the CSV files of the seeds, each only when it is a regular file
-in a seed folder that `dbt_project.yml` names.
+in a seed folder that `dbt_project.yml` names. With `--ontology FILE` it also reads that
+ontology file, before it runs anything, and the lite check reads the bindings of the contracts
+against it, with the rules that need no other service. A warning of that check is logged at
+WARNING and never changes the exit status.
+
+`ontology check` reads one ontology file (`ontology.load`) and logs each finding of
+`ontology_check.ontology_findings`, the check of the file alone.
 
 Output follows one rule. The human text goes through `logging` to stderr. Stdout carries only the
 machine-read result: with `--json` one JSON document, and for `hash` without it the hash alone.
@@ -23,8 +29,10 @@ means the command could not run: a usage error (a `--service` that is empty or b
 a path that names no contract file, a path that cannot be looked up, a folder or a file that
 cannot be read, or a `--read` value that is not a table. For `dbt check`, 0 means the check found
 no error, 1 means it found an error or `dbt parse` failed, and 2 means it could not run: a usage
-error, a folder that does not exist, no `dbt` executable, or a manifest that cannot be read or is
-not the shape of a dbt manifest.
+error, a folder that does not exist, no `dbt` executable, a manifest that cannot be read or is
+not the shape of a dbt manifest, or an `--ontology` file that cannot be read or does not load. For
+`ontology check`, 0 means the file has no error, 1 means it has an error finding, and 2 means the
+command could not run: a file that cannot be read or does not load, as with `--ontology`.
 
 `main` configures logging when it runs, not when the module is imported, and returns the exit
 status. The console script `continuo-contracts` calls it.
@@ -47,13 +55,15 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import Any, Final, cast
 
-from continuo_contracts import lite, yaml_strict
+from continuo_contracts import lite, ontology, yaml_strict
 from continuo_contracts.contract import contract_hash, normalise_python
 from continuo_contracts.errors import (
     DbtNodeError,
     HashInputError,
+    OntologyError,
     StrictYamlError,
 )
+from continuo_contracts.ontology_check import ontology_findings
 from continuo_contracts.validate import Issue, validate_python_contract
 
 _logger = logging.getLogger(__name__)
@@ -85,6 +95,11 @@ exit status of dbt check:
   1  the check found an error, or dbt parse failed
   2  the command could not run
 
+exit status of ontology check:
+  0  the file has no error
+  1  the file has an error
+  2  the command could not run
+
 Each command's --help says what stops it from running.
 """
 
@@ -93,8 +108,16 @@ exit status:
   0  the check found no error
   1  the check found an error, or dbt parse exited with a status other than 0
   2  a usage error (an empty or blank --service among them), a PROJECT_DIR that is not a
-     folder, no dbt executable, or a manifest that cannot be read or is not the shape of a
-     dbt manifest
+     folder, no dbt executable, a manifest that cannot be read or is not the shape of a
+     dbt manifest, or an --ontology file that cannot be read or does not load
+"""
+
+_ONTOLOGY_EXIT_CODES: Final = """\
+exit status:
+  0  the file has no error
+  1  the file has an error finding
+  2  a usage error, a FILE that cannot be read, or a FILE that does not load: it is not
+     UTF-8 text, not the YAML of an ontology, or has a key or a value the format does not allow
 """
 
 # The placeholder that dbt gets for a profile variable that nothing sets, and the text scanned
@@ -113,9 +136,16 @@ _COLOUR: Final = re.compile(r"\x1b\[[0-9;]*m")
 # bytes of a seed's CSV file that its first row may take.
 _SEED_FOLDER: Final = "seeds"
 _HEADER_BYTES: Final = 2**20
-# The level of a `lite.Line` that fails the check.
-_ERROR_LEVEL: Final = "error"
+# The logging level of each level of a `lite.Line` and of each severity of a finding, which
+# share their names.
+_LEVELS: Final = {
+    "error": logging.ERROR,
+    "warning": logging.WARNING,
+    "info": logging.INFO,
+}
 _RELEASE_ONLY: Final = "What only the release does:"
+# The severity of a finding that fails `ontology check`.
+_ERROR_SEVERITY: Final = "error"
 
 _VALIDATE_DESCRIPTION: Final = """\
 Check Python contract files and log every issue at ERROR as
@@ -145,9 +175,14 @@ does not guarantee that continuo will create the contracts at release time.
 
 _DBT_CHECK_DESCRIPTION: Final = """\
 Log the producer's lite check of a dbt project: the banner, one line for each node
-the check leaves out or finds a problem in (a problem at ERROR), what only the release
-does, and the banner again. Passing it does not guarantee that the release creates the
-contracts.
+the check leaves out or finds a problem in (a problem at ERROR, a warning of the ontology
+at WARNING), what only the release does, and the banner again. Passing it does not
+guarantee that the release creates the contracts.
+
+With --ontology FILE the check also reads the bindings of the contracts against that
+ontology file, with the rules that need no other service. A warning does not fail the
+check. A file with an error of its own gives one ERROR line that says so, and the file
+is checked alone with `continuo-contracts ontology check`.
 
 Without --manifest the command runs
   <dbt> --write-json --log-path <TMP> parse --project-dir PROJECT_DIR
@@ -167,6 +202,23 @@ any other file is reported as a file that cannot be read.
 With --json, stdout is
   {"lite": true, "ok": bool, "service": str, "lines": [{"level": str,
     "node_id": str, "message": str}], "contracts": {"<contract id>": "<contract_hash>"}}
+where level is error, warning or info.
+"""
+
+_ONTOLOGY_DESCRIPTION: Final = """\
+Check an ontology file.
+"""
+
+_ONTOLOGY_CHECK_DESCRIPTION: Final = """\
+Check an ontology file alone, without a contract: each service names a declared domain,
+each thing an owner that is a declared domain, each reference a thing and a property that
+exist, and each personal property an access rule. Log each finding at the level of its
+severity, and then how many errors the file has.
+
+With --json, stdout is
+  {"ok": bool, "findings": [{"severity": str, "rule": str, "subject": str,
+    "message": str}]}
+and ok is true when no finding is an error.
 """
 
 
@@ -411,6 +463,26 @@ def _require_folder(path: Path) -> None:
         raise _UsageError(f"{_posix(path)}: no such folder")
 
 
+def _load_ontology(path: Path) -> ontology.Ontology:
+    """Return the ontology in the file `path`.
+
+    The file is read as UTF-8 text and loaded as `ontology.load` does.
+
+    Raises `_UsageError` when the file cannot be read, is not UTF-8 text, or does not load, with
+    the message of the `OntologyError` after the path of the file.
+    """
+    try:
+        text = path.read_bytes().decode("utf-8")
+    except (OSError, ValueError) as error:
+        raise _UsageError(
+            _cannot(path, "read the ontology file", error)
+        ) from error
+    try:
+        return ontology.load(text)
+    except OntologyError as error:
+        raise _UsageError(f"{_posix(path)}: {error}") from error
+
+
 def _read_manifest(path: Path) -> dict[str, Any]:
     """Return the manifest in the JSON file `path`.
 
@@ -619,8 +691,7 @@ def _log_report(report: lite.LiteReport) -> None:
     _logger.info("%s", lite.BANNER)
     for line in report.lines:
         text = f"{line.node_id}: {line.message}" if line.node_id else line.message
-        level = logging.ERROR if line.level == _ERROR_LEVEL else logging.INFO
-        _logger.log(level, "%s", text)
+        _logger.log(_LEVELS[line.level], "%s", text)
     _logger.info("%s", _RELEASE_ONLY)
     for what, why in lite.RELEASE_ONLY:
         _logger.info("  %s: %s", what, why)
@@ -648,6 +719,8 @@ def _report_document(report: lite.LiteReport) -> dict[str, Any]:
 def _dbt_check(args: argparse.Namespace) -> int:
     project: Path = args.project_dir
     _require_folder(project)
+    # The ontology is read before anything runs, so a file that does not load costs no dbt run.
+    onto = _load_ontology(args.ontology) if args.ontology is not None else None
     if args.manifest is not None:
         manifest = _read_manifest(args.manifest)
     else:
@@ -666,6 +739,7 @@ def _dbt_check(args: argparse.Namespace) -> int:
             manifest,
             declared_service=args.service or _folder_service(project),
             read_header=_header_reader(project),
+            ontology=onto,
         )
     except DbtNodeError as error:
         # A field of a node is reported on the node's line, so this is a field of the manifest.
@@ -678,18 +752,46 @@ def _dbt_check(args: argparse.Namespace) -> int:
     return _VALID if report.ok else _INVALID
 
 
+def _ontology_check(args: argparse.Namespace) -> int:
+    findings = ontology_findings(_load_ontology(args.file))
+    for finding in findings:
+        _logger.log(
+            _LEVELS[finding.severity], "%s: %s", finding.subject, finding.message
+        )
+    errors = sum(finding.severity == _ERROR_SEVERITY for finding in findings)
+    _logger.info(
+        "%d %s in the ontology file", errors, "error" if errors == 1 else "errors"
+    )
+    if args.json:
+        _print_json(
+            {
+                "ok": errors == 0,
+                "findings": [
+                    {
+                        "severity": finding.severity,
+                        "rule": finding.rule,
+                        "subject": finding.subject,
+                        "message": finding.message,
+                    }
+                    for finding in findings
+                ],
+            }
+        )
+    return _INVALID if errors else _VALID
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="continuo-contracts",
         description=(
-            "Check the ODCS contract of a Python node and print its contract_hash, or run "
-            "the lite check of a dbt project."
+            "Check the ODCS contract of a Python node and print its contract_hash, run "
+            "the lite check of a dbt project, or check an ontology file."
         ),
         epilog=_ALL_EXIT_CODES,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     commands = parser.add_subparsers(
-        dest="command", required=True, metavar="{validate,hash,dbt}"
+        dest="command", required=True, metavar="{validate,hash,dbt,ontology}"
     )
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument(
@@ -819,7 +921,44 @@ def _parser() -> argparse.ArgumentParser:
             "(default: the name of PROJECT_DIR, with _ written -)"
         ),
     )
+    check.add_argument(
+        "--ontology",
+        type=Path,
+        metavar="FILE",
+        help=(
+            "read the bindings of the contracts against this ontology file, with the rules "
+            "that need no other service; a file with an error of its own is one error line, "
+            "and one that does not load stops the command (default: no binding is checked "
+            "against an ontology)"
+        ),
+    )
     check.set_defaults(handler=_dbt_check, family=None)
+
+    onto = commands.add_parser(
+        "ontology",
+        help="check an ontology file",
+        description=_ONTOLOGY_DESCRIPTION,
+        epilog=_ONTOLOGY_EXIT_CODES,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    onto_commands = onto.add_subparsers(
+        dest="ontology_command", required=True, metavar="{check}"
+    )
+    onto_check = onto_commands.add_parser(
+        "check",
+        parents=[common],
+        help="check an ontology file alone and list every finding",
+        description=_ONTOLOGY_CHECK_DESCRIPTION,
+        epilog=_ONTOLOGY_EXIT_CODES,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    onto_check.add_argument(
+        "file",
+        type=Path,
+        metavar="FILE",
+        help="the ontology file, one YAML document",
+    )
+    onto_check.set_defaults(handler=_ontology_check, family=None)
     return parser
 
 

@@ -22,6 +22,35 @@ DEMO = ontology.load(DEMO_TEXT)
 
 PROJECTS = ("core_bound", "finance_bound")
 
+# Small ontology files, as text, for the tests of the lite check and of the command. `BROKEN_TEXT`
+# has two errors: a service of a domain that is not declared and a thing of an owner that is not
+# one. `CORE_ONLY_TEXT` and `FINANCE_ONLY_TEXT` declare one service each and no thing.
+BROKEN_TEXT = """\
+principals:
+  domains:
+    core: {owner_team: core-data}
+  services:
+    core: {domain: elsewhere}
+entities:
+  Thing:
+    owner: nobody
+    key: {thing_id: int}
+"""
+CORE_ONLY_TEXT = """\
+principals:
+  domains:
+    core: {owner_team: core-data}
+  services:
+    core: {domain: core, kind: dbt}
+"""
+FINANCE_ONLY_TEXT = """\
+principals:
+  domains:
+    finance: {owner_team: finance-data}
+  services:
+    finance: {domain: finance, kind: dbt}
+"""
+
 # The tables that each model's SQL names, as `<schema>.<table>`, written by hand from the `.sql`
 # file of the model: this library parses no SQL, the release lists them. A table reached with
 # `ref` is named by its relation, and a seed reads nothing.
