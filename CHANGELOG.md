@@ -5,8 +5,25 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-No hash of this library moves for a contract that writes no binding key: the vector files of 0.3.1
-are byte for byte the same, and `ontology.json` is new.
+## [0.4.0] - 2026-11-20
+
+**TL;DR**
+
+- New: the ontology. The library reads a company's ontology file, lets a contract bind its table and
+  columns to the ontology's things, fills in what the ontology knows, and checks the bindings. Two
+  commands: `continuo-contracts ontology check FILE` checks an ontology file alone, and
+  `continuo-contracts dbt check --ontology FILE` runs the per-service rules over a project in CI. A
+  team that writes no binding is not touched.
+- Upgrade: a binding key of the wrong shape is refused, whatever any setting says. A dbt project
+  whose `meta.continuo` carries such a key, which 0.3.1 ignored, now fails the lite check: correct
+  or remove the key.
+- Hashes: no hash of this library moves for a contract that writes no binding key. The vector files
+  of 0.3.1 and the golden contracts are byte for byte the same, and `ontology.json` is new. There
+  is no re-baseline. Two cases move a hash once for a consumer: a dbt node that already writes
+  binding keys in `meta.continuo` moves its `source_sha256`, and its `contract_hash` unless the
+  caller takes `ontology.strip` of the stored form; and an enforced snapshot's columns and
+  constraints are now classified, so a consumer that hashes them moves the `content_hash` of such a
+  snapshot once.
 
 ### Added
 
@@ -46,7 +63,7 @@ are byte for byte the same, and `ontology.json` is new.
 - The level `warning` of a lite check line, logged at WARNING: it never changes the exit status.
 - The test vector `vectors/ontology.json`, which pins the first resolved forms, their
   `contract_hash` and their findings.
-- `vocabulary.is_name`, the rule for the name of a thing or of a field: a string with no
+- `vocabulary.is_name`, the rule for the name of a thing or of a field: a non-empty string with no
   whitespace, control character, dot or slash, since `<Thing>.<field>` cannot carry one.
   `validate` reads the names of a binding with it, and `ontology.load` refuses a thing, key part or
   property name it rejects, so a column named `display name` is bound by hand or not at all. The
