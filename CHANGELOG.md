@@ -5,6 +5,21 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-25
+
+**TL;DR**
+
+- A contract names its project in the `continuo` property `project`, which was `service`. Every
+  name, message and command that meant a project says project: `--project` on the commands,
+  `dbt.node_project`, `dbt.manifest_project`, `Ontology.projects()`, `PER_PROJECT_RULES`, and
+  `principals.projects` in an ontology file.
+- Upgrade: rename the `service` property of a Python contract to `project`, which 0.5.0 refuses
+  as `unknown_property` otherwise. Rename `principals.services` to `principals.projects` in the
+  ontology file, which does not load otherwise. Pass `--project` where you passed `--service`.
+- Hashes: every `contract_hash` moves once, because every stored form holds `project`. No
+  `content_hash` and no `source_sha256` moves. continuo adopts this version with a clean break
+  instead of a re-baseline: its install starts empty and every project is released again.
+
 ### Changed
 
 - **Breaking:** A contract names its project in the `continuo` property `project`, which was
