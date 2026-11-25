@@ -10,13 +10,13 @@ meets, or `None` for a node that is kept. The gates are, in order:
 
 - `no_owner`: the node has no `config.meta.owner`, or an empty one;
 - `local_stub`: the node has the tag `local_stub`;
-- `installed_package`: the node has no tag and its service is not the project's. dbt applies a
+- `installed_package`: the node has no tag and its project is not the manifest's. dbt applies a
   project's top-level `+meta` to the nodes of its installed packages too, so such a node can
   carry the project's owner and still not be the project's to schedule.
 
-A node's service is the first entry of its `fqn` with `_` written `-`, and the project is the
-manifest's `metadata.project_name` written the same way. With no project, no node is left out as
-`installed_package`.
+A node's project is the first entry of its `fqn` with `_` written `-`, and the manifest's project
+is its `metadata.project_name` written the same way. With no manifest project, no node is left out
+as `installed_package`.
 
 A node's table is its `name`, or `<name>.v<version>` for a versioned model, and its id is
 `<schema>.<table>` in lower case. A node a gate keeps runs on the schedule of its first tag, and
@@ -63,7 +63,7 @@ SEED_SCHEDULE: Final = "seed"
 
 _NO_OWNER, _LOCAL_STUB, _INSTALLED_PACKAGE = SKIP_REASONS
 
-# The tag that marks a node as a stand-in for a table that another service owns.
+# The tag that marks a node as a stand-in for a table that another project owns.
 _LOCAL_STUB_TAG: Final = "local_stub"
 
 # The marks a generated contract may carry, for a fact that the generator keeps as written but
@@ -368,10 +368,10 @@ def _required_string(where: _Where, field: str, value: object) -> str:
     return value
 
 
-def node_service(node: Mapping[str, Any]) -> str:
-    """Return the service of `node`: the first entry of its `fqn`, with `_` written `-`.
+def node_project(node: Mapping[str, Any]) -> str:
+    """Return the project of `node`: the first entry of its `fqn`, with `_` written `-`.
 
-    A node with no `fqn`, or an empty one, has no service and gives the empty string. An `fqn`
+    A node with no `fqn`, or an empty one, has no project and gives the empty string. An `fqn`
     that is not a list of strings raises `DbtNodeError`.
     """
     fqn = node.get("fqn")
@@ -386,11 +386,11 @@ def node_service(node: Mapping[str, Any]) -> str:
     return fqn[0].replace("_", "-")
 
 
-def project_service(manifest: Mapping[str, Any], declared_service: str) -> str:
-    """Return the service of the dbt project that `manifest` was compiled from.
+def manifest_project(manifest: Mapping[str, Any], declared_project: str) -> str:
+    """Return the project that `manifest` was compiled from.
 
     It is the manifest's `metadata.project_name` with `_` written `-`. A manifest with no
-    project name gives `declared_service` as it is, which is the empty string when no service is
+    project name gives `declared_project` as it is, which is the empty string when no project is
     declared either, and then `skip_reason` leaves no node out as `installed_package`. A
     `metadata` that is not a mapping, or a `project_name` that is not a string, raises
     `DbtNodeError`, whose message starts with `manifest`.
@@ -399,14 +399,14 @@ def project_service(manifest: Mapping[str, Any], declared_service: str) -> str:
     name = _optional_string(
         _MANIFEST, "metadata.project_name", metadata.get("project_name")
     )
-    return name.replace("_", "-") if name else declared_service
+    return name.replace("_", "-") if name else declared_project
 
 
 def skip_reason(node: Mapping[str, Any], *, project: str) -> str | None:
     """Return why continuo leaves `node` out, or `None` for a node it keeps.
 
     The reason is one of `SKIP_REASONS`, and the first gate that applies wins. `project` is
-    what `project_service` returns. A `config` or a `meta` that is missing or is not a mapping
+    what `manifest_project` returns. A `config` or a `meta` that is missing or is not a mapping
     gives a node with no owner. `tags` that are not a list of strings, and an `fqn` that is not
     a list of strings, raise `DbtNodeError`, but only for a node that the earlier gates let
     through.
@@ -419,8 +419,8 @@ def skip_reason(node: Mapping[str, Any], *, project: str) -> str | None:
     tags = _tags(node)
     if _LOCAL_STUB_TAG in tags:
         return _LOCAL_STUB
-    service = node_service(node)
-    if not tags and project and service != project:
+    own = node_project(node)
+    if not tags and project and own != project:
         return _INSTALLED_PACKAGE
     return None
 
@@ -666,7 +666,7 @@ def _root_properties(
     contract = _mapping(node, "config.contract", config.get("contract"))
     access = config.get("access") if is_model else None
     values: dict[str, Any] = {
-        "service": node_service(node),
+        "project": node_project(node),
         "kind": _kind(node),
         "schedule": schedule(node),
         "criticality": DEFAULT_CRITICALITY
@@ -1074,7 +1074,7 @@ def _refs_to_itself(run: _Run, test: Mapping[str, Any], label: str) -> int:
         version = ref.get("version")
         count += (
             name == node.get("name")
-            and (not package or package.replace("_", "-") == node_service(node))
+            and (not package or package.replace("_", "-") == node_project(node))
             and (_is_empty(version) or str(version) == str(node.get("version")))
         )
     return count
@@ -1641,8 +1641,8 @@ class RunFacts:
 
     `unique_id` is the contract's `id`, `schema` the part of that id before its first dot (a
     schema name has no dot, so it is the id without `.<table>`, in lower case), `table` the
-    schema object's `name` and `physical_name` its `physicalName` (else the table). `service`, `kind`, `schedule`, `criticality`, `timeout_minutes` and `file_path` are
-    the root `continuo` properties `service`, `kind`, `schedule` (`""` for a dormant node, which
+    schema object's `name` and `physical_name` its `physicalName` (else the table). `project`, `kind`, `schedule`, `criticality`, `timeout_minutes` and `file_path` are
+    the root `continuo` properties `project`, `kind`, `schedule` (`""` for a dormant node, which
     has none), `criticality` (`DEFAULT_CRITICALITY` when absent), `timeoutMinutes` (`None` when
     absent) and `filePath`. `owner` is `team.name`, and `materialized` the `materialized` of the
     `materialization` property.
@@ -1652,7 +1652,7 @@ class RunFacts:
     schema: str
     table: str
     physical_name: str
-    service: str
+    project: str
     kind: str
     schedule: str
     criticality: str
@@ -1678,7 +1678,7 @@ def run_facts(document: Mapping[str, Any]) -> RunFacts:
         schema=contract_id.partition(".")[0],
         table=table,
         physical_name=table_object.get("physicalName") or table,
-        service=values["service"],
+        project=values["project"],
         kind=values["kind"],
         schedule=values.get("schedule", ""),
         criticality=values.get("criticality", DEFAULT_CRITICALITY),

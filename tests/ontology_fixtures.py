@@ -25,13 +25,13 @@ DEMO = ontology.load(DEMO_TEXT)
 PROJECTS = ("core_bound", "finance_bound")
 
 # Small ontology files, as text, for the tests of the lite check and of the command. `BROKEN_TEXT`
-# has two errors: a service of a domain that is not declared and a thing of an owner that is not
-# one. `CORE_ONLY_TEXT` and `FINANCE_ONLY_TEXT` declare one service each and no thing.
+# has two errors: a project of a domain that is not declared and a thing of an owner that is not
+# one. `CORE_ONLY_TEXT` and `FINANCE_ONLY_TEXT` declare one project each and no thing.
 BROKEN_TEXT = """\
 principals:
   domains:
     core: {owner_team: core-data}
-  services:
+  projects:
     core: {domain: elsewhere}
 entities:
   Thing:
@@ -42,14 +42,14 @@ CORE_ONLY_TEXT = """\
 principals:
   domains:
     core: {owner_team: core-data}
-  services:
+  projects:
     core: {domain: core, kind: dbt}
 """
 FINANCE_ONLY_TEXT = """\
 principals:
   domains:
     finance: {owner_team: finance-data}
-  services:
+  projects:
     finance: {domain: finance, kind: dbt}
 """
 
@@ -144,13 +144,13 @@ def stored_from(
 
 
 def _stored(project: str, manifest: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    service = dbt.project_service(manifest, "")
+    named = dbt.manifest_project(manifest, "")
     joined = dbt.tests_by_node(manifest)
     contracts: dict[str, dict[str, Any]] = {}
     for key, node in sorted(manifest["nodes"].items()):
         if (
             node["resource_type"] not in dbt.RESOURCE_TYPES
-            or dbt.skip_reason(node, project=service) is not None
+            or dbt.skip_reason(node, project=named) is not None
         ):
             continue
         document = dbt.generate(

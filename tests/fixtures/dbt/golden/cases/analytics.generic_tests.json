@@ -1,5 +1,5 @@
 {
- "contract_hash": "sha256:f724150991699cb50dccfd84c0d9d030526b095fe556f52d2d9c6b67279a97a1",
+ "contract_hash": "sha256:fa54daa03459c93fcbd66facced5002f4315c58af3b0990d6aa883857d122deb",
  "flags": [
   "jinja_in_test_arguments"
  ],
@@ -7,7 +7,7 @@
   "apiVersion": "v3.2.0",
   "customProperties": [
    {
-    "property": "service",
+    "property": "project",
     "value": "cases",
     "vendor": "continuo"
    },
@@ -234,13 +234,13 @@
     "vendor": "continuo"
    },
    {
-    "property": "schedule",
-    "value": "project_tag",
+    "property": "project",
+    "value": "cases",
     "vendor": "continuo"
    },
    {
-    "property": "service",
-    "value": "cases",
+    "property": "schedule",
+    "value": "project_tag",
     "vendor": "continuo"
    }
   ],

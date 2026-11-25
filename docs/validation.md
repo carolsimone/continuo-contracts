@@ -4,9 +4,9 @@ Which rules does `validate` apply, and what does each issue mean?
 
 ## Issues
 
-`validate.validate_python_contract(doc, path=..., service=...)` checks a Python node's
-[contract](glossary.md#contract): only the base name of `path` counts, and `service=None` skips
-the service rule. `validate.validate_dbt_contract(doc)` checks the contract `dbt.generate` writes
+`validate.validate_python_contract(doc, path=..., project=...)` checks a Python node's
+[contract](glossary.md#contract): only the base name of `path` counts, and `project=None` skips
+the project rule. `validate.validate_dbt_contract(doc)` checks the contract `dbt.generate` writes
 for a dbt node. Both return a list of `validate.Issue`, sorted by path and empty when the contract
 passes. An issue has a `path` (`$` is the whole contract), a `reason` (one of `validate.REASONS`)
 and a `message`.
@@ -29,7 +29,7 @@ This contract sits in the wrong file, lacks the `readQueries` its kind needs, an
 ... schema:
 ...   - {name: daily_kpis, physicalType: table, properties: [{name: x, physicalType: MONEY}]}
 ... """)
->>> for issue in validate.validate_python_contract(doc, path="kpis.odcs.yaml", service=None):
+>>> for issue in validate.validate_python_contract(doc, path="kpis.odcs.yaml", project=None):
 ...     print(issue.path, issue.reason)
 $ file_name
 customProperties kind_rule
@@ -52,7 +52,7 @@ JSON schema gives each error as an `odcs_schema` issue, and last come continuo's
 | `api_version` | `apiVersion` is a known ODCS version other than `v3.2.0` | both |
 | `identity` | the id, the table name and the schema object disagree | both |
 | `file_name` | the file is not named after the table | Python |
-| `service` | `service` is not the [declared service](glossary.md#declared-service) | Python |
+| `project` | `project` is not the [declared project](glossary.md#declared-project) | Python |
 | `missing_field` | a required field or property is absent | both |
 | `unknown_property` | a `continuo` property not in `vocabulary.PROPERTIES` | both |
 | `refused_property` | a property the family does not carry, or on the wrong object | both |
@@ -119,11 +119,11 @@ skips the kind rules.
 
 ## dbt contract rules
 
-A dbt contract writes `service`, `kind`, `filePath` and `materialization`, else `missing_field` at
+A dbt contract writes `project`, `kind`, `filePath` and `materialization`, else `missing_field` at
 `customProperties`; a [dormant node](glossary.md#dormant-node) has no `schedule`. A bad value is a
 `value` issue at the property's `value`:
 
-- `service`, `filePath`: a string with text. `kind`: `dbt-model`, `dbt-seed` or `dbt-snapshot`.
+- `project`, `filePath`: a string with text. `kind`: `dbt-model`, `dbt-seed` or `dbt-snapshot`.
 - `materialization`: a mapping whose `materialized` is text (its issue is at `value.materialized`).
 - `criticality`: `REGULATORY`, `CORE` or `SECONDARY`. `schedule`: a name, no whitespace, 50 at most.
 - `timeoutMinutes`: an integer from 1 to 10080, not a boolean or a float.
@@ -180,7 +180,7 @@ more than one binding, is for the [rules](ontology.md#the-rules), not for `valid
 ...         physicalType: int
 ...         customProperties: [{vendor: continuo, property: local, value: false}]
 ... """)
->>> for issue in validate.validate_python_contract(malformed, path="kpis.odcs.yaml", service=None):
+>>> for issue in validate.validate_python_contract(malformed, path="kpis.odcs.yaml", project=None):
 ...     print(issue.path, issue.reason)
 schema[0].customProperties[0].value value
 schema[0].properties[0].customProperties[0].value value

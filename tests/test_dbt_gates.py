@@ -59,7 +59,7 @@ def test_a_dbt_node_error_is_a_contracts_error():
 def test_skip_reason_names_each_gate(node_id, reason):
     m = load_manifest("cases")
     node = m["nodes"][node_id]
-    assert dbt.skip_reason(node, project=dbt.project_service(m, "")) == reason
+    assert dbt.skip_reason(node, project=dbt.manifest_project(m, "")) == reason
 
 
 def test_the_recorded_gates_cover_every_gate_and_the_nodes_that_pass():
@@ -78,9 +78,9 @@ def test_skip_reason_matches_the_recorded_gates_on_every_fixture_node(project):
     # and snapshot of each fixture manifest, or null for a node it keeps.
     recorded = json.loads(GATES.read_text(encoding="utf-8"))["projects"][project]
     m = load_manifest(project)
-    service = dbt.project_service(m, "")
+    named = dbt.manifest_project(m, "")
     ours = {
-        node_id: dbt.skip_reason(node, project=service)
+        node_id: dbt.skip_reason(node, project=named)
         for node_id, node in m["nodes"].items()
         if node["resource_type"] in dbt.RESOURCE_TYPES
     }
@@ -192,14 +192,14 @@ def test_a_node_without_an_owner_is_skipped_before_its_tags_are_read():
     ],
 )
 def test_an_fqn_that_is_not_a_list_of_strings_is_refused(fqn, message):
-    # the node has a tag, so only the service of the node reads its fqn
+    # the node has a tag, so only the project of the node reads its fqn
     node = _node(fqn=fqn, tags=["daily"])
 
     with pytest.raises(DbtNodeError) as caught:
         dbt.skip_reason(node, project="shop")
     assert str(caught.value) == f"model.shop.orders: {message}"
     with pytest.raises(DbtNodeError):
-        dbt.node_service(node)
+        dbt.node_project(node)
 
 
 def test_an_fqn_is_not_read_for_a_node_that_a_gate_has_left_out():
@@ -208,36 +208,36 @@ def test_an_fqn_is_not_read_for_a_node_that_a_gate_has_left_out():
     assert dbt.skip_reason(node, project="shop") == "local_stub"
 
 
-def test_a_node_without_fqn_has_no_service():
+def test_a_node_without_fqn_has_no_project():
     m = load_manifest("cases")
     node = copy.deepcopy(m["nodes"]["model.cases.dormant"])
     del node["fqn"]
 
-    assert dbt.node_service(node) == ""
-    assert dbt.node_service(_node(fqn=None)) == ""
-    assert dbt.node_service(_node(fqn=[])) == ""
-    # with no service and no tag, the node is not the project's
+    assert dbt.node_project(node) == ""
+    assert dbt.node_project(_node(fqn=None)) == ""
+    assert dbt.node_project(_node(fqn=[])) == ""
+    # with no project and no tag, the node is not the project's
     assert dbt.skip_reason(node, project="cases") == "installed_package"
     assert dbt.skip_reason(node, project="") is None
 
 
-def test_a_node_service_is_the_first_fqn_entry_with_dashes():
-    assert dbt.node_service(_node(fqn=["my_shop_pkg", "a_b"])) == "my-shop-pkg"
+def test_a_node_project_is_the_first_fqn_entry_with_dashes():
+    assert dbt.node_project(_node(fqn=["my_shop_pkg", "a_b"])) == "my-shop-pkg"
 
 
-def test_the_project_is_the_project_name_then_the_declared_service():
+def test_the_project_is_the_project_name_then_the_declared_project():
     m = load_manifest("cases")
 
     assert m["metadata"]["project_name"] == "cases"
-    assert dbt.project_service(m, "declared") == "cases"
-    assert dbt.project_service(
+    assert dbt.manifest_project(m, "declared") == "cases"
+    assert dbt.manifest_project(
         {"metadata": {"project_name": "my_shop"}}, "x"
     ) == ("my-shop")
     for metadata in ({}, None, {"project_name": ""}, {"project_name": None}):
         manifest = {"metadata": metadata}
-        assert dbt.project_service(manifest, "my_declared") == "my_declared"
-        assert dbt.project_service(manifest, "") == ""
-    assert dbt.project_service({}, "") == ""
+        assert dbt.manifest_project(manifest, "my_declared") == "my_declared"
+        assert dbt.manifest_project(manifest, "") == ""
+    assert dbt.manifest_project({}, "") == ""
 
 
 def test_schedule_is_the_first_tag_then_seed_then_empty():
@@ -487,13 +487,13 @@ def test_every_test_of_a_fixture_manifest_is_joined_once_per_target(project):
 )
 def test_a_project_of_the_wrong_shape_raises_dbt_node_error(manifest, message):
     with pytest.raises(DbtNodeError) as raised:
-        dbt.project_service(manifest, "declared")
+        dbt.manifest_project(manifest, "declared")
     assert str(raised.value) == message
 
 
-def test_a_project_with_no_metadata_or_no_name_is_the_declared_service():
+def test_a_project_with_no_metadata_or_no_name_is_the_declared_project():
     for manifest in ({"metadata": None}, {"metadata": {"project_name": None}}):
-        assert dbt.project_service(manifest, "declared") == "declared"
+        assert dbt.manifest_project(manifest, "declared") == "declared"
 
 
 def _test_node(**fields):

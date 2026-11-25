@@ -1,13 +1,13 @@
 """The ontology file, and the ontology part of a stored contract.
 
 An ontology file is one YAML document in two parts. `principals` names who acts on data: its
-domains, services, teams, roles and people. `entities` names what the data is about: each thing
+domains, projects, teams, roles and people. `entities` names what the data is about: each thing
 has an owner, a key, properties and access rules. `load` reads the file with the strict YAML
-reader and checks its shape against the keys below, and an `Ontology` answers which services it
+reader and checks its shape against the keys below, and an `Ontology` answers which projects it
 declares and which domain each belongs to.
 
 `description`, a string, is allowed on every mapping that has a fixed set of keys. A mapping
-whose keys are names (the domains, the services, a thing's properties) has no `description` key
+whose keys are names (the domains, the projects, a thing's properties) has no `description` key
 of its own, because it would be a name.
 
 The name of a thing, of a key part and of a property is written in `<Thing>.<field>` by the
@@ -18,9 +18,9 @@ whitespace, a control character, a dot or a slash. The names of the principals a
 mapping               keys
 ====================  ==================================================================
 root                  `principals`, `entities`
-`principals`          `domains`, `services`, `teams`, `roles`, `people`
+`principals`          `domains`, `projects`, `teams`, `roles`, `people`
 a domain              `owner_team`
-a service             `domain`, `kind`
+a project             `domain`, `kind`
 a team or a role      `idp_group`
 `people`              `source`
 a thing               `owner`, `born_in`, `key`, `properties`, `access`
@@ -72,23 +72,23 @@ class Ontology:
     document: Mapping[str, Any]
     sha256: str
 
-    def declares(self, service: str) -> bool:
-        """Say whether the ontology names `service` under `principals.services`."""
-        return service in self._services()
+    def declares(self, project: str) -> bool:
+        """Say whether the ontology names `project` under `principals.projects`."""
+        return project in self._projects()
 
-    def domain_of(self, service: str) -> str | None:
-        """Return the `domain` of `service`, or `None` when it has none or is not declared."""
-        domain: str | None = self._services().get(service, {}).get("domain")
+    def domain_of(self, project: str) -> str | None:
+        """Return the `domain` of `project`, or `None` when it has none or is not declared."""
+        domain: str | None = self._projects().get(project, {}).get("domain")
         return domain
 
-    def services(self) -> tuple[str, ...]:
-        """Return the names under `principals.services`, sorted by code point."""
-        return tuple(sorted(self._services()))
+    def projects(self) -> tuple[str, ...]:
+        """Return the names under `principals.projects`, sorted by code point."""
+        return tuple(sorted(self._projects()))
 
-    def _services(self) -> Mapping[str, Mapping[str, Any]]:
+    def _projects(self) -> Mapping[str, Mapping[str, Any]]:
         principals: Mapping[str, Any] = self.document.get("principals", {})
-        services: Mapping[str, Mapping[str, Any]] = principals.get("services", {})
-        return services
+        projects: Mapping[str, Mapping[str, Any]] = principals.get("projects", {})
+        return projects
 
 
 # What the shape check knows about each kind of value. A `_Leaf` is a scalar of one Python type
@@ -165,7 +165,7 @@ _ONTOLOGY: Final = _record(
     principals=_record(
         "the principals",
         domains=_by_name("domain", owner_team=_TEXT),
-        services=_by_name("service", domain=_TEXT, kind=_TEXT),
+        projects=_by_name("project", domain=_TEXT, kind=_TEXT),
         teams=_by_name("team", idp_group=_TEXT),
         roles=_by_name("role", idp_group=_TEXT),
         people=_record("people", source=_TEXT),
@@ -397,8 +397,8 @@ class _Field:
 def resolve(stored: Mapping[str, Any], ontology: Ontology) -> dict[str, Any]:
     """Return the stored contract `stored` filled with what `ontology` knows, a new dict.
 
-    The contract's `service` property (the `continuo` custom property of the contract) must be
-    a service that `ontology` declares. For any other contract, one with no `service` included,
+    The contract's `project` property (the `continuo` custom property of the contract) must be
+    a project that `ontology` declares. For any other contract, one with no `project` included,
     the result is `stored` in the canonical form and nothing more. The result is always in the
     canonical form, so the caller hashes it as it hashes any stored form. `stored` is not
     changed.
@@ -408,7 +408,7 @@ def resolve(stored: Mapping[str, Any], ontology: Ontology) -> dict[str, Any]:
     as `semanticType: column` or `primaryKey: false` is not written, so a gap is a value that
     the form does not hold. What `resolve` fills:
 
-    - the root `domain`: the domain of the service;
+    - the root `domain`: the domain of the project;
     - on a schema object whose `entity` names a thing of the ontology: a link to the thing, an
       `authoritativeDefinitions` entry of `type` `ontology` and the `url` `continuo-ontology:<Thing>`;
     - on each column with no binding (no `property`, `local` or `aggregate`), when the entity
@@ -440,13 +440,13 @@ def resolve(stored: Mapping[str, Any], ontology: Ontology) -> dict[str, Any]:
     binding resolves is for `ontology_check`. Only top-level columns are read.
     """
     resolved = canonical_form(stored)
-    service = continuo_values(resolved.get("customProperties")).get("service")
-    if not isinstance(service, str) or not ontology.declares(service):
+    project = continuo_values(resolved.get("customProperties")).get("project")
+    if not isinstance(project, str) or not ontology.declares(project):
         return resolved
     entities: Mapping[str, Mapping[str, Any]] = ontology.document.get(
         "entities", {}
     )
-    domain = ontology.domain_of(service)
+    domain = ontology.domain_of(project)
     if domain is not None:
         resolved.setdefault("domain", domain)
     for table in resolved.get("schema", []):

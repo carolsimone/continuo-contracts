@@ -19,7 +19,7 @@ FIXTURES = Path(__file__).resolve().parent / "fixtures"
 DEMO = FIXTURES / "demo" / "service-py" / "contracts" / "py_daily_kpis.odcs.yaml"
 FULL = sorted((FIXTURES / "full").glob("*.odcs.yaml"))
 KPIS_PATH = "contracts/py_daily_kpis.odcs.yaml"
-SERVICE = "service-py"
+PROJECT = "service-py"
 
 
 def _load(path):
@@ -32,8 +32,8 @@ def _kpis():
     return _load(DEMO)
 
 
-def _check(doc, *, path=KPIS_PATH, service=SERVICE):
-    return validate_python_contract(doc, path=path, service=service)
+def _check(doc, *, path=KPIS_PATH, project=PROJECT):
+    return validate_python_contract(doc, path=path, project=project)
 
 
 def _found(issues):
@@ -137,9 +137,9 @@ def test_the_full_contracts_name_their_table_after_their_file():
             "unknown_property",
         ),
         (
-            lambda d: d["customProperties"].append(_continuo("service", "other")),
+            lambda d: d["customProperties"].append(_continuo("project", "other")),
             "customProperties[4]",
-            "service",
+            "project",
         ),
     ],
 )
@@ -169,7 +169,7 @@ def test_the_reasons_are_the_closed_set():
         "api_version",
         "identity",
         "file_name",
-        "service",
+        "project",
         "missing_field",
         "unknown_property",
         "refused_property",
@@ -193,7 +193,7 @@ def test_every_issue_has_one_of_the_reasons():
     issues = [
         *schema_issues(bad_schema),
         *rule_issues(
-            bad_rules, path="contracts/other.odcs.yaml", service=SERVICE
+            bad_rules, path="contracts/other.odcs.yaml", project=PROJECT
         ),
     ]
     assert len(issues) > 5
@@ -225,7 +225,7 @@ def test_the_file_name_issue_is_for_the_whole_file_and_names_both_spellings():
     [
         "py_daily_kpis.odcs.yaml",
         "contracts/py_daily_kpis.odcs.yaml",
-        "services/service-py/contracts/py_daily_kpis.odcs.yaml",
+        "projects/service-py/contracts/py_daily_kpis.odcs.yaml",
         "contracts\\py_daily_kpis.odcs.yaml",
         "C:\\repo\\contracts\\analytics.py_daily_kpis.odcs.yaml",
     ],
@@ -274,56 +274,56 @@ def test_a_file_name_with_the_schema_of_an_id_that_names_another_table_is_refuse
     ]
 
 
-# service
+# project
 
 
-def test_service_none_skips_the_service_rule():
+def test_project_none_skips_the_project_rule():
     doc = _kpis()
-    doc["customProperties"].append(_continuo("service", "other"))
-    assert _check(doc, service=None) == []
-    assert _found(_check(doc, service=SERVICE)) == [
-        ("customProperties[4]", "service")
+    doc["customProperties"].append(_continuo("project", "other"))
+    assert _check(doc, project=None) == []
+    assert _found(_check(doc, project=PROJECT)) == [
+        ("customProperties[4]", "project")
     ]
 
 
-def test_the_service_of_the_release_is_accepted():
+def test_the_project_of_the_release_is_accepted():
     doc = _kpis()
-    doc["customProperties"].append(_continuo("service", SERVICE))
+    doc["customProperties"].append(_continuo("project", PROJECT))
     assert _check(doc) == []
 
 
-def test_a_contract_without_a_service_property_is_accepted():
+def test_a_contract_without_a_project_property_is_accepted():
     assert _check(_kpis()) == []
-    assert _check(_kpis(), service=None) == []
+    assert _check(_kpis(), project=None) == []
 
 
-def test_the_service_issue_names_both_services():
+def test_the_project_issue_names_both_projects():
     doc = _kpis()
-    doc["customProperties"].append(_continuo("service", "other"))
+    doc["customProperties"].append(_continuo("project", "other"))
     (issue,) = _check(doc)
     assert "other" in issue.message
-    assert SERVICE in issue.message
+    assert PROJECT in issue.message
 
 
 @pytest.mark.parametrize(
     "value", [5, None, "", " ", "\t", ["service-py"], {"a": "b"}]
 )
-@pytest.mark.parametrize("service", [SERVICE, None])
-def test_a_service_value_that_is_not_text_is_refused_whether_or_not_the_service_is_known(
-    value, service
+@pytest.mark.parametrize("project", [PROJECT, None])
+def test_a_project_value_that_is_not_text_is_refused_whether_or_not_the_project_is_known(
+    value, project
 ):
     doc = _kpis()
-    doc["customProperties"].append(_continuo("service", value))
-    (issue,) = _check(doc, service=service)
+    doc["customProperties"].append(_continuo("project", value))
+    (issue,) = _check(doc, project=project)
     assert (issue.path, issue.reason) == ("customProperties[4]", "value")
-    assert "`service`" in issue.message
+    assert "`project`" in issue.message
 
 
-def test_a_service_string_other_than_the_release_service_is_a_service_issue():
+def test_a_project_string_other_than_the_release_project_is_a_project_issue():
     doc = _kpis()
-    doc["customProperties"].append(_continuo("service", "other"))
-    assert _found(_check(doc)) == [("customProperties[4]", "service")]
-    assert _check(doc, service=None) == []
+    doc["customProperties"].append(_continuo("project", "other"))
+    assert _found(_check(doc)) == [("customProperties[4]", "project")]
+    assert _check(doc, project=None) == []
 
 
 # the envelope
@@ -673,6 +673,14 @@ def test_an_unknown_property_says_to_check_the_spelling():
     assert "spelling" in issue.message
 
 
+def test_a_service_property_is_unknown_because_a_contract_names_its_project():
+    doc = _kpis()
+    doc["customProperties"].append(_continuo("service", PROJECT))
+    (issue,) = _check(doc)
+    assert issue.reason == "unknown_property"
+    assert "`service`" in issue.message
+
+
 def test_a_repeated_property_says_why_it_is_refused():
     doc = _kpis()
     doc["customProperties"].append(_continuo("schedule", "hourly"))
@@ -712,7 +720,7 @@ def test_each_property_a_python_contract_does_not_carry_is_refused(name):
 @pytest.mark.parametrize(
     "name",
     [
-        "service",
+        "project",
         "kind",
         "schedule",
         "criticality",
@@ -934,14 +942,14 @@ def test_an_unknown_property_written_twice_is_unknown_each_time():
     ]
 
 
-def test_a_repeated_service_that_is_also_wrong_gets_both_issues_at_the_repeat():
+def test_a_repeated_project_that_is_also_wrong_gets_both_issues_at_the_repeat():
     doc = _kpis()
     doc["customProperties"] += [
-        _continuo("service", SERVICE),
-        _continuo("service", "other"),
+        _continuo("project", PROJECT),
+        _continuo("project", "other"),
     ]
     assert sorted(_found(_check(doc))) == [
-        ("customProperties[5]", "service"),
+        ("customProperties[5]", "project"),
         ("customProperties[5]", "value"),
     ]
 
@@ -1024,7 +1032,7 @@ def test_a_schema_failure_hides_the_rules():
     assert _found(_check(doc)) == [
         ("schema[0].properties[0].name", "odcs_schema")
     ]
-    assert _found(rule_issues(doc, path=KPIS_PATH, service=SERVICE)) == [
+    assert _found(rule_issues(doc, path=KPIS_PATH, project=PROJECT)) == [
         ("tenant", "refused_field")
     ]
 
@@ -1049,7 +1057,7 @@ def test_the_schema_issues_do_not_change_the_document():
     doc["schema"][0]["properties"][0]["name"] = 3
     before = copy.deepcopy(doc)
     schema_issues(doc)
-    rule_issues(doc, path=KPIS_PATH, service=SERVICE)
+    rule_issues(doc, path=KPIS_PATH, project=PROJECT)
     assert doc == before
 
 
@@ -1119,7 +1127,7 @@ def test_a_column_nested_thirty_levels_deep_is_refused_at_once(check, shape):
 @pytest.mark.parametrize("shape", sorted(FIRST_FIELD))
 def test_the_schema_check_refuses_a_nesting_as_the_rules_do(shape):
     doc = _with_nesting(shape, levels=2)
-    assert schema_issues(doc) == rule_issues(doc, path=KPIS_PATH, service=SERVICE)
+    assert schema_issues(doc) == rule_issues(doc, path=KPIS_PATH, project=PROJECT)
 
 
 def test_a_column_that_carries_items_and_a_map_gives_an_issue_for_each():
@@ -1200,7 +1208,7 @@ def test_rule_issues_put_array_indexes_in_numeric_order():
     doc = _kpis()
     doc["customProperties"] += [_continuo("nonsense", n) for n in range(10)]
     assert [
-        issue.path for issue in rule_issues(doc, path=KPIS_PATH, service=SERVICE)
+        issue.path for issue in rule_issues(doc, path=KPIS_PATH, project=PROJECT)
     ] == [f"customProperties[{n}]" for n in range(4, 14)]
 
 
@@ -1208,7 +1216,7 @@ def test_issues_are_in_path_order_and_then_message_order():
     doc = _kpis()
     doc.update(tenant="t", apiVersion="v3.1.0", id="Analytics.py_daily_kpis")
     doc["customProperties"].append(_continuo("nonsense", 1))
-    issues = rule_issues(doc, path="contracts/other.odcs.yaml", service=SERVICE)
+    issues = rule_issues(doc, path="contracts/other.odcs.yaml", project=PROJECT)
     assert [issue.path for issue in issues] == [
         "$",
         "apiVersion",
@@ -1237,22 +1245,22 @@ def test_the_same_document_gives_the_same_issues_every_time():
 
 
 def test_rule_issues_runs_the_rules_without_the_schema_check():
-    assert rule_issues(_kpis(), path=KPIS_PATH, service=SERVICE) == []
+    assert rule_issues(_kpis(), path=KPIS_PATH, project=PROJECT) == []
     doc = _kpis()
     doc["tenant"] = "t"
-    assert _found(rule_issues(doc, path=KPIS_PATH, service=SERVICE)) == [
+    assert _found(rule_issues(doc, path=KPIS_PATH, project=PROJECT)) == [
         ("tenant", "refused_field")
     ]
 
 
-def test_rule_issues_takes_the_service_and_the_path_by_keyword():
+def test_rule_issues_takes_the_project_and_the_path_by_keyword():
     with pytest.raises(TypeError):
-        rule_issues(_kpis(), KPIS_PATH, SERVICE)
+        rule_issues(_kpis(), KPIS_PATH, PROJECT)
 
 
-def test_validate_python_contract_takes_the_service_and_the_path_by_keyword():
+def test_validate_python_contract_takes_the_project_and_the_path_by_keyword():
     with pytest.raises(TypeError):
-        validate_python_contract(_kpis(), KPIS_PATH, SERVICE)
+        validate_python_contract(_kpis(), KPIS_PATH, PROJECT)
 
 
 def test_validate_python_contract_gives_the_schema_issues_when_there_are_any():
@@ -1260,7 +1268,7 @@ def test_validate_python_contract_gives_the_schema_issues_when_there_are_any():
     doc["tenant"] = "t"
     doc["schema"][0]["properties"][0]["name"] = 3
     assert validate_python_contract(
-        doc, path=KPIS_PATH, service=SERVICE
+        doc, path=KPIS_PATH, project=PROJECT
     ) == schema_issues(doc)
 
 
@@ -1268,8 +1276,8 @@ def test_validate_python_contract_gives_the_rule_issues_otherwise():
     doc = _kpis()
     doc["tenant"] = "t"
     assert validate_python_contract(
-        doc, path=KPIS_PATH, service=SERVICE
-    ) == rule_issues(doc, path=KPIS_PATH, service=SERVICE)
+        doc, path=KPIS_PATH, project=PROJECT
+    ) == rule_issues(doc, path=KPIS_PATH, project=PROJECT)
 
 
 def test_a_key_that_is_not_a_string_is_reported_with_each_error_it_causes():
@@ -1291,19 +1299,19 @@ def test_a_key_that_is_not_a_string_is_reported_with_each_error_it_causes():
 def test_a_custom_properties_value_that_is_not_a_list_is_not_walked(written):
     doc = _kpis()
     doc["customProperties"] = written
-    issues = rule_issues(doc, path=KPIS_PATH, service=SERVICE)
+    issues = rule_issues(doc, path=KPIS_PATH, project=PROJECT)
     assert issues
     assert {issue.path for issue in issues} == {"customProperties"}
     doc = _kpis()
     doc["schema"][0]["customProperties"] = written
-    assert rule_issues(doc, path=KPIS_PATH, service=SERVICE) == []
+    assert rule_issues(doc, path=KPIS_PATH, project=PROJECT) == []
 
 
 @pytest.mark.parametrize("name", [7, None, ["nonsense"]])
 def test_a_continuo_property_with_no_name_is_left_to_the_schema_check(name):
     doc = _kpis()
     doc["customProperties"].append(_continuo(name, "x"))
-    assert rule_issues(doc, path=KPIS_PATH, service=SERVICE) == []
+    assert rule_issues(doc, path=KPIS_PATH, project=PROJECT) == []
     assert [issue.path for issue in schema_issues(doc)] == [
         "customProperties[4].property"
     ]
@@ -1331,7 +1339,7 @@ def test_the_value_of_a_map_is_a_property_and_is_walked():
             },
         },
     )
-    assert _found(rule_issues(doc, path=KPIS_PATH, service=SERVICE)) == [
+    assert _found(rule_issues(doc, path=KPIS_PATH, project=PROJECT)) == [
         ("schema[0].properties[0].map", "refused_field"),
         (
             "schema[0].properties[0].map.value.customProperties[0]",

@@ -1,6 +1,6 @@
 [
  {
-  "contract_hash": "sha256:f724150991699cb50dccfd84c0d9d030526b095fe556f52d2d9c6b67279a97a1",
+  "contract_hash": "sha256:fa54daa03459c93fcbd66facced5002f4315c58af3b0990d6aa883857d122deb",
   "flags": [
    "jinja_in_test_arguments"
   ],
@@ -8,7 +8,7 @@
    "apiVersion": "v3.2.0",
    "customProperties": [
     {
-     "property": "service",
+     "property": "project",
      "value": "cases",
      "vendor": "continuo"
     },
@@ -365,13 +365,13 @@
      "vendor": "continuo"
     },
     {
-     "property": "schedule",
-     "value": "project_tag",
+     "property": "project",
+     "value": "cases",
      "vendor": "continuo"
     },
     {
-     "property": "service",
-     "value": "cases",
+     "property": "schedule",
+     "value": "project_tag",
      "vendor": "continuo"
     }
    ],
@@ -888,13 +888,13 @@
   ]
  },
  {
-  "contract_hash": "sha256:5d96df6153d40607cbfda124e8e4bca796880c3a4affe50749481c1d0a85363f",
+  "contract_hash": "sha256:20598f44f37623015d3008f1a1254de641f17483d2b146a6fc888de3270fe683",
   "flags": [],
   "generated": {
    "apiVersion": "v3.2.0",
    "customProperties": [
     {
-     "property": "service",
+     "property": "project",
      "value": "cases",
      "vendor": "continuo"
     },
@@ -1053,6 +1053,11 @@
      "vendor": "continuo"
     },
     {
+     "property": "project",
+     "value": "cases",
+     "vendor": "continuo"
+    },
+    {
      "property": "quoteColumns",
      "value": true,
      "vendor": "continuo"
@@ -1060,11 +1065,6 @@
     {
      "property": "schedule",
      "value": "seed",
-     "vendor": "continuo"
-    },
-    {
-     "property": "service",
-     "value": "cases",
      "vendor": "continuo"
     }
    ],
@@ -1104,13 +1104,13 @@
   "tests": []
  },
  {
-  "contract_hash": "sha256:53e0f9c565265c15ae4736da3a88eec004e52452c2de0e4b7d98cc37e66494a5",
+  "contract_hash": "sha256:1a8a3b05eb7e3f8ffd33a57f6b3b25125704fd8dad733c6e87c541cc5bbb8e5f",
   "flags": [],
   "generated": {
    "apiVersion": "v3.2.0",
    "customProperties": [
     {
-     "property": "service",
+     "property": "project",
      "value": "cases",
      "vendor": "continuo"
     },
@@ -1227,7 +1227,7 @@
      "vendor": "continuo"
     },
     {
-     "property": "service",
+     "property": "project",
      "value": "cases",
      "vendor": "continuo"
     }
@@ -1255,13 +1255,13 @@
   "tests": []
  },
  {
-  "contract_hash": "sha256:53ef47fbfd8ff0c837cd4820e2c2f9f213d5e3426403263d71b8973052285007",
+  "contract_hash": "sha256:8dc2bce62e7ce07a6a709c5d65d5cfc0e484f02254deab12b8c555e958437705",
   "flags": [],
   "generated": {
    "apiVersion": "v3.2.0",
    "customProperties": [
     {
-     "property": "service",
+     "property": "project",
      "value": "cases",
      "vendor": "continuo"
     },
@@ -1409,13 +1409,13 @@
      "vendor": "continuo"
     },
     {
-     "property": "schedule",
-     "value": "project_tag",
+     "property": "project",
+     "value": "cases",
      "vendor": "continuo"
     },
     {
-     "property": "service",
-     "value": "cases",
+     "property": "schedule",
+     "value": "project_tag",
      "vendor": "continuo"
     }
    ],
@@ -1483,13 +1483,13 @@
   ]
  },
  {
-  "contract_hash": "sha256:00b47acb350f3e7a263450c091c712ddced292ab0f7206b30fa374468abf4590",
+  "contract_hash": "sha256:9cee6a691d91fe969b85ca75869bad5d37b093899c41c8abc98ea2c21135ced1",
   "flags": [],
   "generated": {
    "apiVersion": "v3.2.0",
    "customProperties": [
     {
-     "property": "service",
+     "property": "project",
      "value": "cases",
      "vendor": "continuo"
     },
@@ -1612,13 +1612,13 @@
      "vendor": "continuo"
     },
     {
-     "property": "schedule",
-     "value": "project_tag",
+     "property": "project",
+     "value": "cases",
      "vendor": "continuo"
     },
     {
-     "property": "service",
-     "value": "cases",
+     "property": "schedule",
+     "value": "project_tag",
      "vendor": "continuo"
     }
    ],
@@ -1644,13 +1644,13 @@
   "tests": []
  },
  {
-  "contract_hash": "sha256:5dcbb805f8d316a8007302e628c22cd3a54f4b1d192b1c8669eff0bc43953c4e",
+  "contract_hash": "sha256:72bd2a59be32531b250470c05a93efc78a4370f55f71aa94e6b115d3a3ae3d2e",
   "flags": [],
   "generated": {
    "apiVersion": "v3.2.0",
    "customProperties": [
     {
-     "property": "service",
+     "property": "project",
      "value": "cases",
      "vendor": "continuo"
     },
@@ -1801,7 +1801,7 @@
      "vendor": "continuo"
     },
     {
-     "property": "service",
+     "property": "project",
      "value": "cases",
      "vendor": "continuo"
     },
@@ -1855,13 +1855,13 @@
   "tests": []
  },
  {
-  "contract_hash": "sha256:b1eb3690c4572426aecb14182cd3b04c28f4ceb1d7384c038334af29b171d3c7",
+  "contract_hash": "sha256:6bdbc8b42753a9121c4ab28d2d05bcf7fc37083593e5401dacac0dea55b73cb2",
   "flags": [],
   "generated": {
    "apiVersion": "v3.2.0",
    "customProperties": [
     {
-     "property": "service",
+     "property": "project",
      "value": "cases",
      "vendor": "continuo"
     },
@@ -2036,13 +2036,13 @@
      "vendor": "continuo"
     },
     {
-     "property": "schedule",
-     "value": "project_tag",
+     "property": "project",
+     "value": "cases",
      "vendor": "continuo"
     },
     {
-     "property": "service",
-     "value": "cases",
+     "property": "schedule",
+     "value": "project_tag",
      "vendor": "continuo"
     }
    ],
@@ -2086,13 +2086,13 @@
   "tests": []
  },
  {
-  "contract_hash": "sha256:01e1936b97d5e129439e0bcf0921271712f23e2391de30b9e535dd8dd56611bc",
+  "contract_hash": "sha256:0e2e6b96fae5cb82e15d0f9811854b18520106198f71b3a1c970a6f31fb00506",
   "flags": [],
   "generated": {
    "apiVersion": "v3.2.0",
    "customProperties": [
     {
-     "property": "service",
+     "property": "project",
      "value": "cases",
      "vendor": "continuo"
     },
@@ -2365,13 +2365,13 @@
      "vendor": "continuo"
     },
     {
-     "property": "schedule",
-     "value": "project_tag",
+     "property": "project",
+     "value": "cases",
      "vendor": "continuo"
     },
     {
-     "property": "service",
-     "value": "cases",
+     "property": "schedule",
+     "value": "project_tag",
      "vendor": "continuo"
     },
     {
@@ -2451,13 +2451,13 @@
   "tests": []
  },
  {
-  "contract_hash": "sha256:23ca743c98203225c40f62a23244954537b80e53926d64fd611dc271516a7ca9",
+  "contract_hash": "sha256:798ddfc8f58ff11fc06ebd260bf89976bca792d24c13489bafc0747dc529cc7e",
   "flags": [],
   "generated": {
    "apiVersion": "v3.2.0",
    "customProperties": [
     {
-     "property": "service",
+     "property": "project",
      "value": "cases",
      "vendor": "continuo"
     },
@@ -2734,13 +2734,13 @@
      "vendor": "continuo"
     },
     {
-     "property": "schedule",
-     "value": "project_tag",
+     "property": "project",
+     "value": "cases",
      "vendor": "continuo"
     },
     {
-     "property": "service",
-     "value": "cases",
+     "property": "schedule",
+     "value": "project_tag",
      "vendor": "continuo"
     },
     {
@@ -2937,7 +2937,7 @@
   "tests": []
  },
  {
-  "contract_hash": "sha256:fea1f2410357b35f19e2c2cda6cdcb8d651543e34546846904f2d7fcb78bd6d4",
+  "contract_hash": "sha256:436810de931967828ed7a1a905ffc17a034a875a91f6c8a2dbb9773f615707b2",
   "flags": [
    "jinja_in_test_arguments"
   ],
@@ -2945,7 +2945,7 @@
    "apiVersion": "v3.2.0",
    "customProperties": [
     {
-     "property": "service",
+     "property": "project",
      "value": "cases",
      "vendor": "continuo"
     },
@@ -3326,13 +3326,13 @@
      "vendor": "continuo"
     },
     {
-     "property": "schedule",
-     "value": "project_tag",
+     "property": "project",
+     "value": "cases",
      "vendor": "continuo"
     },
     {
-     "property": "service",
-     "value": "cases",
+     "property": "schedule",
+     "value": "project_tag",
      "vendor": "continuo"
     }
    ],
@@ -3874,7 +3874,7 @@
   ]
  },
  {
-  "contract_hash": "sha256:a054121701e398204d21f72abb9ad77c94609b96b7c0c3421038a495cfadd4eb",
+  "contract_hash": "sha256:7e41ca3a17aab1147b326090a83a2e836d25328ad29b19e05e834319bdeb5640",
   "flags": [
    "jinja_in_test_arguments",
    "test_column_not_declared",
@@ -3884,7 +3884,7 @@
    "apiVersion": "v3.2.0",
    "customProperties": [
     {
-     "property": "service",
+     "property": "project",
      "value": "cases",
      "vendor": "continuo"
     },
@@ -4259,13 +4259,13 @@
      "vendor": "continuo"
     },
     {
-     "property": "schedule",
-     "value": "project_tag",
+     "property": "project",
+     "value": "cases",
      "vendor": "continuo"
     },
     {
-     "property": "service",
-     "value": "cases",
+     "property": "schedule",
+     "value": "project_tag",
      "vendor": "continuo"
     }
    ],
@@ -4798,7 +4798,7 @@
   ]
  },
  {
-  "contract_hash": "sha256:706a0a83c054021ac0e3eaae20a8b0ff153dc00a36db96952c27ed2f77756fcd",
+  "contract_hash": "sha256:cdf6b9adb6a692eb1d6fa42209e0d6920c6f8efe6cb0717f2860ba865d74d28b",
   "flags": [
    "jinja_in_test_arguments",
    "test_column_not_declared"
@@ -4807,7 +4807,7 @@
    "apiVersion": "v3.2.0",
    "customProperties": [
     {
-     "property": "service",
+     "property": "project",
      "value": "cases",
      "vendor": "continuo"
     },
@@ -5167,13 +5167,13 @@
      "vendor": "continuo"
     },
     {
-     "property": "schedule",
-     "value": "project_tag",
+     "property": "project",
+     "value": "cases",
      "vendor": "continuo"
     },
     {
-     "property": "service",
-     "value": "cases",
+     "property": "schedule",
+     "value": "project_tag",
      "vendor": "continuo"
     }
    ],
@@ -5696,7 +5696,7 @@
   ]
  },
  {
-  "contract_hash": "sha256:62f6244589c7fe93c466ea002a610996ff72213aaed6445fa757428b7c1e155e",
+  "contract_hash": "sha256:092d93ffa00f0592b3c32127ea5dcc1edcc301640886e5d6ab5561c4629d111a",
   "flags": [
    "jinja_in_test_arguments"
   ],
@@ -5704,7 +5704,7 @@
    "apiVersion": "v3.2.0",
    "customProperties": [
     {
-     "property": "service",
+     "property": "project",
      "value": "cases",
      "vendor": "continuo"
     },
@@ -6068,13 +6068,13 @@
      "vendor": "continuo"
     },
     {
-     "property": "schedule",
-     "value": "project_tag",
+     "property": "project",
+     "value": "cases",
      "vendor": "continuo"
     },
     {
-     "property": "service",
-     "value": "cases",
+     "property": "schedule",
+     "value": "project_tag",
      "vendor": "continuo"
     }
    ],

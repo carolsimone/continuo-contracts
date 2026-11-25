@@ -64,9 +64,9 @@ def _column(name, **fields):
 
 
 def _issues(doc):
-    """The issues of the demo contract `doc`, with the service left unknown."""
+    """The issues of the demo contract `doc`, with the project left unknown."""
     issues = validate_python_contract(
-        doc, path="contracts/py_daily_kpis.odcs.yaml", service=None
+        doc, path="contracts/py_daily_kpis.odcs.yaml", project=None
     )
     return [str(issue) for issue in issues]
 
@@ -104,7 +104,7 @@ def test_the_demo_projection_does_not_move(table):
 @pytest.mark.parametrize("table", DEMO_TABLES)
 def test_the_demo_contracts_are_valid(table):
     issues = validate_python_contract(
-        _demo(table), path=f"contracts/{table}.odcs.yaml", service="service-py"
+        _demo(table), path=f"contracts/{table}.odcs.yaml", project="service-py"
     )
     assert [str(issue) for issue in issues] == []
 

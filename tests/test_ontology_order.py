@@ -24,7 +24,7 @@ ORDER = ("order",)
 def estate_run(state, document=None):
     """The findings of the `order` rule over the contracts of `state`.
 
-    `check` also writes the findings about a service the ontology does not declare, which
+    `check` also writes the findings about a project the ontology does not declare, which
     are not the findings of a rule: they are left out.
     """
     return [f for f in run(state, ORDER, document) if f.rule == "order"]
@@ -158,7 +158,7 @@ def test_a_read_no_checked_contract_holds_is_not_an_order_finding():
     assert position["analytics.txns"] < position["analytics.revenue"]
 
 
-def test_a_contract_of_an_undeclared_service_is_not_in_the_graph():
+def test_a_contract_of_an_undeclared_project_is_not_in_the_graph():
     state = base()
     state["invoices"] = contract(
         "billing", "invoices", entity="Invoice", reads=["analytics.revenue"]

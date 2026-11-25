@@ -40,7 +40,7 @@ def _run(case):
     except StrictYamlError:
         return {"issues": [{"path": "$", "reason": "strict_yaml"}]}
     issues = validate_python_contract(
-        doc, path=case["path"], service=case["service"]
+        doc, path=case["path"], project=case["project"]
     )
     if issues:
         return {
@@ -48,7 +48,7 @@ def _run(case):
                 {"path": issue.path, "reason": issue.reason} for issue in issues
             ]
         }
-    stored = normalise_python(doc, service=case["service"], reads=case["reads"])
+    stored = normalise_python(doc, project=case["project"], reads=case["reads"])
     return {"stored": stored, "contract_hash": contract_hash(stored)}
 
 
@@ -90,7 +90,7 @@ REFUSED = {
     "script_is_not_a_normalised_path": ["value"],
     "assets_are_not_normalised_paths": ["value"] * 6,
     "varchar_of_length_zero": ["column_type"],
-    "service_property_is_blank": ["value"],
+    "project_property_is_blank": ["value"],
     "column_nests_thirty_levels": ["refused_field"],
 }
 
@@ -110,7 +110,7 @@ def test_every_case_has_the_documented_fields():
         assert set(case) == {
             "name",
             "path",
-            "service",
+            "project",
             "reads",
             "text",
             "stored",
@@ -120,7 +120,7 @@ def test_every_case_has_the_documented_fields():
         assert set(case) == {
             "name",
             "path",
-            "service",
+            "project",
             "reads",
             "text",
             "issues",

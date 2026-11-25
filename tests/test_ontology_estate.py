@@ -2,7 +2,7 @@
 
 Each project is generated from its fixture manifest, stored with the tables its SQL reads (written
 by hand in `ontology_fixtures.READS`) and resolved against `tests/fixtures/ontology/demo.yaml`,
-which declares both services. The two are checked together with every release rule. The list of
+which declares both projects. The two are checked together with every release rule. The list of
 findings the estate gives is written down by hand below, a line for each with its reason; a
 finding that is not in it is a defect to look into, not a line to add.
 """
@@ -235,11 +235,11 @@ def _emptied_python():
         ]
     assert (
         validate_python_contract(
-            doc, path="contracts/py_empties.odcs.yaml", service="service-py"
+            doc, path="contracts/py_empties.odcs.yaml", project="service-py"
         )
         == []
     )
-    stored_form = normalise_python(doc, service="service-py", reads=[])
+    stored_form = normalise_python(doc, project="service-py", reads=[])
     assert stored_form["roles"] == [{"access": "read"}]
     return ontology.resolve(stored_form, DEMO)
 
@@ -294,7 +294,7 @@ def test_the_copies_are_ordered_after_the_copies_they_read():
         for contract_id in layer.split(": ", 1)[1].split(", ")
     }
 
-    # A chain through both services: finance's transactions, core's union of them and its
+    # A chain through both projects: finance's transactions, core's union of them and its
     # revenue, and finance's unit economics.
     chain = [
         "analytics.seed_fx_transactions",
@@ -386,7 +386,7 @@ def test_the_golden_holds_what_the_ontology_fills_in():
     form, stored_form = golden["resolved"], golden["stored"]
     table = form["schema"][0]
 
-    # The domain of the service, and the thing the table is a copy of, with the part of its key
+    # The domain of the project, and the thing the table is a copy of, with the part of its key
     # that the table holds as a constant.
     assert "domain" not in stored_form
     assert form["domain"] == "finance"

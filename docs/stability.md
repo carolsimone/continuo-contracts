@@ -29,9 +29,14 @@ hash once:
   This package hashes none of it. 0.4.1 refuses the contract of such a snapshot, so it is not a
   supported case: see [Contracts](#contracts).
 
+0.5.0 moves every `contract_hash` once. The `continuo` property that names a node's project is
+`project`, which was `service`, so every stored form holds `project` and hashes differently. It
+ships without a re-baseline: continuo adopts it by starting its install empty and releasing every
+project again, so no stored hash is recomputed. No `content_hash` and no `source_sha256` moves.
+
 ## Contracts
 
-The contract check only widens, with two exceptions below. A newer version accepts every contract an
+The contract check only widens, with three exceptions below. A newer version accepts every contract an
 older one accepted, and gives it the same [stored form](glossary.md#stored-form) and the same
 `contract_hash`. The vocabulary of a contract, its kinds, custom properties and values, grows, and a
 rule that would refuse a contract an earlier version accepted is not added. An upgrade needs no edit
@@ -51,6 +56,14 @@ snapshots, so 0.4.1 refuses a `dbt-snapshot` node that writes `contractEnforced:
 and the [lite check](glossary.md#lite-check) fails on it. Remove `contract.enforced` from the
 snapshot's config. A model or a seed with an enforced contract, and a snapshot with none, are
 accepted as before.
+
+The third exception is the name of a contract's project. 0.5.0 calls the `continuo` property
+`project`, which 0.4.x called `service`, so a Python contract that writes `service` is refused as
+`unknown_property`, and the [declared project](glossary.md#declared-project) is compared with
+`project` (reason `project`, which was `service`). Rename the property. An ontology file declares
+its projects under `principals.projects`, which was `principals.services`, and one that writes
+`services` does not load. The commands take `--project`, which was `--service`, and the JSON of
+`dbt check` names it `project`.
 
 Other output can change. 0.3.1, a patch, changed `dbt.generate`'s output for two inputs and made
 the [lite check](glossary.md#lite-check) reject more: read a version's CHANGELOG section before you

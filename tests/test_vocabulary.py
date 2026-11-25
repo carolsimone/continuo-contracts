@@ -12,7 +12,7 @@ from continuo_contracts.vocabulary import (
 )
 
 ROOT_AUTHORED = [
-    "service",
+    "project",
     "kind",
     "schedule",
     "criticality",
@@ -40,7 +40,7 @@ ROOT_REFUSED = [
 ]
 QUALITY_AUTHORED = ["where", "warnIf", "errorIf", "failCalc"]
 DBT_ROOT_WRITTEN = [
-    "service",
+    "project",
     "kind",
     "schedule",
     "criticality",
@@ -215,7 +215,7 @@ def test_the_keys_of_an_aggregate_binding_are_not_properties():
 
 def test_a_row_is_frozen():
     with pytest.raises(dataclasses.FrozenInstanceError):
-        PROPERTIES["service"].python = "refused"
+        PROPERTIES["project"].python = "refused"
 
 
 def test_the_table_cannot_be_changed():

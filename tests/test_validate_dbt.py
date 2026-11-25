@@ -192,9 +192,9 @@ def test_any_other_timeout_is_a_value_issue(value):
     assert "from 1 to 10080" in issue.message
 
 
-@pytest.mark.parametrize("name", ["service", "filePath"])
+@pytest.mark.parametrize("name", ["project", "filePath"])
 @pytest.mark.parametrize("value", ["", "   ", 7, None, ["a"], {"a": 1}])
-def test_a_service_or_a_file_path_that_is_not_text_is_a_value_issue(name, value):
+def test_a_project_or_a_file_path_that_is_not_text_is_a_value_issue(name, value):
     doc = _doc()
     _set(doc, name, value)
     issue = _only(validate_dbt_contract(doc))
@@ -205,9 +205,9 @@ def test_a_service_or_a_file_path_that_is_not_text_is_a_value_issue(name, value)
     assert f"`{name}` is {value!r}" in issue.message
 
 
-def test_a_service_and_a_file_path_with_text_are_accepted_whatever_they_say():
+def test_a_project_and_a_file_path_with_text_are_accepted_whatever_they_say():
     doc = _doc()
-    _set(doc, "service", "some-service")
+    _set(doc, "project", "some-project")
     _set(doc, "filePath", "models\\sub dir\\a.sql")
     assert validate_dbt_contract(doc) == []
 
@@ -392,7 +392,7 @@ def test_a_kind_that_is_not_a_dbt_kind_is_a_value_issue(value):
 
 
 @pytest.mark.parametrize(
-    "name", ["service", "kind", "filePath", "materialization"]
+    "name", ["project", "kind", "filePath", "materialization"]
 )
 def test_a_missing_needed_property_is_a_missing_field_at_the_custom_properties(
     name,
@@ -409,13 +409,13 @@ def test_a_contract_with_no_custom_properties_misses_the_four_it_needs():
     del doc["customProperties"]
     issues = validate_dbt_contract(doc)
     assert _found(issues) == [("customProperties", "missing_field")] * 4
-    for name in ("service", "kind", "filePath", "materialization"):
+    for name in ("project", "kind", "filePath", "materialization"):
         assert sum(f"`{name}`" in i.message for i in issues) == 1, name
 
 
-def test_a_service_of_another_vendor_is_not_the_continuo_service():
+def test_a_project_of_another_vendor_is_not_the_continuo_project():
     doc = _doc()
-    doc["customProperties"][_index(doc, "service")]["vendor"] = "other"
+    doc["customProperties"][_index(doc, "project")]["vendor"] = "other"
     issue = _only(validate_dbt_contract(doc))
     assert (issue.path, issue.reason) == ("customProperties", "missing_field")
 
@@ -535,9 +535,9 @@ def test_a_repeated_property_with_a_bad_value_is_checked_once_at_the_first():
     ]
 
 
-def test_the_service_value_is_not_compared_with_a_release_service():
+def test_the_project_value_is_not_compared_with_a_release_project():
     doc = _doc()
-    _set(doc, "service", "whatever-service")
+    _set(doc, "project", "whatever-project")
     assert validate_dbt_contract(doc) == []
 
 
@@ -797,13 +797,13 @@ def test_python_validation_is_unchanged():
             found = [
                 {"path": issue.path, "reason": issue.reason}
                 for issue in validate_python_contract(
-                    doc, path=case["path"], service=case["service"]
+                    doc, path=case["path"], project=case["project"]
                 )
             ]
         assert found == case.get("issues", []), case["name"]
     digest = hashlib.sha256((VECTORS / "contracts.json").read_bytes()).hexdigest()
     assert digest == (
-        "069f87e5c4e7ed7110a41b02b1cd9b23c56a6b2a0e6cf2cb845f162fdac445c2"
+        "4bb846edddb8f033cd5742dc0c7418159ebb6016a3c5ed800674c207324e6ea2"
     )
 
 
@@ -814,7 +814,7 @@ def test_a_python_contract_is_not_a_dbt_contract_and_the_reverse():
     python = yaml_strict.load(demo.read_text(encoding="utf-8"))
     assert (
         validate_python_contract(
-            python, path="contracts/py_daily_kpis.odcs.yaml", service="service-py"
+            python, path="contracts/py_daily_kpis.odcs.yaml", project="service-py"
         )
         == []
     )
@@ -823,7 +823,7 @@ def test_a_python_contract_is_not_a_dbt_contract_and_the_reverse():
     assert any(reason == "refused_property" for _, reason in reasons)
     dbt_doc = _doc()
     assert validate_python_contract(
-        dbt_doc, path="contracts/generic_tests.odcs.yaml", service=None
+        dbt_doc, path="contracts/generic_tests.odcs.yaml", project=None
     )
 
 
@@ -905,7 +905,7 @@ def test_a_dbt_contract_that_validates_gives_its_run_facts(project):
 
 def test_the_goldens_give_their_run_facts_whole():
     facts = dbt.run_facts(_doc("analytics.governed"))
-    assert facts.service == "cases"
+    assert facts.project == "cases"
     assert facts.kind == "dbt-model"
     assert facts.file_path.endswith("governed.sql")
     assert facts.materialized == "table"

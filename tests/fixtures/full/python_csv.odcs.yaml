@@ -28,7 +28,7 @@ authoritativeDefinitions:
   - type: businessDefinition
     url: https://example.com/glossary/shop-order
 customProperties:
-  - {vendor: continuo, property: service, value: service-py}
+  - {vendor: continuo, property: project, value: service-py}
   - {vendor: continuo, property: kind, value: python-csv}
   - {vendor: continuo, property: schedule, value: daily}
   - {vendor: continuo, property: criticality, value: SECONDARY}

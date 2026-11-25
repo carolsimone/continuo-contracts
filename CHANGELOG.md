@@ -5,6 +5,32 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Breaking
+
+- A contract names its project in the `continuo` property `project`, which was `service`, the
+  glossary word for the code a team releases as one unit. `contract.normalise_python` writes
+  `project` into every stored form and `dbt.generate` into every dbt contract, so **every
+  contract hash changes once**. No `content_hash` and no `source_sha256` moves. continuo adopts
+  this version by starting its install empty and releasing every project again, so there is no
+  re-baseline. A Python contract that writes `service` is now refused as `unknown_property`:
+  rename the property to `project`.
+- The names that said service now say project: `normalise_python(doc, project=..., reads=...)`,
+  `validate.rule_issues` and `validate.validate_python_contract(..., project=...)` with the issue
+  reason `project`, `dbt.node_project` (was `node_service`), `dbt.manifest_project(manifest,
+  declared_project)` (was `project_service`), `dbt.RunFacts.project`,
+  `lite.check_manifest(..., declared_project=...)` and `LiteReport.project`,
+  `ontology.Ontology.projects()` (was `services()`) and `ontology_check.PER_PROJECT_RULES` (was
+  `PER_SERVICE_RULES`). The messages of the lite check, the validation and the ontology rules say
+  project.
+- The commands take `--project`, which was `--service`, and the JSON of `dbt check` names it
+  `project`.
+- An ontology file declares its projects under `principals.projects`, which was
+  `principals.services`. A file that writes `services` does not load: rename the key.
+- `fingerprints.yaml` names the entries `project_units` (was `service_units`), `project` and
+  `project_kind_path`, with the input `odcs.custom.project`.
+- The vectors `contracts.json` and `ontology.json`, the dbt contract vector and the golden
+  contracts are regenerated with `project`.
+
 ## [0.4.1] - 2026-11-21
 
 **TL;DR**

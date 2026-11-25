@@ -8,7 +8,7 @@ that the release accepts the project, because the lite check cannot see what onl
 
 - the project compiled with the release's own dbt and continuo-contracts versions;
 - the tables each node's compiled SQL names, which the release adds to [`reads`](glossary.md#reads);
-- the checks across the contracts of every service, such as for duplicate relations and the
+- the checks across the contracts of every project, such as for duplicate relations and the
   ontology rules `access`, `order` and `drift`;
 - the [ontology](glossary.md#ontology) that the install runs, which can differ from the file you
   name with `--ontology`;
@@ -26,11 +26,11 @@ folder, where it reads the [seed](glossary.md#dbt-words) CSV files, also with `-
 | `--profiles-dir DIR` | the folder of [`profiles.yml`](glossary.md#dbt-words) | `PROJECT_DIR` |
 | `--target NAME` | the profile's target, passed to `dbt parse` | the profile's |
 | `--manifest FILE` | check this [manifest](glossary.md#manifest), run no dbt | none |
-| `--service SERVICE` | the [declared service](glossary.md#declared-service) | see below |
+| `--project PROJECT` | the [declared project](glossary.md#declared-project) | see below |
 | `--ontology FILE` | read the [bindings](glossary.md#binding) of the contracts against this [ontology](glossary.md#ontology) file ([below](#bindings)) | none |
 
-Always pass `--service`: your [service](glossary.md#service), the `name:` in `dbt_project.yml` with
-`_` replaced by `-`. A [kept node](glossary.md#kept-node) of another service is an error, as in the
+Always pass `--project`: your [project](glossary.md#project), the `name:` in `dbt_project.yml` with
+`_` replaced by `-`. A [kept node](glossary.md#kept-node) of another project is an error, as in the
 release. The default is `PROJECT_DIR`'s folder name changed the same way (for `.`, the current one).
 
 ## A CI job
@@ -70,7 +70,7 @@ jobs:
       - run: >
           uvx --python 3.14 --from "continuo-contracts==${{ env.CONTINUO_CONTRACTS_VERSION }}"
           continuo-contracts dbt check . --dbt "$RUNNER_TEMP/dbt/bin/dbt" --profiles-dir ci
-          --service shop
+          --project shop
 ```
 
 Replace the versions, `dbt-postgres` and `shop` with yours. Ask whoever runs your continuo which
@@ -84,7 +84,7 @@ first `...` is the banner; the last is the list of what only the release does, t
 again.
 
 ```bash
-$ continuo-contracts dbt check . --dbt "$RUNNER_TEMP/dbt/bin/dbt" --profiles-dir ci --service shop
+$ continuo-contracts dbt check . --dbt "$RUNNER_TEMP/dbt/bin/dbt" --profiles-dir ci --project shop
 ...
 ERROR seed.shop.countries: label is in the CSV header but not declared
 ERROR seed.shop.countries: name is declared but not in the CSV header
@@ -115,20 +115,20 @@ lite check cannot. So the release's hash differs from the lite check's when the 
 The bindings of a node can make the hashes differ too. The hash that the lite check reports is the
 hash of the stored form as it is, bindings included, and it never resolves the contract. A release
 that uses no ontology stores the form that `ontology.strip` gives, without the bindings, and a
-release that uses one stores the resolved form of a contract whose service the ontology declares,
+release that uses one stores the resolved form of a contract whose project the ontology declares,
 which holds more. So, `reads` aside, the two hashes of a node that writes bindings agree only
-when the release uses an ontology that does not declare the node's service.
+when the release uses an ontology that does not declare the node's project.
 
 ## Bindings
 
 With `--ontology FILE` the check also reads each contract's [bindings](glossary.md#binding) against
 that [ontology](ontology.md) file, which the command reads before it runs dbt. A file that cannot be
 read or does not load stops the command with status 2 and dbt never runs. A file that loads but has
-errors of its own gives one ERROR line of the whole service, with no node id, and no contract is
+errors of its own gives one ERROR line of the whole project, with no node id, and no contract is
 read against it:
 
 ```bash
-$ continuo-contracts dbt check . --dbt "$RUNNER_TEMP/dbt/bin/dbt" --profiles-dir ci --service shop --ontology ontology.yaml
+$ continuo-contracts dbt check . --dbt "$RUNNER_TEMP/dbt/bin/dbt" --profiles-dir ci --project shop --ontology ontology.yaml
 ...
 ERROR the ontology file has 3 error(s): run continuo-contracts ontology check <file>
 ...
@@ -136,30 +136,30 @@ ERROR the ontology file has 3 error(s): run continuo-contracts ontology check <f
 
 Run `continuo-contracts ontology check` on the file to list them
 ([ontology](ontology.md#the-commands)). With a sound file, each contract that has no issue, shares
-its id with no other node and belongs to `--service` is resolved against it and checked with the
-[per-service rules](glossary.md#per-service-rule) `contract`, `coverage`, `quality` and `privacy`.
-The check never runs `access`, `order` or `drift`, which need the contracts of every service, so a
-read of another service's table is no finding here. A finding is a line of its node,
+its id with no other node and belongs to `--project` is resolved against it and checked with the
+[per-project rules](glossary.md#per-project-rule) `contract`, `coverage`, `quality` and `privacy`.
+The check never runs `access`, `order` or `drift`, which need the contracts of every project, so a
+read of another project's table is no finding here. A finding is a line of its node,
 `<LEVEL> <node id>: <message>`, after the node's other lines, and its severity is the level: an
 ERROR line fails the job, and a WARNING or an INFO line does not.
 
 ```bash
-$ continuo-contracts dbt check . --dbt "$RUNNER_TEMP/dbt/bin/dbt" --profiles-dir ci --service finance --ontology ontology.yaml
+$ continuo-contracts dbt check . --dbt "$RUNNER_TEMP/dbt/bin/dbt" --profiles-dir ci --project finance --ontology ontology.yaml
 ...
 WARNING model.finance.fx_transactions_eur: column rate_to_eur comes from FxRate, which Transaction does not reach through any reference: the join is not a declared relationship
 ...
 ```
 
-When the ontology does not declare the service under `principals.services`, no contract of it is
-checked. The check says so once, as an INFO line of the whole service after the node lines, and
+When the ontology does not declare the project under `principals.projects`, no contract of it is
+checked. The check says so once, as an INFO line of the whole project after the node lines, and
 gives a WARNING to each contract that writes a binding. The bindings stay as written.
 
 ```bash
-$ continuo-contracts dbt check . --dbt "$RUNNER_TEMP/dbt/bin/dbt" --profiles-dir ci --service finance --ontology core-only.yaml
+$ continuo-contracts dbt check . --dbt "$RUNNER_TEMP/dbt/bin/dbt" --profiles-dir ci --project finance --ontology core-only.yaml
 ...
-WARNING model.finance.ltv_per_user: writes bindings, but its service is not declared in the ontology: they are kept as written and not checked
+WARNING model.finance.ltv_per_user: writes bindings, but its project is not declared in the ontology: they are kept as written and not checked
 ...
-INFO not declared in the ontology: none of this service's contracts is checked
+INFO not declared in the ontology: none of this project's contracts is checked
 ...
 ```
 
@@ -167,7 +167,7 @@ Without `--ontology` the check reads no binding against an ontology, but a bindi
 wrong shape is an ERROR line as any other contract issue is ([validation](validation.md)). The
 release checks the bindings against the ontology the install runs, and the file you name can
 differ from it, which is the last row of the list that the check prints. In Python,
-`lite.check_manifest(manifest, declared_service=..., read_header=..., ontology=...)` takes the
+`lite.check_manifest(manifest, declared_project=..., read_header=..., ontology=...)` takes the
 loaded `Ontology` instead of a file, and a `Line` has the level `info`, `warning` or `error`.
 
 ## Messages
@@ -177,18 +177,18 @@ loaded `Ontology` instead of a file, and a `Line` has the level `info`, `warning
 | `<column> is in the CSV header but not declared` | ERROR | Declare it in [`schema.yml`](glossary.md#dbt-words) or drop it from the CSV. A seed that declares no column gets this for every CSV column. |
 | `<column> is declared but not in the CSV header` | ERROR | Add it to the CSV header or drop it from `schema.yml`. Names compare exactly: `ID` is not `id`. |
 | `the CSV file cannot be read, so its header is not checked against the declared columns` | ERROR | Missing, outside the seed folders, not UTF-8, a first row over 1 MiB, a field over `csv`'s limit, or a delimiter `csv` refuses. |
-| `the node's service is <service>, the declared service is <declared>: the release rejects a manifest that holds a node of another service as invalid_artifact` | ERROR | Pass the right `--service`. For a tagged model of an installed package, untag or disable it. |
-| `the node has no service, the declared service is <declared>: the release rejects the manifest as invalid_artifact` | ERROR | The node's [`fqn`](glossary.md#dbt-words) is missing, empty, or starts with an empty name: check a manifest that `dbt parse` wrote. |
+| `the node's project is <project>, the declared project is <declared>: the release rejects a manifest that holds a node of another project as invalid_artifact` | ERROR | Pass the right `--project`. For a tagged model of an installed package, untag or disable it. |
+| `the node has no project, the declared project is <declared>: the release rejects the manifest as invalid_artifact` | ERROR | The node's [`fqn`](glossary.md#dbt-words) is missing, empty, or starts with an empty name: check a manifest that `dbt parse` wrote. |
 | `contract id <id> is also the id of <node ids>: the release rejects it as duplicate_table` | ERROR | Two nodes have one `<schema>.<table>`, such as names differing only in case. Rename one or change its schema: the alias is not in the id. |
 | `no owner, continuo skips it` | INFO | Set `owner` in the node's [`meta`](glossary.md#dbt-words) to give it a contract. A skipped seed's CSV header is not checked. |
-| `local stub, continuo skips it`, `from an installed package and has no tag, continuo skips it`, `a seed of an installed package: its CSV header is not checked` | INFO | Nothing to fix. The tag `local_stub` marks a node that stands in for a table another service owns. |
+| `local stub, continuo skips it`, `from an installed package and has no tag, continuo skips it`, `a seed of an installed package: its CSV header is not checked` | INFO | Nothing to fix. The tag `local_stub` marks a node that stands in for a table another project owns. |
 | `no tag: a dormant node, it runs only by hand` | INFO | Add a tag: the first tag is its [schedule](glossary.md#schedule). A seed with no tag is not dormant: it runs on the `seed` schedule. |
 | `<path>: <message>` | ERROR | A contract issue, such as ``customProperties[3].value: `criticality` is 'HIGH', ...``: see the [reasons](validation.md#reasons). |
 | ``<path>: a dbt-snapshot node does not take `contractEnforced`: dbt does not support contracts on snapshots, ...`` | ERROR | Remove `contract.enforced` from the [snapshot](glossary.md#dbt-words)'s config: dbt does not support a contract on a snapshot. |
 | `<message of a rule>` | ERROR, WARNING or INFO | A binding the ontology refuses or doubts, such as `entity Custmer is not a thing in the ontology`: see the [rules](ontology.md#the-rules). |
-| `not declared in the ontology: none of this service's contracts is checked` | INFO | The ontology does not declare your service. Add it under `principals.services` to have its contracts checked. |
-| `writes bindings, but its service is not declared in the ontology: they are kept as written and not checked` | WARNING | The same cause, said of a contract that writes a binding. |
+| `not declared in the ontology: none of this project's contracts is checked` | INFO | The ontology does not declare your project. Add it under `principals.projects` to have its contracts checked. |
+| `writes bindings, but its project is not declared in the ontology: they are kept as written and not checked` | WARNING | The same cause, said of a contract that writes a binding. |
 | `the ontology file has <n> error(s): run continuo-contracts ontology check <file>` | ERROR | Run that command on the file and fix its errors. |
 | `<field> must be <what>, got <type>` | ERROR | The library cannot read that field of the node, such as `config.meta.owner`. Fix it in `schema.yml` or the config. |
 | `reads entry '<entry>': a table is written <schema>.<table>, ...` | ERROR | An entry of `meta.continuo.reads` is not a table: write `<schema>.<table>`. |
-| `every node of the service is skipped: the release rejects it as invalid_artifact (manifest contains no model/seed nodes)` | ERROR | Every model, seed and [snapshot](glossary.md#dbt-words) is skipped, or none exists. The parenthesis counts kept nodes, snapshots included. Give one an owner. |
+| `every node of the project is skipped: the release rejects it as invalid_artifact (manifest contains no model/seed nodes)` | ERROR | Every model, seed and [snapshot](glossary.md#dbt-words) is skipped, or none exists. The parenthesis counts kept nodes, snapshots included. Give one an owner. |

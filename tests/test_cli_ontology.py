@@ -17,7 +17,7 @@ BROKEN_FINDINGS = [
     {
         "severity": "error",
         "rule": "ontology",
-        "subject": "principals.services.core",
+        "subject": "principals.projects.core",
         "message": "domain 'elsewhere' is not declared",
     },
     {
@@ -71,7 +71,7 @@ def test_ontology_check_exits_1_on_an_error_and_0_on_warnings(
     assert _records(caplog) == [
         (
             logging.ERROR,
-            "principals.services.core: domain 'elsewhere' is not declared",
+            "principals.projects.core: domain 'elsewhere' is not declared",
         ),
         (logging.ERROR, "Thing: owner 'nobody' is not a declared domain"),
         (logging.INFO, "2 errors in the ontology file"),
@@ -207,7 +207,7 @@ def test_the_log_goes_to_stderr_and_stdout_holds_the_document_alone(tmp_path):
     assert done.returncode == 1
     assert json.loads(done.stdout)["ok"] is False
     assert done.stderr.splitlines() == [
-        "ERROR principals.services.core: domain 'elsewhere' is not declared",
+        "ERROR principals.projects.core: domain 'elsewhere' is not declared",
         "ERROR Thing: owner 'nobody' is not a declared domain",
         "INFO 2 errors in the ontology file",
     ]

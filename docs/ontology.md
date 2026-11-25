@@ -19,9 +19,9 @@ string, is allowed on every mapping in the table.
 | Mapping | Keys |
 |---|---|
 | root | `principals`, `entities` |
-| `principals` | `domains`, `services`, `teams`, `roles`, `people`, each a mapping of names |
+| `principals` | `domains`, `projects`, `teams`, `roles`, `people`, each a mapping of names |
 | a domain | `owner_team` |
-| a service | `domain`, `kind` |
+| a project | `domain`, `kind` |
 | a team or a role | `idp_group` |
 | `people` | `source` |
 | a thing, under `entities` | `owner`, `born_in`, `key`, `properties`, `access` |
@@ -33,7 +33,7 @@ Every value is a string except `personal` and `nullable` (true or false), the li
 `properties` and `readers` (of strings) and `access` (of access rules). A name is not blank, and
 the name of a thing, of a key part and of a property is one that `<Thing>.<field>` can carry, so
 `vocabulary.is_name` accepts it: no whitespace, control character, dot or slash. The mappings of
-names (`domains`, `services`, `teams`, `roles`, `entities`, `key` and `properties`) take no
+names (`domains`, `projects`, `teams`, `roles`, `entities`, `key` and `properties`) take no
 `description`, because it would be a name. A type is `int`, `string`, `timestamp`, `date`,
 `money`, `decimal`, `bool`, `enum[a, b]` or `ref <Thing>`, and a property may write `ref: <Thing>`
 instead of a type. Both spellings are one reference, to the rules and to `resolve` alike, and when
@@ -45,7 +45,7 @@ a property writes both, `ref` wins.
 ... principals:
 ...   domains:
 ...     shop: {owner_team: shop-data}
-...   services:
+...   projects:
 ...     shop: {domain: shop, kind: python}
 ... entities:
 ...   Customer:
@@ -58,7 +58,7 @@ a property writes both, `ref` wins.
 ...       - {properties: [email], readers: [shop]}
 ... """
 >>> onto = ontology.load(text)
->>> onto.services(), onto.declares("shop"), onto.declares("web"), onto.domain_of("shop")
+>>> onto.projects(), onto.declares("shop"), onto.declares("web"), onto.domain_of("shop")
 (('shop',), True, False, 'shop')
 >>> ontology.load("entities: {User: {owner: core, personnal: {}}}")
 Traceback (most recent call last):
@@ -72,8 +72,8 @@ continuo_contracts.errors.OntologyError: entities.User.properties: a property na
 ```
 
 `Ontology.document` is the parsed file and `Ontology.sha256` the SHA-256 of its text. `declares`
-says whether the file names a service under `principals.services`, `domain_of` gives its domain,
-and `services` lists them. The message of an `OntologyError` is `<path>: <reason>` with a dotted
+says whether the file names a project under `principals.projects`, `domain_of` gives its domain,
+and `projects` lists them. The message of an `OntologyError` is `<path>: <reason>` with a dotted
 path (`entities.User.personnal`, `[<index>]` for a list item, `<root>` for the document itself,
 where a text that strict YAML refuses is reported). `load` reports the first failure in file order.
 
@@ -109,8 +109,8 @@ thing or a field exists is for the [rules](#the-rules).
 ## Resolve
 
 `ontology.resolve(stored, ontology)` returns the [stored form](glossary.md#stored-form) filled with
-what the ontology knows, a new dict. It fills a contract only when its `service` property is a
-service the ontology declares. For any other contract, one with no service included, it returns
+what the ontology knows, a new dict. It fills a contract only when its `project` property is a
+project the ontology declares. For any other contract, one with no project included, it returns
 `stored` in the canonical form and nothing more. The result is always in the canonical form
 ([contract hash](contract-hash.md#walk)), so the caller hashes it as it hashes any stored form.
 
@@ -118,7 +118,7 @@ service the ontology declares. For any other contract, one with no service inclu
 result is the same result. A stored form holds no ODCS default, so a default counts as no value. It
 fills:
 
-- the root `domain`: the domain of the service;
+- the root `domain`: the domain of the project;
 - on a table whose `entity` is a thing, a link to the thing, the `authoritativeDefinitions` entry
   `{type: ontology, url: "continuo-ontology:<Thing>"}` (`ontology.LINK_PREFIX` is the prefix);
 - on a column with no binding, when the thing has a key part or a property of that name, the
@@ -180,7 +180,7 @@ The contract below binds `customers` to `Customer`. The author writes `entity` a
 ...         physicalType: int
 ...         customProperties: [{vendor: continuo, property: local, value: true}]
 ... """)
->>> stored = contract.normalise_python(doc, service="shop", reads=["raw.customers"])
+>>> stored = contract.normalise_python(doc, project="shop", reads=["raw.customers"])
 >>> resolved = ontology.resolve(stored, onto)
 >>> resolved["domain"], resolved["schema"][0]["authoritativeDefinitions"]
 ('shop', [{'type': 'ontology', 'url': 'continuo-ontology:Customer'}])
@@ -220,52 +220,52 @@ A stored form with no ontology part comes back as it is. It reads the top-level 
 over stored contracts, sorted by severity, rule, subject and message, whatever the order of
 `contracts`. A finding has a `severity` (one of `ontology_check.SEVERITIES`: `error`, `warning`,
 `info`), the `rule`, a `subject`, a `message` and the `contract_id` of the contract it is about.
-The contracts are stored forms that `validate` accepted, resolved where their service is declared:
+The contracts are stored forms that `validate` accepted, resolved where their project is declared:
 `check` does not resolve them. `ontology_check.RULES` lists the rules, and `rules` names those to
 run, except `ontology`; any other name raises `ValueError` before a rule runs.
 
 | Rule | Checks | Findings |
 |---|---|---|
-| `ontology` | the file alone: each service names a declared domain, each thing an owner that is a declared domain, each `ref` (either spelling) a thing, each `derived_from` a thing or a `Thing.field` that exists, each access rule properties of its thing and readers that are domains, each personal property an access rule | errors |
-| `contract` | the domain is the service's; exactly one of `entity` and `grain`; the thing exists; `fixed` names key parts, with a value an `enum` allows; `filter` names fields; each binding names a field that exists; each reader is a declared domain | errors, and a warning for a column that comes from a thing the entity does not reach through a reference |
+| `ontology` | the file alone: each project names a declared domain, each thing an owner that is a declared domain, each `ref` (either spelling) a thing, each `derived_from` a thing or a `Thing.field` that exists, each access rule properties of its thing and readers that are domains, each personal property an access rule | errors |
+| `contract` | the domain is the project's; exactly one of `entity` and `grain`; the thing exists; `fixed` names key parts, with a value an `enum` allows; `filter` names fields; each binding names a field that exists; each reader is a declared domain | errors, and a warning for a column that comes from a thing the entity does not reach through a reference |
 | `coverage` | each column has a binding, no column has two, and a copy carries each key part or fixes or filters it | a warning for unbound columns, errors for the others |
 | `quality` | a data-quality test's `*_attribute` parameter names a column of the contract, for a test on the table or on a column, and its `params` is a mapping | errors |
 | `privacy` | a column that holds a personal property is classified `personal`, and no other column is | an error for the first, a warning for the second |
-| `access` | a contract reads a table only when its service's domain is the table's domain or its thing's owner, or the table's contract lists that domain as a reader | an error for a read without a grant, a warning for a table no checked contract holds |
+| `access` | a contract reads a table only when its project's domain is the table's domain or its thing's owner, or the table's contract lists that domain as a reader | an error for a read without a grant, a warning for a table no checked contract holds |
 | `order` | the copies fall into layers by what they read, none in a cycle (a contract's read of its own relation, as an incremental model makes, is no edge), and a thing's copies follow its birth copy, the one `born_in` names | errors for a cycle, a copy upstream of the birth copy or a `born_in` that names a copy of another thing, warnings for a copy with no path from the birth copy or a `born_in` no contract holds, and one `info` finding with the layers |
-| `drift` | each property of a thing is held by a copy | a warning for a property no copy holds, an `info` finding for a thing that no contract binds, when its owner is a domain of the checked services |
+| `drift` | each property of a thing is held by a copy | a warning for a property no copy holds, an `info` finding for a thing that no contract binds, when its owner is a domain of the checked projects |
 
 `ontology_check.ontology_findings(ontology)` runs the `ontology` rule, which needs no contract. The
-rules fall in two sets. `PER_SERVICE_RULES` (`contract`, `coverage`, `quality`, `privacy`) need no
-other service: over one service's contracts they give the findings that the whole estate gives.
-`RELEASE_RULES` adds `access`, `order` and `drift`, which need the contracts of every service, so
+rules fall in two sets. `PER_PROJECT_RULES` (`contract`, `coverage`, `quality`, `privacy`) need no
+other project: over one project's contracts they give the findings that the whole estate gives.
+`RELEASE_RULES` adds `access`, `order` and `drift`, which need the contracts of every project, so
 only continuo's [release](glossary.md#release) runs them. The [lite check](check-your-project.md)
-runs `PER_SERVICE_RULES` and reports the errors of `ontology` as one line.
+runs `PER_PROJECT_RULES` and reports the errors of `ontology` as one line.
 
-A copy is a contract of a declared service. Copies are found by their physical relation, the
+A copy is a contract of a declared project. Copies are found by their physical relation, the
 `<schema>.<table>` that another contract's `reads` names, and the case of a name or a read does not
-matter. In the example below the contract's domain is not the one its service has, and `resolve`
+matter. In the example below the contract's domain is not the one its project has, and `resolve`
 leaves it (a declared value wins), so `contract` reports it:
 
 ```python
 >>> from continuo_contracts import ontology_check
 >>> doc["domain"] = "billing"
->>> wrong = ontology.resolve(contract.normalise_python(doc, service="shop", reads=[]), onto)
->>> for finding in ontology_check.check(onto, [wrong], rules=ontology_check.PER_SERVICE_RULES):
+>>> wrong = ontology.resolve(contract.normalise_python(doc, project="shop", reads=[]), onto)
+>>> for finding in ontology_check.check(onto, [wrong], rules=ontology_check.PER_PROJECT_RULES):
 ...     print(finding.severity, finding.rule, finding.subject, finding.message)
 error contract analytics.customers domain 'billing' is not shop's domain 'shop'
->>> ontology_check.PER_SERVICE_RULES, ontology_check.RELEASE_RULES[-3:]
+>>> ontology_check.PER_PROJECT_RULES, ontology_check.RELEASE_RULES[-3:]
 (('contract', 'coverage', 'quality', 'privacy'), ('access', 'order', 'drift'))
 
 ```
 
 ## Scope
 
-Only the contracts of a service that the ontology declares are copies, and the rules read only
-those. A contract of any other service is kept as written. `check` writes, whatever `rules` names,
-one `info` finding of the rule `contract` for each such service, `not declared in the ontology: none
-of this service's contracts is checked`, and one `warning` for each of its contracts that writes a
-binding, `writes bindings, but its service is not declared in the ontology: they are kept as written
+Only the contracts of a project that the ontology declares are copies, and the rules read only
+those. A contract of any other project is kept as written. `check` writes, whatever `rules` names,
+one `info` finding of the rule `contract` for each such project, `not declared in the ontology: none
+of this project's contracts is checked`, and one `warning` for each of its contracts that writes a
+binding, `writes bindings, but its project is not declared in the ontology: they are kept as written
 and not checked`. `resolve` returns such a contract unfilled.
 
 ## The commands
@@ -276,7 +276,7 @@ many errors the file has:
 
 ```bash
 $ continuo-contracts ontology check ontology.yaml
-ERROR principals.services.web: domain 'web' is not declared
+ERROR principals.projects.web: domain 'web' is not declared
 ERROR Customer.email: personal property with no access rule: nobody can read it
 INFO 2 errors in the ontology file
 ```
@@ -286,7 +286,7 @@ error. Logs go to stderr.
 
 ```json
 {"ok": false, "findings": [
-  {"severity": "error", "rule": "ontology", "subject": "principals.services.web",
+  {"severity": "error", "rule": "ontology", "subject": "principals.projects.web",
    "message": "domain 'web' is not declared"},
   {"severity": "error", "rule": "ontology", "subject": "Customer.email",
    "message": "personal property with no access rule: nobody can read it"}]}
@@ -299,7 +299,7 @@ error. Logs go to stderr.
 | 2 | the command could not run: a usage error, a file it cannot read, or a file that does not load (not UTF-8, not strict YAML, or a key or value the format refuses) |
 
 `continuo-contracts dbt check ... --ontology FILE` reads the bindings of a dbt project's contracts
-against the file, with `PER_SERVICE_RULES` ([check your project](check-your-project.md#bindings)).
+against the file, with `PER_PROJECT_RULES` ([check your project](check-your-project.md#bindings)).
 A file that does not load stops the command with status 2 before dbt runs. A file that loads but
 has errors gives the one line `the ontology file has <n> error(s): run continuo-contracts ontology
 check <file>` and no contract is read against it.

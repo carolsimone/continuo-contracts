@@ -3,7 +3,7 @@
 continuo stores a contract in one canonical shape, its stored form, so two files that mean the
 same thing store the same document. `normalise_python` builds it from a Python contract that
 `validate.validate_python_contract` accepted: it fills what continuo knows about the node (the
-stored labels, the table's names, the kind, the service, the tables the node reads and a
+stored labels, the table's names, the kind, the project, the tables the node reads and a
 `logicalType` per column) and then writes the result in the canonical form. `normalise_dbt`
 builds it from a contract that `dbt.generate` wrote: it joins the tables the node's compiled SQL
 names with the ones the node declares and then writes the result in the canonical form. Both also
@@ -259,18 +259,18 @@ def _length(canonical: str) -> int | None:
 
 
 def normalise_python(
-    doc: Mapping[str, Any], *, service: str, reads: Sequence[str]
+    doc: Mapping[str, Any], *, project: str, reads: Sequence[str]
 ) -> dict[str, Any]:
     """Return the stored form of the Python contract `doc`, a new dict.
 
     `doc` is a contract that `validate.validate_python_contract` accepted, and it is not changed.
-    `service` is the service of the release that carries it, and `reads` lists the tables that
+    `project` is the project of the release that carries it, and `reads` lists the tables that
     the node's read queries name, each `<schema>.<table>`.
 
     The stored form is `doc` with `version: "0"` and `status: active`, the root `name` and the
     `physicalName` of the schema object set to the table when they are absent, the `continuo`
     properties `kind` (the kind of the node, read through `python.KIND_ALIASES`, `python-node`
-    when `doc` writes none) and `service` always written, and on each column the `physicalType`
+    when `doc` writes none) and `project` always written, and on each column the `physicalType`
     as `python.canonical_sql_type` writes it, with the `logicalType` and `logicalTypeOptions`
     that `logical_type` gives for it in place of any written ones (both are removed when it gives
     none). A `physicalType` that `canonical_sql_type` refuses, which an accepted contract never
@@ -279,15 +279,15 @@ def normalise_python(
     by code point and listed once. The result is then written in the canonical form that the module
     describes.
 
-    Raises `HashInputError` when `service` is empty or blank, when `reads` is a string or lists a
+    Raises `HashInputError` when `project` is empty or blank, when `reads` is a string or lists a
     table that is not a string of exactly two parts joined by a dot, neither empty, with no
     whitespace and no control character, and `CanonicalJsonError` when an item of a set-like list
     holds a value that canonical JSON cannot write, which a document that `yaml_strict.load` read
     never holds.
     """
-    if not service.strip():
+    if not project.strip():
         raise HashInputError(
-            f"service {service!r}: the service of a release is not empty or blank"
+            f"project {project!r}: the project of a release is not empty or blank"
         )
     tables = _reads(reads)
     stored: dict[str, Any] = _as_written(doc)
@@ -300,7 +300,7 @@ def normalise_python(
     custom = stored.setdefault("customProperties", [])
     declared = continuo_values(custom).get("kind", _DEFAULT_KIND)
     _set_property(custom, "kind", KIND_ALIASES.get(declared, declared))
-    _set_property(custom, "service", service)
+    _set_property(custom, "project", project)
     columns = table_object.get("properties", [])
     for column in columns:
         column.pop("logicalType", None)

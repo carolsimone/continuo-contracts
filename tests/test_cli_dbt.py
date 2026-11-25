@@ -36,7 +36,7 @@ UNREADABLE = (
     "declared columns"
 )
 ALL_SKIPPED = (
-    "every node of the service is skipped: the release rejects it as "
+    "every node of the project is skipped: the release rejects it as "
     "invalid_artifact (manifest contains no model/seed nodes)"
 )
 
@@ -557,7 +557,7 @@ def test_an_information_line_is_logged_at_info(tmp_path, caplog):
     assert _errors(caplog) == []
 
 
-def test_a_line_about_the_whole_service_is_logged_without_a_node(
+def test_a_line_about_the_whole_project_is_logged_without_a_node(
     tmp_path, caplog
 ):
     path = _write_json(tmp_path / "manifest.json", {"nodes": {}})
@@ -579,10 +579,10 @@ def test_json_prints_one_document_and_nothing_else(fake_dbt, capsys, caplog):
     out = capsys.readouterr().out
     document = json.loads(out)
     assert out == json.dumps(document, indent=2) + "\n"
-    assert list(document) == ["lite", "ok", "service", "lines", "contracts"]
+    assert list(document) == ["lite", "ok", "project", "lines", "contracts"]
     assert document["lite"] is True
     assert document["ok"] is False
-    assert document["service"] == "finance"
+    assert document["project"] == "finance"
     errors = [line for line in document["lines"] if line["level"] == "error"]
     assert [(line["node_id"], line["message"]) for line in errors] == [
         (COSTS_SEED, f"{column} is in the CSV header but not declared")
@@ -595,7 +595,7 @@ def test_json_prints_one_document_and_nothing_else(fake_dbt, capsys, caplog):
     # differs still has its hash, because its contract is valid.
     expected = lite.check_manifest(
         load_manifest("finance"),
-        declared_service="finance",
+        declared_project="finance",
         read_header=lambda node: None,
     ).contracts
     assert document["contracts"] == dict(expected)
@@ -821,8 +821,8 @@ def test_a_folder_path_with_a_nul_character_is_a_usage_error(
     [
         ["dbt"],
         ["dbt", "check"],
-        ["dbt", "check", ".", "--service", " "],
-        ["dbt", "check", ".", "--service", ""],
+        ["dbt", "check", ".", "--project", " "],
+        ["dbt", "check", ".", "--project", ""],
         ["dbt", "other"],
     ],
 )
@@ -856,7 +856,7 @@ def test_the_help_of_the_command_names_its_flags(capsys):
         "--profiles-dir",
         "--target",
         "--manifest",
-        "--service",
+        "--project",
         "--ontology",
         "--json",
     ):
@@ -865,22 +865,22 @@ def test_the_help_of_the_command_names_its_flags(capsys):
     assert "does not load" in out
 
 
-def test_the_service_is_the_folder_name_with_underscores_written_as_dashes(
+def test_the_project_is_the_folder_name_with_underscores_written_as_dashes(
     tmp_path, capsys
 ):
-    # A manifest that names no project leaves the declared service to decide it.
+    # A manifest that names no project leaves the declared project to decide it.
     manifest = copy.deepcopy(load_manifest("finance"))
     del manifest["metadata"]["project_name"]
     path = _write_json(tmp_path / "manifest.json", manifest)
-    project = tmp_path / "my_finance_service"
+    project = tmp_path / "my_finance_project"
     project.mkdir()
 
     _check(project, "--manifest", path, "--json")
 
-    assert json.loads(capsys.readouterr().out)["service"] == "my-finance-service"
+    assert json.loads(capsys.readouterr().out)["project"] == "my-finance-project"
 
 
-def test_the_service_of_the_current_folder_is_its_name(
+def test_the_project_of_the_current_folder_is_its_name(
     tmp_path, monkeypatch, capsys
 ):
     manifest = copy.deepcopy(load_manifest("finance"))
@@ -892,68 +892,68 @@ def test_the_service_of_the_current_folder_is_its_name(
 
     _check(".", "--manifest", path, "--json")
 
-    assert json.loads(capsys.readouterr().out)["service"] == "a-b"
+    assert json.loads(capsys.readouterr().out)["project"] == "a-b"
 
 
-def test_service_names_the_declared_service(tmp_path, capsys):
+def test_project_names_the_declared_project(tmp_path, capsys):
     manifest = copy.deepcopy(load_manifest("finance"))
     del manifest["metadata"]["project_name"]
     path = _write_json(tmp_path / "manifest.json", manifest)
 
-    _check(FINANCE, "--manifest", path, "--service", "other_service", "--json")
+    _check(FINANCE, "--manifest", path, "--project", "other_project", "--json")
 
-    # As given: the gates compare it with the service of each node.
-    assert json.loads(capsys.readouterr().out)["service"] == "other_service"
+    # As given: the gates compare it with the project of each node.
+    assert json.loads(capsys.readouterr().out)["project"] == "other_project"
 
 
-def test_the_service_that_the_manifest_names_wins_over_the_folder(
+def test_the_project_that_the_manifest_names_wins_over_the_folder(
     tmp_path, capsys
 ):
     path = _write_json(tmp_path / "manifest.json", load_manifest("finance"))
     project = tmp_path / "other_name"
     project.mkdir()
 
-    _check(project, "--manifest", path, "--service", "declared", "--json")
+    _check(project, "--manifest", path, "--project", "declared", "--json")
 
-    assert json.loads(capsys.readouterr().out)["service"] == "finance"
+    assert json.loads(capsys.readouterr().out)["project"] == "finance"
 
 
 CASES = FIXTURES / "dbt" / "projects" / "cases"
 PKG_TAGGED = "model.cases_pkg.pkg_tagged"
-OTHER_SERVICE = (
-    "the node's service is cases-pkg, the declared service is cases: the release "
-    "rejects a manifest that holds a node of another service as invalid_artifact"
+OTHER_PROJECT = (
+    "the node's project is cases-pkg, the declared project is cases: the release "
+    "rejects a manifest that holds a node of another project as invalid_artifact"
 )
 
 
-@pytest.mark.parametrize("flags", [(), ("--service", "cases")])
-def test_a_tagged_package_node_of_another_service_fails_the_check(
+@pytest.mark.parametrize("flags", [(), ("--project", "cases")])
+def test_a_tagged_package_node_of_another_project_fails_the_check(
     flags, tmp_path, capsys, caplog
 ):
-    # The folder `cases` gives the service `cases` when `--service` is not given.
+    # The folder `cases` gives the project `cases` when `--project` is not given.
     path = _write_json(tmp_path / "manifest.json", load_manifest("cases"))
 
     status = _check(CASES, "--manifest", path, *flags, "--json")
 
     assert status == 1
     document = json.loads(capsys.readouterr().out)
-    assert _lines(document, PKG_TAGGED) == [OTHER_SERVICE]
-    assert f"{PKG_TAGGED}: {OTHER_SERVICE}" in _errors(caplog)
-    # Only the package's tagged node is of another service.
+    assert _lines(document, PKG_TAGGED) == [OTHER_PROJECT]
+    assert f"{PKG_TAGGED}: {OTHER_PROJECT}" in _errors(caplog)
+    # Only the package's tagged node is of another project.
     assert [
         line["node_id"]
         for line in document["lines"]
-        if "declared service" in line["message"]
+        if "declared project" in line["message"]
     ] == [PKG_TAGGED]
 
 
-def test_the_help_says_the_service_is_the_one_the_team_deploys_under(capsys):
+def test_the_help_says_the_project_is_the_one_the_release_names(capsys):
     with pytest.raises(SystemExit):
         main(["dbt", "check", "--help"])
 
     out = " ".join(capsys.readouterr().out.split())
-    assert "the service the team deploys the project under" in out
-    assert "compares the service of every node it keeps with it" in out
+    assert "the project the release names" in out
+    assert "compares the project of every node it keeps with it" in out
 
 
 ABSENT = object()
@@ -1121,8 +1121,8 @@ def test_the_seeds_are_read_from_the_project_folder(tmp_path, capsys):
     shutil.copytree(FINANCE / "seeds", project / "seeds")
     path = _write_json(tmp_path / "manifest.json", load_manifest("finance"))
 
-    # The folder is not named after the service, so the service is given.
-    _check(project, "--manifest", path, "--service", "finance", "--json")
+    # The folder is not named after the project, so the project is given.
+    _check(project, "--manifest", path, "--project", "finance", "--json")
 
     document = json.loads(capsys.readouterr().out)
     assert _lines(document, COSTS_SEED) != []
@@ -1570,8 +1570,8 @@ FX_WARNING = (
 )
 FX_SEED_RATES = "seed.finance.seed_fx_rates_eur"
 GHOST = "entity Ghost is not a thing in the ontology"
-UNDECLARED_SERVICE = (
-    "not declared in the ontology: none of this service's contracts is checked"
+UNDECLARED_PROJECT = (
+    "not declared in the ontology: none of this project's contracts is checked"
 )
 BROKEN_ONTOLOGY = "the ontology file has 2 error(s): run continuo-contracts ontology check <file>"
 
@@ -1590,7 +1590,7 @@ def _check_bound(tmp_path, *flags, manifest=None, ontology=DEMO_PATH):
     )
     flags = ["--ontology", ontology, *flags] if ontology else flags
     return _check(
-        FINANCE_BOUND, "--manifest", path, "--service", "finance", *flags
+        FINANCE_BOUND, "--manifest", path, "--project", "finance", *flags
     )
 
 
@@ -1608,7 +1608,7 @@ def _above_information(caplog):
     ]
 
 
-def test_dbt_check_with_the_ontology_fails_on_a_per_service_error(
+def test_dbt_check_with_the_ontology_fails_on_a_per_project_error(
     tmp_path, caplog
 ):
     manifest = _bind(
@@ -1631,7 +1631,7 @@ def test_dbt_check_with_the_ontology_passes_on_warnings(tmp_path, caplog):
     ]
 
 
-def test_dbt_check_on_an_undeclared_service_prints_one_information_line(
+def test_dbt_check_on_an_undeclared_project_prints_one_information_line(
     tmp_path, caplog
 ):
     # The finance project binds nothing, and the ontology declares core alone.
@@ -1641,7 +1641,7 @@ def test_dbt_check_on_an_undeclared_service_prints_one_information_line(
         FINANCE,
         "--manifest",
         path,
-        "--service",
+        "--project",
         "finance",
         "--ontology",
         _put(tmp_path, CORE_ONLY_TEXT),
@@ -1649,12 +1649,12 @@ def test_dbt_check_on_an_undeclared_service_prints_one_information_line(
 
     assert status == 0
     assert _above_information(caplog) == []
-    assert _infos(caplog).count(UNDECLARED_SERVICE) == 1
+    assert _infos(caplog).count(UNDECLARED_PROJECT) == 1
     # The two banners, that line, the heading and the table: no other line.
     assert len(_infos(caplog)) == 2 + 1 + 1 + len(lite.RELEASE_ONLY)
 
 
-def test_a_service_the_ontology_does_not_declare_warns_for_each_binding_and_passes(
+def test_a_project_the_ontology_does_not_declare_warns_for_each_binding_and_passes(
     tmp_path, caplog
 ):
     status = _check_bound(tmp_path, ontology=_put(tmp_path, CORE_ONLY_TEXT))
@@ -1665,17 +1665,17 @@ def test_a_service_the_ontology_does_not_declare_warns_for_each_binding_and_pass
     assert all(
         m.endswith("they are kept as written and not checked") for m in warnings
     )
-    assert UNDECLARED_SERVICE in _infos(caplog)
+    assert UNDECLARED_PROJECT in _infos(caplog)
 
 
-def test_dbt_check_never_reads_another_service(tmp_path, caplog):
+def test_dbt_check_never_reads_another_project(tmp_path, caplog):
     # `core` grants nobody its `seed_users`: in the whole estate this read is an error, and the
-    # table `not_in_any_service` is a warning, and the ontology's things that no contract of this
-    # service holds are information. The lite check sees one service, so none of it shows.
+    # table `not_in_any_project` is a warning, and the ontology's things that no contract of this
+    # project holds are information. The lite check sees one project, so none of it shows.
     manifest = _bind(
         load_manifest("finance_bound"),
         "model.finance.operational_cost_per_user",
-        reads=["analytics.seed_users", "analytics.not_in_any_service"],
+        reads=["analytics.seed_users", "analytics.not_in_any_project"],
     )
 
     assert _check_bound(tmp_path, manifest=manifest) == 0
@@ -1739,7 +1739,7 @@ def test_the_json_document_has_the_warning_lines_and_the_same_keys(
     out = capsys.readouterr().out
     document = json.loads(out)
     assert out == json.dumps(document, indent=2) + "\n"
-    assert list(document) == ["lite", "ok", "service", "lines", "contracts"]
+    assert list(document) == ["lite", "ok", "project", "lines", "contracts"]
     assert document["ok"] is True
     assert document["lines"] == [
         {"level": "warning", "node_id": FX, "message": FX_WARNING}

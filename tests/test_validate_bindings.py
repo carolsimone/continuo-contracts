@@ -25,7 +25,7 @@ FIXTURES = Path(__file__).resolve().parent / "fixtures"
 DEMO = FIXTURES / "demo" / "service-py" / "contracts" / "py_daily_kpis.odcs.yaml"
 GOLDEN = FIXTURES / "dbt" / "golden" / "cases" / "analytics.generic_tests.json"
 PATH = "contracts/py_daily_kpis.odcs.yaml"
-SERVICE = "service-py"
+PROJECT = "service-py"
 
 # Each binding property, a value that is well shaped, and where it sits.
 SCHEMA_BINDINGS = [
@@ -108,7 +108,7 @@ def _dbt(*, schema=(), column=()):
 
 
 def _check_python(doc):
-    return validate_python_contract(doc, path=PATH, service=SERVICE)
+    return validate_python_contract(doc, path=PATH, project=PROJECT)
 
 
 def _check(family, doc):
@@ -321,7 +321,7 @@ def test_an_item_that_is_not_a_property_is_not_checked(family):
     doc = make(schema=items)
     # The schema stage refuses a list item that is not an object, so the rules read it alone.
     found = (
-        rule_issues(doc, path=PATH, service=SERVICE)
+        rule_issues(doc, path=PATH, project=PROJECT)
         if family == "python"
         else dbt_rule_issues(doc)
     )

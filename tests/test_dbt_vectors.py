@@ -71,13 +71,14 @@ EDITED = {
     ),
 }
 
-# The SHA-256 of the file, which no later change may move.
-DBT_CONTRACTS = "f3f5ceed22eeceafe03ab43f4c978ada153969cf39653ee85ef28a799f5791f9"
+# The SHA-256 of the file. Only a version that ships with a re-baseline may move it.
+DBT_CONTRACTS = "eaf79d62c891aeb58d997599c27699697b88400516b565bac6d4ebd8d8414669"
 
-# The SHA-256 of each vector file of 0.2.0, which no later change may move.
+# The SHA-256 of each vector file that 0.2.0 added. Only a version that ships with a re-baseline
+# may move one, as 0.5.0 moved `contracts.json`.
 OLDER_VECTORS = {
     "canonical_json.json": "5a597cd1c06dc5fe7b666c79015433b2311fa3e896dc14d1ee6300def2a50c6d",
-    "contracts.json": "069f87e5c4e7ed7110a41b02b1cd9b23c56a6b2a0e6cf2cb845f162fdac445c2",
+    "contracts.json": "4bb846edddb8f033cd5742dc0c7418159ebb6016a3c5ed800674c207324e6ea2",
     "hashing.json": "2f2270fd329f2380c4e8623225014222599b331766b3827d252fe1b2670cf329",
     "projection.json": "4cc7f7907b5c93e4830bdf5c5225cf2da2f3d8b4fca1b115ab24148eec2d1ea6",
     "sql_types.json": "7584965983a61ebc0ea5aa8efdf14ae12f7d76062891f727c7188f055577ed46",

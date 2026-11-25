@@ -62,7 +62,7 @@ REASONS: Final = (
     "api_version",
     "identity",
     "file_name",
-    "service",
+    "project",
     "missing_field",
     "unknown_property",
     "refused_property",
@@ -458,12 +458,12 @@ class _Contract:
     """A document that the JSON schema accepted.
 
     It holds what the rules read of the document besides its fields. The file name and the
-    service of the release matter only to the rules of a Python contract.
+    project of the release matter only to the rules of a Python contract.
     """
 
     doc: Mapping[str, Any]
     file_name: str = ""
-    service: str | None = None
+    project: str | None = None
 
     @property
     def schema_objects(self) -> Sequence[Any]:
@@ -766,21 +766,21 @@ def _placement_fault(name: str, level: str) -> tuple[str, str] | None:
 
 
 def _custom_properties(contract: _Contract) -> Iterator[Issue]:
-    yield from _property_issues(contract, _placement_fault, check_service=True)
+    yield from _property_issues(contract, _placement_fault, check_project=True)
 
 
 def _property_issues(
     contract: _Contract,
     fault_of: Callable[[str, str], tuple[str, str] | None],
     *,
-    check_service: bool,
+    check_project: bool,
 ) -> Iterator[Issue]:
     """Yield the issues of the `continuo` properties in every `customProperties` list.
 
     `fault_of(name, level)` gives the reason and the message of a property that may not sit on
     `level`, or `None`. A property that sits where it may and is written twice in one list is a
-    `value` issue at each later copy. With `check_service`, the `service` property is a string
-    with text and names the service of the release.
+    `value` issue at each later copy. With `check_project`, the `project` property is a string
+    with text and names the project of the release.
     """
     for path, level, items in _custom_property_lists(contract.doc, "", "root"):
         first: dict[str, int] = {}
@@ -804,33 +804,33 @@ def _property_issues(
                 )
             else:
                 first[name] = index
-            if check_service and name == "service":
-                yield from _service_issues(
-                    item.get("value"), where, contract.service
+            if check_project and name == "project":
+                yield from _project_issues(
+                    item.get("value"), where, contract.project
                 )
 
 
-def _service_issues(
-    value: object, where: str, service: str | None
+def _project_issues(
+    value: object, where: str, project: str | None
 ) -> Iterator[Issue]:
-    """Yield the issue of the `service` property at `where`.
+    """Yield the issue of the `project` property at `where`.
 
-    Its value is `value`, and `service` is the service of the release, or `None`
+    Its value is `value`, and `project` is the project of the release, or `None`
     when it is not known. A `value` issue says the value is not a string with
-    text, whether or not the service is known, and a `service` issue says it names
-    another service than the release's.
+    text, whether or not the project is known, and a `project` issue says it names
+    another project than the release's.
     """
     if not _is_text(value):
         yield _issue(
             where,
             "value",
-            f"`service` is {_shown(value)}, it must be the name of a service, a string with text",
+            f"`project` is {_shown(value)}, it must be the name of a project, a string with text",
         )
-    elif service is not None and value != service:
+    elif project is not None and value != project:
         yield _issue(
             where,
-            "service",
-            f"`service` is {_shown(value)}, the service of the release is {service!r}",
+            "project",
+            f"`project` is {_shown(value)}, the project of the release is {project!r}",
         )
 
 
@@ -1421,13 +1421,13 @@ _RULES: Final[tuple[_Rule, ...]] = (
 
 
 def rule_issues(
-    doc: Mapping[str, Any], *, path: str, service: str | None
+    doc: Mapping[str, Any], *, path: str, project: str | None
 ) -> list[Issue]:
     """Return the issues that continuo's rules find in `doc`, without the JSON schema check.
 
     `doc` is a document that `schema_issues` accepted, and `path` is the repository path of its
-    file, of which only the base name counts. `service` is the service of the release that
-    carries the contract, or `None` when it is not known, which skips the check of the `service`
+    file, of which only the base name counts. `project` is the project of the release that
+    carries the contract, or `None` when it is not known, which skips the check of the `project`
     property. The issues come in path order, then in message order.
 
     A name, wherever the rules ask for one, is a string that is not blank and has no whitespace at
@@ -1437,8 +1437,8 @@ def rule_issues(
     and the physical name agreeing with the table), the file name, `team.name`, the root fields a
     Python contract may not carry, and the custom properties of the `continuo` vendor: each must
     be a property that the vocabulary knows, that a Python contract carries and that sits where
-    it is written, and it may be written once in a list. A `service` property is a string with
-    text and, when `service` is given, names it.
+    it is written, and it may be written once in a list. A `project` property is a string with
+    text and, when `project` is given, names it.
 
     The rules of the node come after them. The contract writes `schedule` and `criticality`, and
     each property it writes has a value of its own kind: `schedule` is a name with no whitespace,
@@ -1461,26 +1461,26 @@ def rule_issues(
     `DOUBLE PRECISION`, and each column of a key of several has its own whole-number
     `primaryKeyPosition` from 1. A python-csv node is not checked for its key.
     """
-    contract = _Contract(doc=doc, file_name=_base_name(path), service=service)
+    contract = _Contract(doc=doc, file_name=_base_name(path), project=project)
     return _ordered(issue for rule in _RULES for issue in rule(contract))
 
 
 def validate_python_contract(
-    doc: object, *, path: str, service: str | None
+    doc: object, *, path: str, project: str | None
 ) -> list[Issue]:
     """Return every issue of the Python contract `doc`, or an empty list when it is valid.
 
     The result is `schema_issues(doc)` when that has any issue, and `rule_issues` of the same
     arguments otherwise, because the rules read a document of the shape the schema describes.
     `path` is the repository path of the file, of which only the base name is checked, and
-    `service` is the service of the release, or `None` to skip the check of the `service`
+    `project` is the project of the release, or `None` to skip the check of the `project`
     property.
     """
     found = schema_issues(doc)
     if found:
         return found
     # The schema accepts only an object, so `doc` is a mapping here.
-    return rule_issues(cast(Mapping[str, Any], doc), path=path, service=service)
+    return rule_issues(cast(Mapping[str, Any], doc), path=path, project=project)
 
 
 # The kinds of a dbt node, one for each resource type that gets a contract.
@@ -1488,17 +1488,17 @@ _DBT_KINDS: Final = tuple(f"dbt-{resource}" for resource in RESOURCE_TYPES)
 
 # The properties that every dbt contract writes, with what each says.
 _DBT_NEEDED: Final = {
-    "service": "the service that owns the node",
+    "project": "the project that owns the node",
     "kind": f"the kind of the node: {_one_of(_DBT_KINDS)}",
     "filePath": "the path of the file that declares the node",
     "materialization": "how dbt builds the node, as a mapping with its `materialized`",
 }
 
 
-def _check_dbt_service(value: object) -> Iterator[str]:
+def _check_dbt_project(value: object) -> Iterator[str]:
     if not _is_text(value):
         yield (
-            f"`service` is {_shown(value)}, it must be the name of a service, a string with text"
+            f"`project` is {_shown(value)}, it must be the name of a project, a string with text"
         )
 
 
@@ -1514,7 +1514,7 @@ def _check_file_path(value: object) -> Iterator[str]:
 # and `materialization`, which have rules of their own. A dormant node writes no schedule, and no
 # node needs a criticality or a timeout.
 _DBT_VALUE_CHECKS: Final[dict[str, Callable[[object], Iterator[str]]]] = {
-    "service": _check_dbt_service,
+    "project": _check_dbt_project,
     "filePath": _check_file_path,
     **{
         name: _VALUE_CHECKS[name]
@@ -1614,7 +1614,7 @@ def _dbt_team(contract: _Contract) -> Iterator[Issue]:
 
 def _dbt_custom_properties(contract: _Contract) -> Iterator[Issue]:
     yield from _property_issues(
-        contract, _dbt_placement_fault, check_service=False
+        contract, _dbt_placement_fault, check_project=False
     )
 
 
@@ -1715,7 +1715,7 @@ def dbt_rule_issues(doc: Mapping[str, Any]) -> list[Issue]:
     vendor: each must be a property that the vocabulary knows (`unknown_property`) and that a dbt
     contract uses, where it sits (`refused_property`, as `<name> is not a dbt contract property`
     for a Python-only one), and it may be written once in a list (`value`). The contract writes
-    `service`, `kind`, `filePath` and `materialization` (`missing_field`). `service` and
+    `project`, `kind`, `filePath` and `materialization` (`missing_field`). `project` and
     `filePath` are strings with text, `kind` is `dbt-model`, `dbt-seed` or `dbt-snapshot`,
     `materialization` is a mapping whose `materialized` is a string with text, `criticality` is
     `REGULATORY`, `CORE` or `SECONDARY`, `schedule` is a name with no whitespace at most 50

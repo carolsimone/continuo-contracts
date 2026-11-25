@@ -19,7 +19,7 @@ from continuo_contracts.validate import (
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 DEMO = FIXTURES / "demo" / "service-py" / "contracts" / "py_daily_kpis.odcs.yaml"
 KPIS_PATH = "contracts/py_daily_kpis.odcs.yaml"
-SERVICE = "service-py"
+PROJECT = "service-py"
 FULL = ["python_node", "python_csv", "python_api"]
 # continuo's own list of the secret names a python-api node may name, copied byte for byte from
 # pkg/domain/model/testdata/secret_ref_cases.json in the continuo repository, where the Go rule
@@ -43,8 +43,8 @@ def _full(name):
     return _load(FIXTURES / "full" / f"{name}.odcs.yaml")
 
 
-def _check(doc, *, path=KPIS_PATH, service=SERVICE):
-    return validate_python_contract(doc, path=path, service=service)
+def _check(doc, *, path=KPIS_PATH, project=PROJECT):
+    return validate_python_contract(doc, path=path, project=project)
 
 
 def _found(issues):
@@ -103,10 +103,10 @@ def test_the_full_fixtures_are_valid(fixture):
 
 
 @pytest.mark.parametrize("fixture", FULL)
-def test_the_full_fixtures_are_valid_when_the_service_is_not_known(fixture):
+def test_the_full_fixtures_are_valid_when_the_project_is_not_known(fixture):
     assert (
         validate_python_contract(
-            _full(fixture), path=_path_of(fixture), service=None
+            _full(fixture), path=_path_of(fixture), project=None
         )
         == []
     )
@@ -1077,7 +1077,7 @@ def test_a_unique_column_is_accepted_whatever_the_node():
 def test_a_column_that_is_not_a_mapping_does_not_stop_the_rules():
     doc = _kpis()
     doc["schema"][0]["properties"].insert(0, "day")
-    assert isinstance(rule_issues(doc, path=KPIS_PATH, service=SERVICE), list)
+    assert isinstance(rule_issues(doc, path=KPIS_PATH, project=PROJECT), list)
 
 
 # the upsert key
@@ -1154,7 +1154,7 @@ def test_a_double_precision_key_column_is_refused(raw):
 def test_a_column_type_that_is_not_a_string_is_refused_by_the_rule(raw):
     doc = _kpis()
     _columns(doc)[0]["physicalType"] = raw
-    issues = rule_issues(doc, path=KPIS_PATH, service=SERVICE)
+    issues = rule_issues(doc, path=KPIS_PATH, project=PROJECT)
     assert _found(issues) == [
         ("schema[0].properties[0].physicalType", "column_type")
     ]
@@ -1165,7 +1165,7 @@ def test_a_column_type_that_is_not_a_string_is_refused_by_the_rule(raw):
 def test_a_key_column_whose_type_is_not_a_string_gets_only_the_type_issue(raw):
     doc = _upsert()
     _columns(doc)[1]["physicalType"] = raw
-    issues = rule_issues(doc, path=_path_of("python_node"), service=SERVICE)
+    issues = rule_issues(doc, path=_path_of("python_node"), project=PROJECT)
     assert _found(issues) == [
         ("schema[0].properties[1].physicalType", "column_type")
     ]
@@ -1252,7 +1252,7 @@ def test_a_position_that_is_not_a_whole_number_from_one_is_refused_by_the_rule(
 ):
     doc = _upsert()
     _columns(doc)[1]["primaryKeyPosition"] = position
-    issues = rule_issues(doc, path=_path_of("python_node"), service=SERVICE)
+    issues = rule_issues(doc, path=_path_of("python_node"), project=PROJECT)
     assert _found(issues) == [
         ("schema[0].properties[1].primaryKeyPosition", "primary_key")
     ]
@@ -1262,7 +1262,7 @@ def test_a_bool_is_not_a_position_even_when_no_other_key_column_has_a_one():
     doc = _upsert()
     _columns(doc)[0]["primaryKeyPosition"] = 2
     _columns(doc)[1]["primaryKeyPosition"] = True
-    issues = rule_issues(doc, path=_path_of("python_node"), service=SERVICE)
+    issues = rule_issues(doc, path=_path_of("python_node"), project=PROJECT)
     assert _found(issues) == [
         ("schema[0].properties[1].primaryKeyPosition", "primary_key")
     ]

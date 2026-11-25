@@ -28,7 +28,7 @@ authoritativeDefinitions:
   - type: businessDefinition
     url: https://example.com/glossary/exchange-rate
 customProperties:
-  - {vendor: continuo, property: service, value: service-py}
+  - {vendor: continuo, property: project, value: service-py}
   - {vendor: continuo, property: kind, value: python-api}
   - {vendor: continuo, property: schedule, value: hourly}
   - {vendor: continuo, property: criticality, value: REGULATORY}

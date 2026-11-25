@@ -3,7 +3,7 @@
 Each case holds `ontology`, the text of an ontology file, `stored`, the stored contract of one
 node before `resolve`, with the bindings its team wrote, `resolved`, what `resolve` makes of it,
 `contract_hash`, the hash of `resolved`, and `findings`. The findings are the ones `check` writes
-for `resolved` alone, with the rules of `PER_SERVICE_RULES` (`contract`, `coverage`, `quality` and
+for `resolved` alone, with the rules of `PER_PROJECT_RULES` (`contract`, `coverage`, `quality` and
 `privacy`), the rules that need no other contract, as `{severity, rule, subject, message,
 contract_id}`, in the order `check` returns them.
 """
@@ -22,7 +22,7 @@ from ontology_fixtures import without_filled
 from continuo_contracts import ontology
 from continuo_contracts.canonical import canonical_json
 from continuo_contracts.contract import canonical_form, contract_hash
-from continuo_contracts.ontology_check import PER_SERVICE_RULES, check
+from continuo_contracts.ontology_check import PER_PROJECT_RULES, check
 from continuo_contracts.validate import schema_issues
 from continuo_contracts.vocabulary import continuo_values
 
@@ -36,8 +36,8 @@ GOLDEN = (
     / "analytics.fx_transactions_eur.json"
 )
 
-# The SHA-256 of the file, which no later change may move.
-ONTOLOGY_JSON = "d4a64f5b203ca30f2a534ac35ac0e5131f297505fc863562fabb4562b58d5416"
+# The SHA-256 of the file. Only a version that ships with a re-baseline may move it.
+ONTOLOGY_JSON = "5577b356fd0e6877d02fca26b1d2d7eaab3bac9a2146784f89f1bc3db62fd523"
 
 FIELDS = {"name", "ontology", "stored", "resolved", "contract_hash", "findings"}
 FINDING_FIELDS = {"severity", "rule", "subject", "message", "contract_id"}
@@ -55,15 +55,15 @@ def _kind(document):
     return continuo_values(document["customProperties"])["kind"]
 
 
-def _service(document):
-    return continuo_values(document["customProperties"])["service"]
+def _project(document):
+    return continuo_values(document["customProperties"])["project"]
 
 
 def _findings(case):
     found = check(
         ontology.load(case["ontology"]),
         [case["resolved"]],
-        rules=PER_SERVICE_RULES,
+        rules=PER_PROJECT_RULES,
     )
     return [
         {
@@ -94,16 +94,16 @@ def test_every_case_holds_the_documented_fields():
         assert all(set(finding) == FINDING_FIELDS for finding in case["findings"])
 
 
-def test_the_cases_cover_both_families_and_a_service_the_ontology_does_not_declare():
+def test_the_cases_cover_both_families_and_a_project_the_ontology_does_not_declare():
     families = {_kind(case["stored"]).split("-")[0] for case in CASES}
     undeclared = [
         case
         for case in CASES
-        if not ontology.load(case["ontology"]).declares(_service(case["stored"]))
+        if not ontology.load(case["ontology"]).declares(_project(case["stored"]))
     ]
 
     assert families == {"dbt", "python"}
-    assert [case["name"] for case in undeclared] == ["service_not_declared"]
+    assert [case["name"] for case in undeclared] == ["project_not_declared"]
     assert any(case["findings"] == [] for case in CASES)
     assert any(case["findings"] for case in CASES)
 
@@ -153,10 +153,10 @@ def test_stripping_a_resolved_form_removes_the_ontology_part_and_nothing_a_team_
     assert without_filled(resolved) == without_filled(stored)
 
 
-def test_a_declared_service_gains_what_the_ontology_knows_and_an_undeclared_one_gains_nothing():
+def test_a_declared_project_gains_what_the_ontology_knows_and_an_undeclared_one_gains_nothing():
     for case in CASES:
         declared = ontology.load(case["ontology"]).declares(
-            _service(case["stored"])
+            _project(case["stored"])
         )
         assert (case["resolved"] != case["stored"]) == declared, case["name"]
         if not declared:
@@ -177,4 +177,4 @@ def test_the_dbt_cases_are_the_bound_fixtures_and_the_golden_resolved_form():
     assert fx["resolved"] == golden["resolved"]
     assert fx["contract_hash"] == golden["contract_hash"]
     assert seed["stored"] == bound_stored("core_bound")["analytics.seed_users"]
-    assert by_name["service_not_declared"]["stored"] == seed["stored"]
+    assert by_name["project_not_declared"]["stored"] == seed["stored"]

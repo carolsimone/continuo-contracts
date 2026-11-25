@@ -25,7 +25,7 @@ gives; the reader never repairs it. The [vectors](vectors.md) ship in the wheel,
 
 [Validation](validation.md) uses `continuo_contracts/odcs-json-schema-v3.2.0.json` (ODCS v3.2.0,
 JSON Schema draft 2019-09) and [continuo](glossary.md#continuo)'s rules. The hashes are defined on a
-contract that passed it. `normalise_*` checks only `service` and the `reads` tables, so a port that
+contract that passed it. `normalise_*` checks only `project` and the `reads` tables, so a port that
 hashes only contracts the package accepted need not validate.
 
 A dbt node's `id` is `<schema>.<table>` lower-cased as one string by Python 3.14's `str.lower`

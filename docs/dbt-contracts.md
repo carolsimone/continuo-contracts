@@ -43,10 +43,10 @@ Three [gates](glossary.md#gate), tried in this order, decide whether a model, se
 |---|---|
 | `no_owner` | it has no `config.meta.owner`, or an empty one |
 | `local_stub` | it has the tag `local_stub` |
-| `installed_package` | it has no tag and its service is not the project's service |
+| `installed_package` | it has no tag and its project is not the manifest's project |
 
-A node's service is its `service` property. The project's service is `metadata.project_name`
-with `_` replaced by `-`, else the [declared service](glossary.md#declared-service) (`--service`).
+A node's project is its `project` property. The manifest's project is `metadata.project_name`
+with `_` replaced by `-`, else the [declared project](glossary.md#declared-project) (`--project`).
 With neither, no node is skipped as `installed_package`.
 
 ## Contract fields
@@ -67,7 +67,7 @@ shape the generator cannot read raises an error, `DbtNodeError`, that names the 
 | `roles` | each of `config.meta.continuo.readers` as `{role, access: read}`, then the grants |
 | `roles` (grants) | `{role: <grantee>, access: <privilege>}`, privileges sorted by name |
 | `schema[0]` property `reads` | `config.meta.continuo.reads` |
-| property `service` | the first entry of `fqn`, `_` written `-` |
+| property `project` | the first entry of `fqn`, `_` written `-` |
 | property `kind` | `dbt-model`, `dbt-seed` or `dbt-snapshot` |
 | property `schedule` | the first tag, else `seed` for a seed, else none: the node runs by hand |
 | property `criticality` | `config.meta.criticality`, else `SECONDARY` |
@@ -84,7 +84,7 @@ shape the generator cannot read raises an error, `DbtNodeError`, that names the 
 | `schema[0]` properties `entity`, `grain`, `fixed`, `filter` | the same keys of `config.meta.continuo`: [bindings](#bind-to-an-ontology) |
 
 A property is a root `{vendor: continuo, property, value}` item, written in this order when it has
-a value. `service` is left out with no `fqn`, which validation reports as `missing_field`.
+a value. `project` is left out with no `fqn`, which validation reports as `missing_field`.
 `materialization` leaves out `onSchemaChange: ignore`, and `snapshot` holds `strategy`,
 `unique_key`, `updated_at`, `check_cols`, `hard_deletes` in camelCase, then
 `snapshot_meta_column_names` as `metaColumnNames` and `dbt_valid_to_current` as `validToCurrent`.

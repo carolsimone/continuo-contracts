@@ -28,7 +28,7 @@ class HashInputError(ContractsError):
     Examples are a unit key that is empty, a unit digest that is not 64 lowercase
     hex characters, a `reads` entry of a contract that is not `<schema>.<table>`
     (exactly two parts joined by a dot, neither empty, with no whitespace and no
-    control character) or a service of a release that is empty or blank.
+    control character) or a project of a release that is empty or blank.
 
     The message names the offending unit key or `reads` entry.
     """

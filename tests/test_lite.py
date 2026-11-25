@@ -36,7 +36,7 @@ LOCAL_STUB = "local stub, continuo skips it"
 INSTALLED_PACKAGE = "from an installed package and has no tag, continuo skips it"
 DORMANT = "no tag: a dormant node, it runs only by hand"
 ALL_SKIPPED = (
-    "every node of the service is skipped: the release rejects it as "
+    "every node of the project is skipped: the release rejects it as "
     "invalid_artifact (manifest contains no model/seed nodes)"
 )
 UNREADABLE = (
@@ -96,9 +96,9 @@ def _declared_header(node):
     return CASES_HEADERS[node["unique_id"]]
 
 
-def _check(manifest, *, read_header=_declared_header, service=""):
+def _check(manifest, *, read_header=_declared_header, project=""):
     return lite.check_manifest(
-        manifest, declared_service=service, read_header=read_header
+        manifest, declared_project=project, read_header=read_header
     )
 
 
@@ -150,7 +150,7 @@ def _golden_hashes(project):
 def test_cases_lists_each_skip_with_its_reason_and_passes_except_the_bad_nodes():
     report = _check(load_manifest("cases"))
 
-    assert report.service == "cases"
+    assert report.project == "cases"
     assert report.lines == CASES_LINES
     assert report.ok is False
     assert [line.node_id for line in report.lines] == sorted(
@@ -190,7 +190,7 @@ def test_every_line_has_a_level_of_info_or_error():
     assert {line.level for line in report.lines} == {"info", "error"}
 
 
-# A service with nothing kept.
+# A project with nothing kept.
 
 
 @pytest.mark.parametrize(
@@ -208,15 +208,15 @@ def test_every_line_has_a_level_of_info_or_error():
     ],
     ids=["no nodes key", "null nodes", "no node", "no model, seed or snapshot"],
 )
-def test_every_skipped_service_fails(manifest):
-    report = _check(manifest, service="shop")
+def test_every_skipped_project_fails(manifest):
+    report = _check(manifest, project="shop")
 
     assert report.lines == (Line("error", "", ALL_SKIPPED),)
     assert report.ok is False
     assert report.contracts == {}
 
 
-def test_a_service_whose_nodes_are_all_skipped_lists_each_skip_then_fails():
+def test_a_project_whose_nodes_are_all_skipped_lists_each_skip_then_fails():
     manifest = _manifest(
         _model("a", owner=""),
         _model("b", tags=("local_stub",)),
@@ -237,7 +237,7 @@ def test_a_service_whose_nodes_are_all_skipped_lists_each_skip_then_fails():
     assert report.contracts == {}
 
 
-def test_a_kept_node_with_a_problem_is_not_a_skipped_service():
+def test_a_kept_node_with_a_problem_is_not_a_skipped_project():
     manifest = _manifest(_model("a", owner=""), _model("b", tags=("a", 1)))
 
     report = _check(manifest)
@@ -431,11 +431,11 @@ def test_with_no_project_name_every_kept_seed_has_its_header_checked():
     seed.update(package_name="pkg", tags=["daily"])
     manifest = {"nodes": {seed["unique_id"]: seed}}
 
-    report = _check(manifest, read_header=lambda node: ["a"], service="shop")
+    report = _check(manifest, read_header=lambda node: ["a"], project="shop")
 
-    # The header agrees with the declared columns: the one line is the service check's.
+    # The header agrees with the declared columns: the one line is the project check's.
     assert report.lines == (
-        Line("error", "seed.pkg.rates", _other_service("pkg", "shop")),
+        Line("error", "seed.pkg.rates", _other_project("pkg", "shop")),
     )
 
 
@@ -653,7 +653,7 @@ def test_a_node_whose_gate_cannot_read_it_is_an_error_line():
 
     report = _check(manifest)
 
-    # The node is not skipped, so the service is not all skipped.
+    # The node is not skipped, so the project is not all skipped.
     assert report.lines == (
         Line(
             "error",
@@ -694,21 +694,21 @@ def test_the_problems_of_one_node_come_in_a_fixed_order():
     ]
 
 
-# The service and the order.
+# The project and the order.
 
 
-def test_the_service_is_the_one_the_gates_compare_with():
+def test_the_project_is_the_one_the_gates_compare_with():
     named = _manifest(_model("orders", project="my_shop"), project="my_shop")
 
-    assert _check(named, service="declared").service == "my-shop"
+    assert _check(named, project="declared").project == "my-shop"
     assert (
-        _check({"nodes": named["nodes"]}, service="declared").service
+        _check({"nodes": named["nodes"]}, project="declared").project
         == "declared"
     )
-    assert _check({}, service="").service == ""
+    assert _check({}, project="").project == ""
 
 
-def test_a_node_of_another_package_is_skipped_against_the_declared_service():
+def test_a_node_of_another_package_is_skipped_against_the_declared_project():
     manifest = {
         "nodes": {
             "model.shop.orders": _model("orders"),
@@ -716,16 +716,16 @@ def test_a_node_of_another_package_is_skipped_against_the_declared_service():
         }
     }
 
-    report = _check(manifest, service="shop")
+    report = _check(manifest, project="shop")
 
     assert report.lines == (Line("info", "model.pkg.rates", INSTALLED_PACKAGE),)
 
 
 @pytest.mark.parametrize(
-    ("project", "service"),
+    ("project", "declared"),
     [("cases", ""), ("core", ""), ("cases", "cases"), ("core", "other")],
 )
-def test_report_lines_do_not_depend_on_manifest_order(project, service):
+def test_report_lines_do_not_depend_on_manifest_order(project, declared):
     manifest = load_manifest(project)
     before = copy.deepcopy(manifest)
     nodes = list(manifest["nodes"].items())
@@ -737,36 +737,38 @@ def test_report_lines_do_not_depend_on_manifest_order(project, service):
         **manifest,
         "nodes": dict(nodes[1::2] + nodes[::2]),
     }
-    expected = _check(manifest, read_header=_csv_header(project), service=service)
+    expected = _check(
+        manifest, read_header=_csv_header(project), project=declared
+    )
 
     for other in (reordered, shuffled):
-        report = _check(other, read_header=_csv_header(project), service=service)
+        report = _check(other, read_header=_csv_header(project), project=declared)
 
         assert report == expected
         assert list(report.contracts) == list(expected.contracts)
     assert manifest == before
 
 
-# The release's service check: a kept node of another service than the declared one.
+# The release's project check: a kept node of another project than the declared one.
 
 
-def _other_service(node_service, declared):
+def _other_project(node_project, declared):
     return (
-        f"the node's service is {node_service}, the declared service is {declared}: "
-        "the release rejects a manifest that holds a node of another service as "
+        f"the node's project is {node_project}, the declared project is {declared}: "
+        "the release rejects a manifest that holds a node of another project as "
         "invalid_artifact"
     )
 
 
-def test_a_tagged_package_node_is_an_error_against_the_declared_service():
+def test_a_tagged_package_node_is_an_error_against_the_declared_project():
     manifest = load_manifest("cases")
 
-    report = _check(manifest, service="cases")
+    report = _check(manifest, project="cases")
 
     line = Line(
         "error",
         "model.cases_pkg.pkg_tagged",
-        _other_service("cases-pkg", "cases"),
+        _other_project("cases-pkg", "cases"),
     )
     lines = list(CASES_LINES)
     lines.insert(
@@ -782,42 +784,42 @@ def test_a_tagged_package_node_is_an_error_against_the_declared_service():
     assert "analytics.pkg_tagged" in report.contracts
 
 
-def test_every_node_of_the_project_passes_the_service_check_of_its_own_service():
+def test_every_node_of_the_project_passes_the_project_check_of_its_own_project():
     manifest = copy.deepcopy(load_manifest("cases"))
     for key in [
         key for key in manifest["nodes"] if key.startswith("model.cases_pkg.")
     ]:
         del manifest["nodes"][key]
 
-    report = _check(manifest, service="cases")
+    report = _check(manifest, project="cases")
 
     assert report == _check(manifest)
     assert not [
-        line for line in report.lines if "declared service" in line.message
+        line for line in report.lines if "declared project" in line.message
     ]
 
 
-def test_an_empty_declared_service_makes_no_service_check():
+def test_an_empty_declared_project_makes_no_project_check():
     manifest = {"nodes": {"model.pkg.rates": _model("rates", project="pkg")}}
 
-    report = _check(manifest, service="")
+    report = _check(manifest, project="")
 
     assert report.lines == ()
     assert report.ok is True
 
 
-def test_a_skipped_node_of_another_service_gets_no_service_line():
+def test_a_skipped_node_of_another_project_gets_no_project_line():
     manifest = _manifest(
         _model("orders"), _model("rates", project="pkg", tags=())
     )
 
-    report = _check(manifest, service="shop")
+    report = _check(manifest, project="shop")
 
     assert report.lines == (Line("info", "model.pkg.rates", INSTALLED_PACKAGE),)
 
 
-NO_SERVICE = (
-    "the node has no service, the declared service is shop: the release rejects "
+NO_PROJECT = (
+    "the node has no project, the declared project is shop: the release rejects "
     "the manifest as invalid_artifact"
 )
 
@@ -825,42 +827,42 @@ NO_SERVICE = (
 @pytest.mark.parametrize(
     "fqn", [None, [], [""]], ids=["no fqn", "an empty fqn", "an empty first name"]
 )
-def test_a_kept_node_with_no_service_says_it_has_none(fqn):
+def test_a_kept_node_with_no_project_says_it_has_none(fqn):
     node = _model("orders")
     if fqn is None:
         del node["fqn"]
     else:
         node["fqn"] = fqn
-    assert dbt.node_service(node) == ""
-    # A tagged node with no service passes the gates.
+    assert dbt.node_project(node) == ""
+    # A tagged node with no project passes the gates.
     assert dbt.skip_reason(node, project="shop") is None
 
-    report = _check(_manifest(node), service="shop")
+    report = _check(_manifest(node), project="shop")
 
-    assert report.lines[0] == Line("error", "model.shop.orders", NO_SERVICE)
+    assert report.lines[0] == Line("error", "model.shop.orders", NO_PROJECT)
     # The node keeps the error lines its contract has.
     assert len(report.lines) > 1
     assert all(line.node_id == "model.shop.orders" for line in report.lines)
 
 
-def test_a_project_node_is_an_error_against_another_declared_service():
+def test_a_project_node_is_an_error_against_another_declared_project():
     manifest = _manifest(_model("orders"), project="my_shop")
 
-    report = _check(manifest, service="my_shop")
+    report = _check(manifest, project="my_shop")
 
-    # The node's service has `_` written `-`, and the declared service is compared as given.
+    # The node's project has `_` written `-`, and the declared project is compared as given.
     assert report.lines == (
-        Line("error", "model.shop.orders", _other_service("shop", "my_shop")),
+        Line("error", "model.shop.orders", _other_project("shop", "my_shop")),
     )
     assert list(report.contracts) == ["analytics.orders"]
 
 
-def test_the_all_skipped_line_is_unchanged_by_the_service_check():
+def test_the_all_skipped_line_is_unchanged_by_the_project_check():
     manifest = _manifest(
         _model("a", owner=""), _model("c", project="other", tags=())
     )
 
-    report = _check(manifest, service="another")
+    report = _check(manifest, project="another")
 
     assert report.lines == (
         Line("info", "model.other.c", INSTALLED_PACKAGE),
@@ -869,7 +871,7 @@ def test_the_all_skipped_line_is_unchanged_by_the_service_check():
     )
 
 
-def test_the_service_line_comes_first_among_the_lines_of_a_node():
+def test_the_project_line_comes_first_among_the_lines_of_a_node():
     dormant = _aliased("orders", "orders_b", project="pkg")
     dormant["tags"] = []
     dormant["config"]["meta"]["criticality"] = "high"
@@ -880,15 +882,15 @@ def test_the_service_line_comes_first_among_the_lines_of_a_node():
         _aliased("orders", "orders_a"), dormant, broken, project="pkg"
     )
 
-    report = _check(manifest, service="shop")
+    report = _check(manifest, project="shop")
 
     assert [line.message for line in report.lines] == [
-        _other_service("pkg", "shop"),
+        _other_project("pkg", "shop"),
         DORMANT,
         "customProperties[2].value: `criticality` is 'high', it must be one of "
         "REGULATORY, CORE, SECONDARY",
         _SHARED.format("analytics.orders", "model.shop.orders"),
-        _other_service("pkg", "shop"),
+        _other_project("pkg", "shop"),
         "config.materialized must be a non-empty string, got int",
         _SHARED.format("analytics.orders", "model.pkg.orders"),
     ]
@@ -942,7 +944,7 @@ def test_a_line_and_a_report_cannot_be_changed():
     with pytest.raises(dataclasses.FrozenInstanceError):
         line.message = "x"
     with pytest.raises(dataclasses.FrozenInstanceError):
-        report.service = "x"
+        report.project = "x"
 
 
 def test_a_line_and_a_report_name_their_fields():
@@ -952,7 +954,7 @@ def test_a_line_and_a_report_name_their_fields():
         "message",
     ]
     assert [f.name for f in dataclasses.fields(LiteReport)] == [
-        "service",
+        "project",
         "lines",
         "contracts",
     ]
@@ -961,7 +963,7 @@ def test_a_line_and_a_report_name_their_fields():
 def test_the_banner_says_what_passing_does_not_guarantee():
     assert lite.BANNER == (
         "LITE CHECK. Passing it does not guarantee that continuo will create "
-        "this service's contracts at release time."
+        "this project's contracts at release time."
     )
 
 
@@ -1018,7 +1020,7 @@ def test_a_value_canonical_json_cannot_write_is_one_error_line(change, message):
     manifest = copy.deepcopy(load_manifest("cases"))
     change(manifest)
     report = lite.check_manifest(
-        manifest, declared_service="cases", read_header=lambda node: []
+        manifest, declared_project="cases", read_header=lambda node: []
     )
     (line,) = [
         line
@@ -1158,11 +1160,11 @@ def test_no_fixture_project_has_a_shared_id(project):
 
 # The lite check against an ontology.
 
-UNDECLARED_SERVICE = (
-    "not declared in the ontology: none of this service's contracts is checked"
+UNDECLARED_PROJECT = (
+    "not declared in the ontology: none of this project's contracts is checked"
 )
 UNDECLARED_BINDINGS = (
-    "writes bindings, but its service is not declared in the ontology: they are "
+    "writes bindings, but its project is not declared in the ontology: they are "
     "kept as written and not checked"
 )
 BROKEN_ONTOLOGY = "the ontology file has 2 error(s): run continuo-contracts ontology check <file>"
@@ -1171,7 +1173,7 @@ FX_WARNING = (
     "column rate_to_eur comes from FxRate, which Transaction does not reach "
     "through any reference: the join is not a declared relationship"
 )
-SERVICES = {"core_bound": "core", "finance_bound": "finance"}
+PROJECTS = {"core_bound": "core", "finance_bound": "finance"}
 # The ontology of the `shop` nodes that the tests below write: one thing, which no node binds
 # unless a test says so.
 SHOP = ontology.load(
@@ -1179,7 +1181,7 @@ SHOP = ontology.load(
 principals:
   domains:
     shop: {owner_team: shop-data}
-  services:
+  projects:
     shop: {domain: shop, kind: dbt}
 entities:
   Order:
@@ -1194,7 +1196,7 @@ def _bound(project, onto=DEMO, manifest=None):
     """The lite check of a bound fixture project, with its own seed headers."""
     return lite.check_manifest(
         manifest or load_manifest(project),
-        declared_service=SERVICES[project],
+        declared_project=PROJECTS[project],
         read_header=_csv_header(project),
         ontology=onto,
     )
@@ -1241,7 +1243,7 @@ def test_the_default_is_no_ontology_and_no_binding_is_checked():
 
     assert report == lite.check_manifest(
         manifest,
-        declared_service="",
+        declared_project="",
         read_header=_declared_header,
         ontology=None,
     )
@@ -1249,11 +1251,11 @@ def test_the_default_is_no_ontology_and_no_binding_is_checked():
     assert list(report.contracts) == ["analytics.orders"]
 
 
-@pytest.mark.parametrize("project", SERVICES)
+@pytest.mark.parametrize("project", PROJECTS)
 def test_a_bound_project_has_no_line_when_no_ontology_is_given(project):
     report = lite.check_manifest(
         load_manifest(project),
-        declared_service=SERVICES[project],
+        declared_project=PROJECTS[project],
         read_header=_csv_header(project),
     )
 
@@ -1266,7 +1268,7 @@ def test_a_binding_of_the_wrong_shape_is_an_error_whatever_the_ontology():
     without = _check(_manifest(node))
     with_one = lite.check_manifest(
         _manifest(node),
-        declared_service="",
+        declared_project="",
         read_header=_declared_header,
         ontology=SHOP,
     )
@@ -1291,12 +1293,12 @@ def test_a_warning_of_the_ontology_is_a_warning_line_and_the_check_passes():
     assert report.ok is True
 
 
-@pytest.mark.parametrize("project", SERVICES)
+@pytest.mark.parametrize("project", PROJECTS)
 def test_the_hashes_do_not_depend_on_the_ontology(project):
     manifest = load_manifest(project)
     plain = lite.check_manifest(
         manifest,
-        declared_service=SERVICES[project],
+        declared_project=PROJECTS[project],
         read_header=_csv_header(project),
     )
 
@@ -1325,7 +1327,7 @@ def test_the_lines_of_a_node_come_before_the_ontology_lines_of_the_node():
 
     report = lite.check_manifest(
         _manifest(node),
-        declared_service="shop",
+        declared_project="shop",
         read_header=_declared_header,
         ontology=SHOP,
     )
@@ -1339,17 +1341,17 @@ def test_the_lines_of_a_node_come_before_the_ontology_lines_of_the_node():
     )
 
 
-def test_an_undeclared_service_is_one_information_line_for_the_service():
+def test_an_undeclared_project_is_one_information_line_for_the_project():
     report = _bound("finance_bound", ontology.load(CORE_ONLY_TEXT))
 
     assert report.ok is True
-    assert report.lines[-1] == Line("info", "", UNDECLARED_SERVICE)
+    assert report.lines[-1] == Line("info", "", UNDECLARED_PROJECT)
     assert [line for line in report.lines if line.level == "info"] == [
         report.lines[-1]
     ]
 
 
-def test_each_contract_with_bindings_in_an_undeclared_service_is_a_warning():
+def test_each_contract_with_bindings_in_an_undeclared_project_is_a_warning():
     report = _bound("finance_bound", ontology.load(CORE_ONLY_TEXT))
 
     assert [line.node_id for line in report.lines[:-1]] == [
@@ -1366,23 +1368,23 @@ def test_each_contract_with_bindings_in_an_undeclared_service_is_a_warning():
     }
 
 
-def test_an_undeclared_service_whose_nodes_bind_nothing_has_only_the_information_line():
+def test_an_undeclared_project_whose_nodes_bind_nothing_has_only_the_information_line():
     report = lite.check_manifest(
         _manifest(_model()),
-        declared_service="shop",
+        declared_project="shop",
         read_header=_declared_header,
         ontology=ontology.load(CORE_ONLY_TEXT),
     )
 
-    assert report.lines == (Line("info", "", UNDECLARED_SERVICE),)
+    assert report.lines == (Line("info", "", UNDECLARED_PROJECT),)
 
 
-def test_a_broken_ontology_is_one_error_line_for_the_service():
+def test_a_broken_ontology_is_one_error_line_for_the_project():
     node = _bind(_model(), entity="Ghost")
 
     report = lite.check_manifest(
         _manifest(node),
-        declared_service="shop",
+        declared_project="shop",
         read_header=_declared_header,
         ontology=ontology.load(BROKEN_TEXT),
     )
@@ -1404,7 +1406,7 @@ def test_a_broken_ontology_line_comes_before_the_line_for_skipped_nodes():
 
     report = lite.check_manifest(
         _manifest(node),
-        declared_service="shop",
+        declared_project="shop",
         read_header=_declared_header,
         ontology=ontology.load(BROKEN_TEXT),
     )
@@ -1421,7 +1423,7 @@ def test_the_error_count_of_a_broken_ontology_is_the_number_of_findings():
 
     report = lite.check_manifest(
         _manifest(_model()),
-        declared_service="shop",
+        declared_project="shop",
         read_header=_declared_header,
         ontology=one,
     )
@@ -1435,7 +1437,7 @@ def test_the_error_count_of_a_broken_ontology_is_the_number_of_findings():
     )
 
 
-def test_only_the_rules_that_need_no_other_service_run(monkeypatch):
+def test_only_the_rules_that_need_no_other_project_run(monkeypatch):
     calls = []
     real = ontology_check.check
 
@@ -1449,17 +1451,17 @@ def test_only_the_rules_that_need_no_other_service_run(monkeypatch):
 
     [(onto, contracts, rules)] = calls
     assert onto is DEMO
-    assert rules == ontology_check.PER_SERVICE_RULES
+    assert rules == ontology_check.PER_PROJECT_RULES
     assert not {"access", "order", "drift"} & set(rules)
     assert len(contracts) == 7
 
 
-def test_a_read_of_another_services_table_is_no_error_and_no_warning():
+def test_a_read_of_another_projects_table_is_no_error_and_no_warning():
     manifest = copy.deepcopy(load_manifest("finance_bound"))
     # core grants nobody its `seed_users`, and finance reads it.
     _bind(
         manifest["nodes"]["model.finance.operational_cost_per_user"],
-        reads=["analytics.seed_users", "analytics.not_in_any_service"],
+        reads=["analytics.seed_users", "analytics.not_in_any_project"],
     )
 
     report = _bound("finance_bound", manifest=manifest)
@@ -1522,7 +1524,7 @@ def test_a_node_with_no_stored_contract_is_not_checked_against_the_ontology(
 
     report = lite.check_manifest(
         _manifest(node),
-        declared_service="shop",
+        declared_project="shop",
         read_header=_declared_header,
         ontology=SHOP,
     )
@@ -1531,13 +1533,13 @@ def test_a_node_with_no_stored_contract_is_not_checked_against_the_ontology(
     assert GHOST not in report.lines[0].message
 
 
-def test_a_node_of_another_service_is_not_checked_against_the_ontology():
+def test_a_node_of_another_project_is_not_checked_against_the_ontology():
     own = _bind(_model("orders"), entity="Ghost")
     other = _bind(_model("sales", project="other"), entity="Ghost")
 
     report = lite.check_manifest(
         _manifest(own, other),
-        declared_service="shop",
+        declared_project="shop",
         read_header=_declared_header,
         ontology=SHOP,
     )
@@ -1547,31 +1549,31 @@ def test_a_node_of_another_service_is_not_checked_against_the_ontology():
         for line in report.lines
         if line.node_id == "model.other.sales"
     ] == [
-        "the node's service is other, the declared service is shop: the release "
-        "rejects a manifest that holds a node of another service as invalid_artifact"
+        "the node's project is other, the declared project is shop: the release "
+        "rejects a manifest that holds a node of another project as invalid_artifact"
     ]
     assert ("model.shop.orders", GHOST) in _messages(report)
     assert not [line for line in report.lines if line.level == "info"]
 
 
-def test_every_node_is_checked_when_no_service_is_declared():
+def test_every_node_is_checked_when_no_project_is_declared():
     own = _bind(_model("orders"), entity="Ghost")
     other = _bind(_model("sales", project="other"), entity="Ghost")
 
     report = lite.check_manifest(
         _manifest(own, other),
-        declared_service="",
+        declared_project="",
         read_header=_declared_header,
         ontology=SHOP,
     )
 
     assert ("model.shop.orders", GHOST) in _messages(report)
-    # The service `other` is not the ontology's, so its contract is not checked and says so.
+    # The project `other` is not the ontology's, so its contract is not checked and says so.
     assert ("model.other.sales", GHOST) not in _messages(report)
     assert (
         Line("warning", "model.other.sales", UNDECLARED_BINDINGS) in report.lines
     )
-    assert Line("info", "", UNDECLARED_SERVICE) in report.lines
+    assert Line("info", "", UNDECLARED_PROJECT) in report.lines
 
 
 def test_nodes_that_share_a_contract_id_are_not_checked_against_the_ontology():
@@ -1580,7 +1582,7 @@ def test_nodes_that_share_a_contract_id_are_not_checked_against_the_ontology():
 
     report = lite.check_manifest(
         _manifest(first, second),
-        declared_service="",
+        declared_project="",
         read_header=_declared_header,
         ontology=SHOP,
     )

@@ -7,11 +7,13 @@ The platform that runs a team's dbt and Python nodes on schedules and stores the
 fingerprints. Its [release](#release) builds each node's [contract](#contract) with this package.
 ### release
 continuo's release step. It builds, checks and hashes every contract, and can reject the project.
-### service
-The name continuo knows a project by: for dbt, the `name:` in `dbt_project.yml` with `_` written
-`-`, so `my_shop` is `my-shop` ([check your project](check-your-project.md)).
-### declared service
-The service a release or `--service` gives. A [kept node](#kept-node) of another service makes the
+### project
+The code a team releases to continuo as one unit: a dbt project, or a package of Python nodes.
+continuo knows a dbt project by the `name:` in `dbt_project.yml` with `_` written `-`, so
+`my_shop` is `my-shop` ([check your project](check-your-project.md)). Every contract names its
+project in the `continuo` property `project`.
+### declared project
+The project a release or `--project` gives. A [kept node](#kept-node) of another project makes the
 release reject the manifest as `invalid_artifact`.
 ### manifest
 dbt's `target/manifest.json`, the project as `dbt parse` reads it ([walkthrough](walkthrough.md)).
@@ -40,7 +42,7 @@ This package checks contracts against the ODCS v3.2.0 JSON schema, which it ship
 ### quality rule
 An item of a contract's `quality` list. A dbt test becomes one ([dbt contracts](dbt-contracts.md)).
 ### ontology
-A YAML file that names who acts on data (domains, services, teams, roles, people) and what the data
+A YAML file that names who acts on data (domains, projects, teams, roles, people) and what the data
 is about ([things](#thing)). Contracts are bound to it and checked against it
 ([ontology](ontology.md)).
 ### thing
@@ -51,7 +53,7 @@ One of the seven `continuo` custom properties that tie a contract to the ontolog
 `grain`, `fixed` and `filter` on the table, `property`, `local` and `aggregate` on a column
 ([ontology](ontology.md#bind-a-contract)).
 ### copy
-A contract of a service that the ontology declares, as the rules read it: the table that holds some
+A contract of a project that the ontology declares, as the rules read it: the table that holds some
 rows and fields of a [thing](#thing), or an aggregate. A rule finds a copy by its physical relation,
 `<schema>.<table>`, which another contract's [`reads`](#reads) names.
 ### resolution
@@ -64,10 +66,10 @@ What `ontology.strip` removes from a stored form: the seven [bindings](#binding)
 ### finding
 What an ontology rule reports: a severity (`error`, `warning` or `info`), the rule, a subject and a
 message ([ontology](ontology.md#the-rules)).
-### per-service rule
-An ontology rule that needs no other service: `contract`, `coverage`, `quality` or `privacy`. The
+### per-project rule
+An ontology rule that needs no other project: `contract`, `coverage`, `quality` or `privacy`. The
 [lite check](#lite-check) runs them. `access`, `order` and `drift` read the contracts of every
-service, so only the [release](#release) runs them.
+project, so only the [release](#release) runs them.
 ### reads
 The tables a node reads. For dbt: those `meta.continuo.reads` declares, which the library writes,
 plus those the compiled SQL names, which the release adds. The [lite check](#lite-check) cannot
@@ -105,7 +107,7 @@ A hash that moves with what it covers. A node has two ([fingerprints](fingerprin
 `continuo-contracts dbt check`, run in the team's CI: it runs `dbt parse` and does for each node
 what the release does with it. Passing it does not guarantee that the release accepts the project.
 ### re-baseline
-After a version of this package moves a hash, continuo's release runs once for each service. It
+After a version of this package moves a hash, continuo's release runs once for each project. It
 recomputes every node's stored hash with the new code, and validates and reloads nothing.
 ### port
 An implementation in another language that gives the same bytes ([hashing](hashing.md)).

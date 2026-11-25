@@ -1,7 +1,7 @@
 """The fingerprint field declaration: reader, classifier and renderer of `fingerprints.yaml`.
 
 `fingerprints.yaml` says which fingerprint each input of a node moves, so the producers, the
-topology service and the guards that check them agree on it. It holds `version: 1` and:
+topology-controller and the guards that check them agree on it. It holds `version: 1` and:
 
 - `lists.hashed_config_denylist`: the dbt `config` keys that stay out of the hashed config.
 - `lists.projection_keys`: the keys of the Python code projection, in projection order.
@@ -465,7 +465,7 @@ _NAME_MEANING = (
 _TERMS_MEANING = (
     "## Terms",
     "",
-    "- *re-baseline*: a continuo release of each service, run once after a change of the "
+    "- *re-baseline*: a continuo release of each project, run once after a change of the "
     "hashing code, that recomputes every node's stored hash with the new code and validates "
     "and reloads nothing.",
     "- *compile extras*: the files continuo's compile step writes beside dbt's manifest: seed "
