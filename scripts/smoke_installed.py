@@ -42,7 +42,7 @@ from continuo_contracts.errors import (
 )
 from continuo_contracts.fingerprints import SECTIONS, load
 from continuo_contracts.hashing import fold3, fold4, shared_fold, shared_hash
-from continuo_contracts.ontology_check import PER_SERVICE_RULES, check
+from continuo_contracts.ontology_check import PER_PROJECT_RULES, check
 from continuo_contracts.python import (
     PythonNode,
     canonical_sql_type,
@@ -254,7 +254,7 @@ def _contract_result(case: dict[str, Any]) -> dict[str, Any]:
     except StrictYamlError:
         return {"issues": [{"path": "$", "reason": "strict_yaml"}]}
     issues = validate_python_contract(
-        doc, path=case["path"], service=case["service"]
+        doc, path=case["path"], project=case["project"]
     )
     if issues:
         return {
@@ -264,7 +264,7 @@ def _contract_result(case: dict[str, Any]) -> dict[str, Any]:
         }
     # The contract check accepts only a mapping, so `doc` is one here.
     stored = normalise_python(
-        cast(Mapping[str, Any], doc), service=case["service"], reads=case["reads"]
+        cast(Mapping[str, Any], doc), project=case["project"], reads=case["reads"]
     )
     return {"stored": stored, "contract_hash": contract_hash(stored)}
 
@@ -425,7 +425,7 @@ def _ontology_failures(cases: list[dict[str, Any]]) -> list[str]:
             resolved = ontology.resolve(case["stored"], loaded)
             found = [
                 asdict(finding)
-                for finding in check(loaded, [resolved], rules=PER_SERVICE_RULES)
+                for finding in check(loaded, [resolved], rules=PER_PROJECT_RULES)
             ]
         except ContractsError as error:
             failures.append(f"ontology vector {name!r}: refused: {error}")

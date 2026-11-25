@@ -66,7 +66,7 @@ def bad_folder(tmp_path):
 
 
 def test_validate_passes_the_demo_folder(capsys, caplog):
-    assert main(["validate", str(DEMO), "--service", "service-py"]) == 0
+    assert main(["validate", str(DEMO), "--project", "service-py"]) == 0
     assert capsys.readouterr().out == ""
     assert _errors(caplog) == []
 
@@ -130,28 +130,28 @@ def test_validate_reads_a_file_and_a_folder_together(tmp_path, capsys):
     ]
 
 
-def test_validate_checks_the_service_only_when_it_is_given(
+def test_validate_checks_the_project_only_when_it_is_given(
     tmp_path, capsys, caplog
 ):
     text = _demo_text().replace(
         "customProperties:\n",
-        "customProperties:\n  - {vendor: continuo, property: service, value: other-service}\n",
+        "customProperties:\n  - {vendor: continuo, property: project, value: other-project}\n",
     )
     _put(tmp_path, "py_daily_kpis.odcs.yaml", text)
     assert main(["validate", str(tmp_path)]) == 0
     assert (
-        main(["validate", str(tmp_path), "--service", "service-py", "--json"])
+        main(["validate", str(tmp_path), "--project", "service-py", "--json"])
         == 1
     )
     issues = json.loads(capsys.readouterr().out)["files"][0]["issues"]
-    assert [issue["reason"] for issue in issues] == ["service"]
+    assert [issue["reason"] for issue in issues] == ["project"]
 
 
 def test_validate_reads_the_text_as_written(tmp_path):
     # A byte order mark and CRLF line endings are a valid file.
     text = "\ufeff" + _demo_text().replace("\n", "\r\n")
     _put(tmp_path, "py_daily_kpis.odcs.yaml", text)
-    assert main(["validate", str(tmp_path), "--service", "service-py"]) == 0
+    assert main(["validate", str(tmp_path), "--project", "service-py"]) == 0
 
 
 def test_validate_refuses_an_empty_folder(tmp_path, capsys, caplog):
@@ -259,8 +259,8 @@ def unsearchable(tmp_path):
 
 
 def _argv(command, path, *flags):
-    service = ["--service", "service-py"] if command == "hash" else []
-    return [command, str(path), *service, *flags]
+    project = ["--project", "service-py"] if command == "hash" else []
+    return [command, str(path), *project, *flags]
 
 
 @pytest.mark.parametrize("flags", [[], ["--json"]])
@@ -285,7 +285,7 @@ def test_validate_refuses_a_folder_it_cannot_read(locked, capsys, caplog):
 
 
 def test_hash_refuses_a_folder_it_cannot_read_as_a_folder(locked, capsys, caplog):
-    assert main(["hash", str(locked), "--service", "service-py"]) == 2
+    assert main(["hash", str(locked), "--project", "service-py"]) == 2
     assert capsys.readouterr().out == ""
     assert _errors(caplog) == [
         f"{locked.as_posix()}: hash takes one contract file, not a folder"
@@ -347,24 +347,24 @@ def test_a_usage_error_exits_2_through_argparse(argv, capsys):
     assert capsys.readouterr().out == ""
 
 
-@pytest.mark.parametrize("service", ["", " ", "\t"])
+@pytest.mark.parametrize("project", ["", " ", "\t"])
 @pytest.mark.parametrize("command", ["validate", "hash"])
-def test_an_empty_or_blank_service_is_a_usage_error(
-    command, service, tmp_path, capsys
+def test_an_empty_or_blank_project_is_a_usage_error(
+    command, project, tmp_path, capsys
 ):
     path = _put(tmp_path, "py_daily_kpis.odcs.yaml", _demo_text())
     with pytest.raises(SystemExit) as exit_:
-        main([command, str(path), "--service", service])
+        main([command, str(path), "--project", project])
     assert exit_.value.code == 2
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert "--service" in captured.err and "empty or blank" in captured.err
+    assert "--project" in captured.err and "empty or blank" in captured.err
 
 
 def test_hash_prints_the_vector_hash(tmp_path, capsys):
     case = _case("demo_py_daily_kpis")
     path = _put(tmp_path, "py_daily_kpis.odcs.yaml", case["text"])
-    argv = ["hash", str(path), "--service", case["service"]]
+    argv = ["hash", str(path), "--project", case["project"]]
     for table in case["reads"]:
         argv += ["--read", table]
     assert main(argv) == 0
@@ -374,7 +374,7 @@ def test_hash_prints_the_vector_hash(tmp_path, capsys):
 def test_hash_json_prints_the_stored_form_and_the_hash(tmp_path, capsys):
     case = _case("demo_py_daily_kpis")
     path = _put(tmp_path, "py_daily_kpis.odcs.yaml", case["text"])
-    argv = ["hash", str(path), "--service", case["service"], "--json"]
+    argv = ["hash", str(path), "--project", case["project"], "--json"]
     assert main([*argv, "--read", "analytics.daily_transactions"]) == 0
     assert json.loads(capsys.readouterr().out) == {
         "contract_hash": case["contract_hash"],
@@ -385,7 +385,7 @@ def test_hash_json_prints_the_stored_form_and_the_hash(tmp_path, capsys):
 def test_hash_without_a_read_hashes_a_stored_form_with_no_reads(tmp_path, capsys):
     case = _case("demo_py_daily_kpis")
     path = _put(tmp_path, "py_daily_kpis.odcs.yaml", case["text"])
-    assert main(["hash", str(path), "--service", case["service"], "--json"]) == 0
+    assert main(["hash", str(path), "--project", case["project"], "--json"]) == 0
     printed = json.loads(capsys.readouterr().out)
     assert printed["contract_hash"] != case["contract_hash"]
     assert "customProperties" not in printed["stored"]["schema"][0]
@@ -396,7 +396,7 @@ def test_hash_a_messy_spelling_prints_the_hash_of_the_clean_file(
 ):
     clean, messy = _case("full_python_api"), _case("messy_python_api")
     path = _put(tmp_path, Path(messy["path"]).name, messy["text"])
-    argv = ["hash", str(path), "--service", messy["service"]]
+    argv = ["hash", str(path), "--project", messy["project"]]
     for table in messy["reads"]:
         argv += ["--read", table]
     assert main(argv) == 0
@@ -408,7 +408,7 @@ def test_hash_exits_1_for_an_invalid_file_and_prints_nothing(
 ):
     path = _put(tmp_path, "wrong_name.odcs.yaml", _demo_text())
     for flags in ([], ["--json"]):
-        assert main(["hash", str(path), "--service", "service-py", *flags]) == 1
+        assert main(["hash", str(path), "--project", "service-py", *flags]) == 1
         assert capsys.readouterr().out == ""
     assert len(_errors(caplog)) == 2
     assert _errors(caplog)[0].startswith(f"{path.as_posix()}: $: ")
@@ -416,14 +416,14 @@ def test_hash_exits_1_for_an_invalid_file_and_prints_nothing(
 
 def test_hash_reports_a_strict_yaml_error_as_an_issue(tmp_path, capsys, caplog):
     path = _put(tmp_path, "x.odcs.yaml", "id: a\nid: b\n")
-    assert main(["hash", str(path), "--service", "service-py"]) == 1
+    assert main(["hash", str(path), "--project", "service-py"]) == 1
     assert "line 2, column 1" in _errors(caplog)[0]
 
 
 def test_hash_refuses_a_read_value_that_is_not_a_table(tmp_path, capsys, caplog):
     path = _put(tmp_path, "py_daily_kpis.odcs.yaml", _demo_text())
     assert (
-        main(["hash", str(path), "--service", "service-py", "--read", "daily"])
+        main(["hash", str(path), "--project", "service-py", "--read", "daily"])
         == 2
     )
     assert capsys.readouterr().out == ""
@@ -439,7 +439,7 @@ def test_hash_refuses_a_read_value_that_is_not_exactly_a_schema_and_a_table(
 ):
     path = _put(tmp_path, "py_daily_kpis.odcs.yaml", _demo_text())
     assert (
-        main(["hash", str(path), "--service", "service-py", "--read", table]) == 2
+        main(["hash", str(path), "--project", "service-py", "--read", table]) == 2
     )
     assert capsys.readouterr().out == ""
     (message,) = _errors(caplog)
@@ -450,14 +450,14 @@ def test_hash_refuses_a_path_that_is_not_a_contract_file(tmp_path, caplog):
     unnamed = _put(tmp_path, "py_daily_kpis.yaml", _demo_text())
     for target in (tmp_path / "missing.odcs.yaml", unnamed, tmp_path):
         caplog.clear()
-        assert main(["hash", str(target), "--service", "service-py"]) == 2, target
+        assert main(["hash", str(target), "--project", "service-py"]) == 2, target
         assert len(_errors(caplog)) == 1, target
 
 
 def test_hash_refuses_a_file_that_is_not_utf_8(tmp_path, caplog):
     path = tmp_path / "py_daily_kpis.odcs.yaml"
     path.write_bytes(b"\x80\n")
-    assert main(["hash", str(path), "--service", "service-py"]) == 2
+    assert main(["hash", str(path), "--project", "service-py"]) == 2
     assert "UTF-8" in _errors(caplog)[0]
 
 
@@ -465,7 +465,7 @@ def test_hash_refuses_a_file_that_is_not_utf_8(tmp_path, caplog):
 def test_both_commands_name_the_family_they_check(command, tmp_path, caplog):
     path = _put(tmp_path, "py_daily_kpis.odcs.yaml", _demo_text())
     argv = [command, str(path)] + (
-        ["--service", "service-py"] if command == "hash" else []
+        ["--project", "service-py"] if command == "hash" else []
     )
     assert main(argv) == 0
     assert FAMILY_LINE in _infos(caplog)
@@ -488,7 +488,7 @@ def test_json_mode_prints_only_json_on_stdout(tmp_path, capsys):
     for argv, status in (
         (["validate", str(valid), "--json"], 0),
         (["validate", str(invalid), "--json"], 1),
-        (["hash", str(valid), "--service", "service-py", "--json"], 0),
+        (["hash", str(valid), "--project", "service-py", "--json"], 0),
     ):
         assert main(argv) == status, argv
         document = json.loads(capsys.readouterr().out)
@@ -512,8 +512,8 @@ def test_the_log_goes_to_stderr_and_stdout_stays_machine_readable(tmp_path):
     done = _run(
         "hash",
         str(path),
-        "--service",
-        case["service"],
+        "--project",
+        case["project"],
         "--read",
         "analytics.daily_transactions",
     )

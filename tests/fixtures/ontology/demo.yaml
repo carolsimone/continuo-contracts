@@ -1,4 +1,4 @@
-# The demo ontology that the tests load: one file with the principals (domains, services,
+# The demo ontology that the tests load: one file with the principals (domains, projects,
 # teams, roles and people) and the entities (things, with their keys, properties and access
 # rules) of a small estate. The tests read it as it is, so a change here changes what they pin.
 
@@ -8,7 +8,7 @@ principals:
     finance:   {owner_team: finance-data}
     marketing: {owner_team: marketing-data}
     analytics: {owner_team: analytics-eng}
-  services:
+  projects:
     core:       {domain: core,      kind: dbt}
     finance:    {domain: finance,   kind: dbt}
     marketing:  {domain: marketing, kind: dbt}

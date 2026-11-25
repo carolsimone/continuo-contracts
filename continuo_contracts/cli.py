@@ -15,7 +15,7 @@ its arguments name, the profiles file in the profiles folder of `dbt check`, the
 project's `dbt_project.yml` and the CSV files of the seeds, each only when it is a regular file
 in a seed folder that `dbt_project.yml` names. With `--ontology FILE` it also reads that
 ontology file, before it runs anything, and the lite check reads the bindings of the contracts
-against it, with the rules that need no other service. A warning of that check is logged at
+against it, with the rules that need no other project. A warning of that check is logged at
 WARNING and never changes the exit status.
 
 `ontology check` reads one ontology file (`ontology.load`) and logs each finding of
@@ -25,7 +25,7 @@ Output follows one rule. The human text goes through `logging` to stderr. Stdout
 machine-read result: with `--json` one JSON document, and for `hash` without it the hash alone.
 When a command finds nothing to print, as a usage error does, stdout stays empty. For `validate`
 and `hash`, exit status 0 means the contracts are valid, 1 means a contract has an issue, and 2
-means the command could not run: a usage error (a `--service` that is empty or blank among them),
+means the command could not run: a usage error (a `--project` that is empty or blank among them),
 a path that names no contract file, a path that cannot be looked up, a folder or a file that
 cannot be read, or a `--read` value that is not a table. For `dbt check`, 0 means the check found
 no error, 1 means it found an error or `dbt parse` failed, and 2 means it could not run: a usage
@@ -79,7 +79,7 @@ _EXIT_CODES: Final = """\
 exit status:
   0  every contract is valid
   1  a contract has an issue
-  2  a usage error (an empty or blank --service among them), a path that names no contract
+  2  a usage error (an empty or blank --project among them), a path that names no contract
      file, a path that cannot be looked up, a folder or a file that cannot be read, or a
      --read value that is not a table
 """
@@ -107,7 +107,7 @@ _DBT_EXIT_CODES: Final = """\
 exit status:
   0  the check found no error
   1  the check found an error, or dbt parse exited with a status other than 0
-  2  a usage error (an empty or blank --service among them), a PROJECT_DIR that is not a
+  2  a usage error (an empty or blank --project among them), a PROJECT_DIR that is not a
      folder, no dbt executable, a manifest that cannot be read or is not the shape of a
      dbt manifest, or an --ontology file that cannot be read or does not load
 """
@@ -180,7 +180,7 @@ at WARNING), what only the release does, and the banner again. Passing it does n
 guarantee that the release creates the contracts.
 
 With --ontology FILE the check also reads the bindings of the contracts against that
-ontology file, with the rules that need no other service. A warning does not fail the
+ontology file, with the rules that need no other project. A warning does not fail the
 check. A file with an error of its own gives one ERROR line that says so, and the file
 is checked alone with `continuo-contracts ontology check`.
 
@@ -200,7 +200,7 @@ PROJECT_DIR/dbt_project.yml names (seeds by default) is read, and only its first
 any other file is reported as a file that cannot be read.
 
 With --json, stdout is
-  {"lite": true, "ok": bool, "service": str, "lines": [{"level": str,
+  {"lite": true, "ok": bool, "project": str, "lines": [{"level": str,
     "node_id": str, "message": str}], "contracts": {"<contract id>": "<contract_hash>"}}
 where level is error, warning or info.
 """
@@ -210,7 +210,7 @@ Check an ontology file.
 """
 
 _ONTOLOGY_CHECK_DESCRIPTION: Final = """\
-Check an ontology file alone, without a contract: each service names a declared domain,
+Check an ontology file alone, without a contract: each project names a declared domain,
 each thing an owner that is a declared domain, each reference a thing and a property that
 exist, and each personal property an access rule. Log each finding at the level of its
 severity, and then how many errors the file has.
@@ -230,14 +230,14 @@ class _UsageError(Exception):
         self.problems = problems
 
 
-def _service(value: str) -> str:
-    """Return `value`, the service of a release, or refuse one that is blank.
+def _project_name(value: str) -> str:
+    """Return `value`, the project of a release, or refuse one that is blank.
 
-    An empty or blank service names no release, so a hash computed under it
+    An empty or blank project names no release, so a hash computed under it
     matches none that a release stores.
     """
     if not value.strip():
-        raise argparse.ArgumentTypeError("the service must not be empty or blank")
+        raise argparse.ArgumentTypeError("the project must not be empty or blank")
     return value
 
 
@@ -359,7 +359,7 @@ def _read_texts(files: Sequence[Path]) -> list[tuple[Path, str]]:
 
 
 def _check(
-    path: Path, text: str, service: str | None
+    path: Path, text: str, project: str | None
 ) -> tuple[object, list[Issue]]:
     """Read and check one contract file, and return the document and its issues.
 
@@ -370,7 +370,7 @@ def _check(
         doc = yaml_strict.load(text)
     except StrictYamlError as error:
         return None, [Issue("$", "strict_yaml", str(error))]
-    return doc, validate_python_contract(doc, path=_posix(path), service=service)
+    return doc, validate_python_contract(doc, path=_posix(path), project=project)
 
 
 def _log_issues(path: Path, issues: Sequence[Issue]) -> None:
@@ -386,7 +386,7 @@ def _validate(args: argparse.Namespace) -> int:
     texts = _read_texts(_contract_files(args.paths))
     results: list[tuple[Path, list[Issue]]] = []
     for path, text in texts:
-        _, issues = _check(path, text, args.service)
+        _, issues = _check(path, text, args.project)
         results.append((path, issues))
     for path, issues in results:
         _log_issues(path, issues)
@@ -431,14 +431,14 @@ def _hash(args: argparse.Namespace) -> int:
             f"{_posix(path)}: hash takes one contract file, not a folder"
         )
     ((path, text),) = _read_texts(_contract_files([path]))
-    doc, issues = _check(path, text, args.service)
+    doc, issues = _check(path, text, args.project)
     if issues:
         _log_issues(path, issues)
         return _INVALID
     try:
         # No issue means the document is a mapping, which the schema check guarantees.
         stored = normalise_python(
-            cast(Mapping[str, Any], doc), service=args.service, reads=args.read
+            cast(Mapping[str, Any], doc), project=args.project, reads=args.read
         )
     except HashInputError as error:
         raise _UsageError(str(error)) from error
@@ -506,18 +506,18 @@ def _read_manifest(path: Path) -> dict[str, Any]:
     return document
 
 
-def _seed_folders(project: Path) -> list[Path]:
-    """Return the real paths of the seed folders of the dbt project `project`.
+def _seed_folders(project_dir: Path) -> list[Path]:
+    """Return the real paths of the seed folders of the dbt project `project_dir`.
 
-    They are the folders that the list `seed-paths` of `project/dbt_project.yml` names, each
-    read from `project` (an absolute one as it is), with its symbolic links resolved. An entry
+    They are the folders that the list `seed-paths` of `project_dir/dbt_project.yml` names, each
+    read from `project_dir` (an absolute one as it is), with its symbolic links resolved. An entry
     that is not a string or that holds a NUL names no folder. The file is read as
     `yaml_strict.load` reads it, and the folder is `seeds` when the file is missing or cannot be
     read, is not a mapping, or has no string in a list under `seed-paths`, as dbt's default is.
     """
     try:
         document = yaml_strict.load(
-            (project / "dbt_project.yml").read_text(encoding="utf-8")
+            (project_dir / "dbt_project.yml").read_text(encoding="utf-8")
         )
     except OSError, UnicodeError, StrictYamlError:
         document = None
@@ -528,7 +528,7 @@ def _seed_folders(project: Path) -> list[Path]:
         else []
     )
     return [
-        Path(os.path.realpath(project / name))
+        Path(os.path.realpath(project_dir / name))
         for name in names or [_SEED_FOLDER]
         if "\0" not in name
     ]
@@ -558,28 +558,30 @@ def _first_row(path: Path, delimiter: str) -> list[str]:
 
 
 def _header_reader(
-    project: Path,
+    project_dir: Path,
 ) -> Callable[[Mapping[str, Any]], list[str] | None]:
-    """Return the `read_header` of the lite check for the seeds of the dbt project `project`.
+    """Return the `read_header` of the lite check for the seeds of the dbt project `project_dir`.
 
-    A seed's header is the first row of its CSV file `project/<original_file_path>`, read as
+    A seed's header is the first row of its CSV file `project_dir/<original_file_path>`, read as
     UTF-8 with an optional byte order mark and with the delimiter of the seed's `config` (a comma
     when it has none), so a CRLF line ending changes nothing. An empty file has an empty header.
     Only a regular file whose real path, its symbolic links resolved, lies in a folder of
-    `_seed_folders(project)` is read, and only its first MiB. Any other file gives `None`, as does
-    a file that cannot be read: one that is missing, whose path holds a NUL, that is not UTF-8,
+    `_seed_folders(project_dir)` is read, and only its first MiB. Any other file gives `None`, as
+    does a file that cannot be read: one that is missing, whose path holds a NUL, that is not UTF-8,
     whose first row is longer than a MiB, that has a field over the limit of `csv`, or whose
     delimiter is not one character or is one `csv` refuses, such as a quote, a newline or a
     carriage return. A manifest therefore cannot name another file for the check to show.
     """
-    folders = _seed_folders(project)
+    folders = _seed_folders(project_dir)
 
     def read(node: Mapping[str, Any]) -> list[str] | None:
         # A node that the lite check reads a header of is a kept seed, so `config` is a mapping
         # and `original_file_path` a non-empty string.
         delimiter = node["config"].get("delimiter") or ","
         try:
-            real = Path(os.path.realpath(project / node["original_file_path"]))
+            real = Path(
+                os.path.realpath(project_dir / node["original_file_path"])
+            )
             if not real.is_file() or not any(
                 real.is_relative_to(folder) for folder in folders
             ):
@@ -591,9 +593,9 @@ def _header_reader(
     return read
 
 
-def _folder_service(project: Path) -> str:
-    """Return the name of the folder `project`, with `_` written `-`: the default service."""
-    return Path(os.path.abspath(project)).name.replace("_", "-")
+def _folder_project(folder: Path) -> str:
+    """Return the name of `folder`, with `_` written `-`: the default project."""
+    return Path(os.path.abspath(folder)).name.replace("_", "-")
 
 
 def _env_vars_without_default(text: str) -> list[str]:
@@ -703,7 +705,7 @@ def _report_document(report: lite.LiteReport) -> dict[str, Any]:
     return {
         "lite": True,
         "ok": report.ok,
-        "service": report.service,
+        "project": report.project,
         "lines": [
             {
                 "level": line.level,
@@ -717,8 +719,8 @@ def _report_document(report: lite.LiteReport) -> dict[str, Any]:
 
 
 def _dbt_check(args: argparse.Namespace) -> int:
-    project: Path = args.project_dir
-    _require_folder(project)
+    project_dir: Path = args.project_dir
+    _require_folder(project_dir)
     # The ontology is read before anything runs, so a file that does not load costs no dbt run.
     onto = _load_ontology(args.ontology) if args.ontology is not None else None
     if args.manifest is not None:
@@ -737,8 +739,8 @@ def _dbt_check(args: argparse.Namespace) -> int:
     try:
         report = lite.check_manifest(
             manifest,
-            declared_service=args.service or _folder_service(project),
-            read_header=_header_reader(project),
+            declared_project=args.project or _folder_project(project_dir),
+            read_header=_header_reader(project_dir),
             ontology=onto,
         )
     except DbtNodeError as error:
@@ -819,10 +821,10 @@ def _parser() -> argparse.ArgumentParser:
         ),
     )
     validate.add_argument(
-        "--service",
-        type=_service,
+        "--project",
+        type=_project_name,
         help=(
-            "the service of the release: a `service` property that names another one is an "
+            "the project of the release: a `project` property that names another one is an "
             "issue. Without it that check is skipped"
         ),
     )
@@ -843,10 +845,10 @@ def _parser() -> argparse.ArgumentParser:
         help=f"the contract file, named *{_FILE_SUFFIX}",
     )
     hash_.add_argument(
-        "--service",
-        type=_service,
+        "--project",
+        type=_project_name,
         required=True,
-        help="the service of the release that carries the contract",
+        help="the project of the release that carries the contract",
     )
     hash_.add_argument(
         "--read",
@@ -912,12 +914,12 @@ def _parser() -> argparse.ArgumentParser:
         ),
     )
     check.add_argument(
-        "--service",
-        type=_service,
+        "--project",
+        type=_project_name,
         help=(
-            "the service the team deploys the project under: the check compares the service "
-            "of every node it keeps with it, as the release does, so a node of another service "
-            "is an error; it is also the service of the project when the manifest names none "
+            "the project the release names: the check compares the project of every node it "
+            "keeps with it, as the release does, so a node of another project is an error; it "
+            "is used as the project when the manifest's metadata.project_name is empty "
             "(default: the name of PROJECT_DIR, with _ written -)"
         ),
     )
@@ -927,7 +929,7 @@ def _parser() -> argparse.ArgumentParser:
         metavar="FILE",
         help=(
             "read the bindings of the contracts against this ontology file, with the rules "
-            "that need no other service; a file with an error of its own is one error line, "
+            "that need no other project; a file with an error of its own is one error line, "
             "and one that does not load stops the command (default: no binding is checked "
             "against an ontology)"
         ),

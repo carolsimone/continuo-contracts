@@ -96,8 +96,8 @@ families:
       parts: ["shared"]
       why: "shared part, by dbt's own checksum, and counted in `test_count`; code, not quality rules"
       inputs: ["unit_tests"]
-    - id: "service_units"
-      field: "Service units: `on-run-start`, `on-run-end`, the `flags:` block, `generate_schema_name`, `generate_alias_name`"
+    - id: "project_units"
+      field: "Project units: `on-run-start`, `on-run-end`, the `flags:` block, `generate_schema_name`, `generate_alias_name`"
       source: "the manifest, compile extras"
       fingerprint: "content"
       parts: ["shared"]
@@ -231,12 +231,12 @@ families:
       fingerprint: "contract"
       why: "`description.purpose`, `schema[0].description`; outside `hashed_config`"
       inputs: ["odcs.description.purpose", "odcs.schema.description"]
-    - id: "service"
-      field: "Service"
+    - id: "project"
+      field: "Project"
       source: "`fqn[0]`"
       fingerprint: "contract"
-      why: "`service`; renaming a service versions every contract in it"
-      inputs: ["odcs.custom.service"]
+      why: "`project`; renaming a project versions every contract in it"
+      inputs: ["odcs.custom.project"]
     - id: "kind"
       field: "Kind"
       source: "`resource_type`"
@@ -367,8 +367,8 @@ families:
       fingerprint: "neither"
       why: "as for a model"
       inputs: []
-    - id: "service_units"
-      field: "Service units"
+    - id: "project_units"
+      field: "Project units"
       source: "the manifest, compile extras"
       fingerprint: "content"
       parts: ["shared"]
@@ -477,12 +477,12 @@ families:
       fingerprint: "contract"
       why: "`description.purpose`, `schema[0].description`, as for a model"
       inputs: ["odcs.description.purpose", "odcs.schema.description"]
-    - id: "service_kind_path"
-      field: "Service, kind (`dbt-seed`), file path"
+    - id: "project_kind_path"
+      field: "Project, kind (`dbt-seed`), file path"
       source: "`fqn[0]`, `resource_type`, `original_file_path`"
       fingerprint: "contract"
-      why: "`service`, `kind`, `filePath`; the path counts in `content_hash` only as the checksum of a seed over 1 MiB that a stored artifact with no compile extras keeps"
-      inputs: ["odcs.custom.service", "odcs.custom.kind", "odcs.custom.filePath"]
+      why: "`project`, `kind`, `filePath`; the path counts in `content_hash` only as the checksum of a seed over 1 MiB that a stored artifact with no compile extras keeps"
+      inputs: ["odcs.custom.project", "odcs.custom.kind", "odcs.custom.filePath"]
     - id: "declared_columns"
       field: "Declared columns: name, order, description, tags"
       source: "`schema.yml`"
@@ -581,8 +581,8 @@ families:
       parts: ["shared"]
       why: "shared part"
       inputs: ["functions"]
-    - id: "service_units"
-      field: "Service units"
+    - id: "project_units"
+      field: "Project units"
       source: "the manifest, compile extras"
       fingerprint: "content"
       parts: ["shared"]
@@ -685,11 +685,11 @@ families:
       why: "`group`, as on a model; outside `hashed_config`. dbt declares `group` on every node's config"
       inputs: ["config.group", "odcs.custom.group"]
     - id: "node_facts"
-      field: "Description, service, kind (`dbt-snapshot`), file path"
+      field: "Description, project, kind (`dbt-snapshot`), file path"
       source: "the node"
       fingerprint: "contract"
-      why: "`description.purpose`, `schema[0].description`, `service`, `kind`, `filePath`, as for a model"
-      inputs: ["odcs.description.purpose", "odcs.schema.description", "odcs.custom.service",
+      why: "`description.purpose`, `schema[0].description`, `project`, `kind`, `filePath`, as for a model"
+      inputs: ["odcs.description.purpose", "odcs.schema.description", "odcs.custom.project",
                "odcs.custom.kind", "odcs.custom.filePath"]
     - id: "declared_columns"
       field: "Declared columns: name and order"
@@ -1039,12 +1039,12 @@ families:
       fingerprint: "contract"
       why: "not code, so outside `content_hash`"
       inputs: ["odcs.custom.timeoutMinutes"]
-    - id: "service"
-      field: "`service`"
+    - id: "project"
+      field: "`project`"
       source: "the release, or authored and equal"
       fingerprint: "contract"
       why: "not code, so outside `content_hash`; the stored form always carries it"
-      inputs: ["odcs.custom.service"]
+      inputs: ["odcs.custom.project"]
     - id: "reads"
       field: "`reads` on the schema object"
       source: "filled from the tables the read queries name"
@@ -1279,12 +1279,12 @@ families:
       fingerprint: "contract"
       why: "as for a `python-node`"
       inputs: ["odcs.custom.timeoutMinutes"]
-    - id: "service"
-      field: "`service`"
+    - id: "project"
+      field: "`project`"
       source: "the release, or authored and equal"
       fingerprint: "contract"
       why: "as for a `python-node`"
-      inputs: ["odcs.custom.service"]
+      inputs: ["odcs.custom.project"]
     - id: "reads"
       field: "`reads` on the schema object"
       source: "filled from the tables the read queries name"
@@ -1524,12 +1524,12 @@ families:
       fingerprint: "contract"
       why: "as for a `python-node`"
       inputs: ["odcs.custom.timeoutMinutes"]
-    - id: "service"
-      field: "`service`"
+    - id: "project"
+      field: "`project`"
       source: "the release, or authored and equal"
       fingerprint: "contract"
       why: "as for a `python-node`"
-      inputs: ["odcs.custom.service"]
+      inputs: ["odcs.custom.project"]
     - id: "reads"
       field: "`reads` on the schema object"
       source: "filled from the tables the read queries name"

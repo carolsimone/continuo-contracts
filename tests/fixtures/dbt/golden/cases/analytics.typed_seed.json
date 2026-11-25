@@ -1,11 +1,11 @@
 {
- "contract_hash": "sha256:5d96df6153d40607cbfda124e8e4bca796880c3a4affe50749481c1d0a85363f",
+ "contract_hash": "sha256:20598f44f37623015d3008f1a1254de641f17483d2b146a6fc888de3270fe683",
  "flags": [],
  "generated": {
   "apiVersion": "v3.2.0",
   "customProperties": [
    {
-    "property": "service",
+    "property": "project",
     "value": "cases",
     "vendor": "continuo"
    },
@@ -102,6 +102,11 @@
     "vendor": "continuo"
    },
    {
+    "property": "project",
+    "value": "cases",
+    "vendor": "continuo"
+   },
+   {
     "property": "quoteColumns",
     "value": true,
     "vendor": "continuo"
@@ -109,11 +114,6 @@
    {
     "property": "schedule",
     "value": "seed",
-    "vendor": "continuo"
-   },
-   {
-    "property": "service",
-    "value": "cases",
     "vendor": "continuo"
    }
   ],

@@ -26,7 +26,7 @@ FIXTURES = Path(__file__).resolve().parent / "fixtures"
 VECTORS = ROOT / "continuo_contracts" / "vectors" / "contracts.json"
 DBT_VECTORS = ROOT / "continuo_contracts" / "vectors" / "dbt_contracts.json"
 GOLDEN = FIXTURES / "dbt" / "golden"
-SERVICE = "service-py"
+PROJECT = "service-py"
 
 
 def test_every_section_declares_entries():
@@ -62,7 +62,7 @@ def test_every_python_hash_input_is_classified(family):
         ("dbt-model", "raw_code", "raw_code", "content", ("source",)),
         ("dbt-model", "compiled_code", "compiled_code", "content", ("compiled",)),
         ("dbt-model", "unit_tests", "unit_tests", "content", ("shared",)),
-        ("dbt-model", "project_flags", "service_units", "content", ("shared",)),
+        ("dbt-model", "project_flags", "project_units", "content", ("shared",)),
         ("dbt-model", "relation.alias", "alias", "both", ("config",)),
         (
             "dbt-model",
@@ -325,7 +325,7 @@ def _stored_forms():
             path.name,
             normalise_python(
                 yaml_strict.load(path.read_text(encoding="utf-8")),
-                service=SERVICE,
+                project=PROJECT,
                 reads=reads[path.name],
             ),
         )
@@ -337,7 +337,7 @@ def _stored_forms():
             messy["name"],
             normalise_python(
                 yaml_strict.load(messy["text"]),
-                service=SERVICE,
+                project=PROJECT,
                 reads=messy["reads"],
             ),
         )
@@ -585,14 +585,14 @@ DEMO_ONTOLOGY = ontology.load(
 
 
 def _bound_stored():
-    """Return the stored form of a contract of the `core` service that binds a thing.
+    """Return the stored form of a contract of the `core` project that binds a thing.
 
     It writes every binding a team can write and none of what an ontology fills in: the column
     `source` is left to the implicit binding, and no column declares a key.
     """
     return {
         "customProperties": [
-            _continuo("service", "core"),
+            _continuo("project", "core"),
             _continuo("kind", "dbt-model"),
         ],
         "schema": [

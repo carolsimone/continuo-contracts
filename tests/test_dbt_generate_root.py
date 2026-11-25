@@ -19,7 +19,7 @@ PROJECTS = ("cases", "core", "finance", "marketing", "service_1")
 
 # The root properties in the order a generated contract lists them.
 ROOT_ORDER = (
-    "service",
+    "project",
     "kind",
     "schedule",
     "criticality",
@@ -155,13 +155,22 @@ def _root(project, node_id):
 
 def _kept(project):
     manifest = load_manifest(project)
-    service = dbt.project_service(manifest, "")
+    named = dbt.manifest_project(manifest, "")
     return sorted(
         node_id
         for node_id, node in manifest["nodes"].items()
         if node["resource_type"] in dbt.RESOURCE_TYPES
-        and dbt.skip_reason(node, project=service) is None
+        and dbt.skip_reason(node, project=named) is None
     )
+
+
+@pytest.mark.parametrize("project", ["core", "finance", "marketing", "service_1"])
+def test_every_kept_node_names_its_project_and_no_service(project):
+    for node_id in _kept(project):
+        root = _root(project, node_id)
+        assert root["project"] == dbt.node_project(_node(project, node_id))
+        assert root["project"] == project.replace("_", "-")
+        assert "service" not in root
 
 
 def test_fx_transactions_eur_root_is_the_designs():
@@ -173,7 +182,7 @@ def test_fx_transactions_eur_root_is_the_designs():
     assert doc["id"] == "analytics.fx_transactions_eur"
     assert doc["team"] == {"name": "finance"}
     assert continuo_values(doc["customProperties"]) == {
-        "service": "finance",
+        "project": "finance",
         "kind": "dbt-model",
         "schedule": "daily",
         "criticality": "CORE",
@@ -238,7 +247,7 @@ def test_root_order_is_every_root_property_a_dbt_contract_writes():
 def test_a_seed_with_no_tag_has_schedule_seed_and_no_tags():
     doc = _doc("core", "seed.core.seed_users")
     assert continuo_values(doc["customProperties"]) == {
-        "service": "core",
+        "project": "core",
         "kind": "dbt-seed",
         "schedule": "seed",
         "criticality": "CORE",
@@ -1060,14 +1069,14 @@ def test_a_field_of_the_wrong_shape_raises_dbt_node_error(change, message):
     assert str(raised.value) == f"model.cases.governed: {message}"
 
 
-def test_a_node_with_no_fqn_has_no_service():
+def test_a_node_with_no_fqn_has_no_project():
     for fqn in (None, []):
         node = _node("cases", "model.cases.governed")
         node["fqn"] = fqn
         root = continuo_values(
             _generate(node, "cases").document["customProperties"]
         )
-        assert "service" not in root
+        assert "project" not in root
 
 
 def test_a_node_with_no_id_and_no_name_is_named_unknown():

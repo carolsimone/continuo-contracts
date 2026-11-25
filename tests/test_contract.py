@@ -17,6 +17,7 @@ from continuo_contracts.contract import (
 from continuo_contracts.errors import CanonicalJsonError, HashInputError
 from continuo_contracts.python import node_from_odcs, projection_hash
 from continuo_contracts.validate import validate_python_contract
+from continuo_contracts.vocabulary import continuo_values
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 DEMO = FIXTURES / "demo" / "service-py" / "contracts"
@@ -39,6 +40,7 @@ KPIS_STORED = {
     "customProperties": [
         {"property": "criticality", "value": "SECONDARY", "vendor": "continuo"},
         {"property": "kind", "value": "python-node", "vendor": "continuo"},
+        {"property": "project", "value": "service-py", "vendor": "continuo"},
         {
             "property": "readQueries",
             "value": {"daily": DAILY},
@@ -50,7 +52,6 @@ KPIS_STORED = {
             "value": "scripts/py_daily_kpis.py",
             "vendor": "continuo",
         },
-        {"property": "service", "value": "service-py", "vendor": "continuo"},
     ],
     "schema": [
         {
@@ -111,14 +112,14 @@ def _valid(doc, table):
     """Return `doc` after checking that `validate_python_contract` accepts it, so a test never
     normalises a document that the contract check refuses."""
     path = f"contracts/{table}.odcs.yaml"
-    issues = validate_python_contract(doc, path=path, service="service-py")
+    issues = validate_python_contract(doc, path=path, project="service-py")
     assert [str(issue) for issue in issues] == []
     return doc
 
 
 def _stored(doc, table="py_daily_kpis", reads=()):
     return normalise_python(
-        _valid(doc, table), service="service-py", reads=list(reads)
+        _valid(doc, table), project="service-py", reads=list(reads)
     )
 
 
@@ -136,14 +137,14 @@ def _custom(name, value, vendor="continuo"):
 def test_the_stored_form_of_the_demo_node():
     assert (
         normalise_python(
-            _kpis(), service="service-py", reads=["Analytics.Daily_Transactions"]
+            _kpis(), project="service-py", reads=["Analytics.Daily_Transactions"]
         )
         == KPIS_STORED
     )
 
 
 def test_the_csv_node_gets_a_max_length():
-    stored = normalise_python(_csv(), service="service-py", reads=[])
+    stored = normalise_python(_csv(), project="service-py", reads=[])
     assert stored["schema"][0]["properties"][1] == {
         "name": "customer",
         "physicalType": "VARCHAR(64)",
@@ -153,12 +154,12 @@ def test_the_csv_node_gets_a_max_length():
     assert "customProperties" not in stored["schema"][0]
 
 
-def test_the_csv_node_stores_its_service_status_physical_name_and_logical_types():
-    stored = normalise_python(_csv(), service="service-py", reads=[])
+def test_the_csv_node_stores_its_project_status_physical_name_and_logical_types():
+    stored = normalise_python(_csv(), project="service-py", reads=[])
     assert stored["version"] == "0"
     assert stored["status"] == "active"
     assert stored["schema"][0]["physicalName"] == "demo_orders_csv"
-    assert _custom("service", "service-py") in stored["customProperties"]
+    assert _custom("project", "service-py") in stored["customProperties"]
     assert _custom("kind", "python-csv") in stored["customProperties"]
     assert [c.get("logicalType") for c in stored["schema"][0]["properties"]] == [
         "integer",
@@ -437,14 +438,14 @@ def test_a_null_odcs_field_is_refused_by_the_schema_and_dropped_by_normalise(
     doc = _kpis()
     parent(doc)[key] = None
     issues = validate_python_contract(
-        doc, path="contracts/py_daily_kpis.odcs.yaml", service=None
+        doc, path="contracts/py_daily_kpis.odcs.yaml", project=None
     )
     assert {issue.reason for issue in issues} == {"odcs_schema"}
     absent = _kpis()
     parent(absent).pop(key, None)
-    expected = normalise_python(absent, service="service-py", reads=KPIS_READS)
+    expected = normalise_python(absent, project="service-py", reads=KPIS_READS)
     assert (
-        normalise_python(doc, service="service-py", reads=KPIS_READS) == expected
+        normalise_python(doc, project="service-py", reads=KPIS_READS) == expected
     )
 
 
@@ -523,8 +524,14 @@ def test_the_kind_is_always_written_and_an_old_name_is_stored_as_its_kind():
     assert stored == KPIS_STORED
 
 
-def test_a_written_service_is_stored_once():
-    doc = _with_property(_kpis(), _custom("service", "service-py"))
+def test_the_stored_form_names_its_project_and_no_service():
+    root = continuo_values(_stored(_kpis(), reads=KPIS_READS)["customProperties"])
+    assert root["project"] == "service-py"
+    assert "service" not in root
+
+
+def test_a_written_project_is_stored_once():
+    doc = _with_property(_kpis(), _custom("project", "service-py"))
     assert _stored(doc, reads=KPIS_READS) == KPIS_STORED
 
 
@@ -700,7 +707,7 @@ def test_two_spellings_of_a_type_give_one_contract_hash_and_one_projection_hash(
 def test_a_physical_type_that_is_not_accepted_is_stored_as_written():
     # The contract check refuses it, so no stored form holds it; normalise_python leaves it alone.
     doc = _with_column(_kpis(), 0, physicalType="JSONB")
-    stored = normalise_python(doc, service="service-py", reads=[])
+    stored = normalise_python(doc, project="service-py", reads=[])
     assert stored["schema"][0]["properties"][0]["physicalType"] == "JSONB"
     assert "logicalType" not in stored["schema"][0]["properties"][0]
 
@@ -718,7 +725,7 @@ def test_a_type_with_no_logical_type_is_stored_canonical_and_loses_the_written_o
         logicalType="string",
         logicalTypeOptions={"maxLength": 5},
     )
-    stored = normalise_python(doc, service="service-py", reads=[])
+    stored = normalise_python(doc, project="service-py", reads=[])
     column = stored["schema"][0]["properties"][0]
     assert column["physicalType"] == written.upper()
     assert "logicalType" not in column
@@ -801,7 +808,7 @@ def test_an_authored_logical_type_options_is_refused_by_the_contract_check():
         _csv(), 1, logicalType="string", logicalTypeOptions={"minLength": 1}
     )
     issues = validate_python_contract(
-        doc, path="contracts/demo_orders_csv.odcs.yaml", service=None
+        doc, path="contracts/demo_orders_csv.odcs.yaml", project=None
     )
     assert [(issue.path, issue.reason) for issue in issues] == [
         ("schema[0].properties[1].logicalTypeOptions", "refused_field")
@@ -817,7 +824,7 @@ def test_a_service_level_value_ext_that_is_null_or_empty_is_dropped():
         assert (
             normalise_python(
                 _with_root(_kpis(), slaProperties=sla),
-                service="service-py",
+                project="service-py",
                 reads=[],
             )
             == plain
@@ -837,7 +844,7 @@ def test_the_schema_object_keeps_its_physical_name_and_a_column_physical_name_ot
     doc = _kpis()
     doc["schema"][0]["physicalName"] = "py_daily_kpis"
     stored = normalise_python(
-        _with_column(doc, 0, physicalName="other"), service="service-py", reads=[]
+        _with_column(doc, 0, physicalName="other"), project="service-py", reads=[]
     )
     assert stored["schema"][0]["physicalName"] == "py_daily_kpis"
     assert stored["schema"][0]["properties"][0]["physicalName"] == "other"
@@ -849,7 +856,7 @@ def test_the_schema_object_keeps_its_physical_name_and_a_column_physical_name_ot
 def test_the_reads_list_is_lower_case_sorted_and_unique():
     stored = normalise_python(
         _kpis(),
-        service="service-py",
+        project="service-py",
         reads=[
             "core.Orders",
             "Analytics.Daily_Transactions",
@@ -862,22 +869,22 @@ def test_the_reads_list_is_lower_case_sorted_and_unique():
 
 
 def test_the_order_and_case_of_the_reads_do_not_move_the_hash():
-    a = normalise_python(_kpis(), service="service-py", reads=["b.y", "a.x"])
+    a = normalise_python(_kpis(), project="service-py", reads=["b.y", "a.x"])
     b = normalise_python(
-        _kpis(), service="service-py", reads=["A.X", "b.y", "a.x"]
+        _kpis(), project="service-py", reads=["A.X", "b.y", "a.x"]
     )
     assert contract_hash(a) == contract_hash(b)
 
 
 def test_no_reads_write_no_reads_property():
-    stored = normalise_python(_kpis(), service="service-py", reads=[])
+    stored = normalise_python(_kpis(), project="service-py", reads=[])
     assert "customProperties" not in stored["schema"][0]
 
 
 def test_the_reads_are_lower_cased_in_ascii_only():
     stored = normalise_python(
         _kpis(),
-        service="service-py",
+        project="service-py",
         reads=["Analytics.\u00c4rger_TX", "analytics.\u00c4rger_tx"],
     )
     assert stored["schema"][0]["customProperties"][0]["value"] == [
@@ -912,19 +919,19 @@ def test_the_reads_are_lower_cased_in_ascii_only():
 def test_a_reads_entry_that_is_not_a_schema_and_a_table_is_refused(entry):
     with pytest.raises(HashInputError, match="reads"):
         normalise_python(
-            _kpis(), service="service-py", reads=["analytics.t", entry]
+            _kpis(), project="service-py", reads=["analytics.t", entry]
         )
 
 
 def test_reads_given_as_one_string_is_refused():
     with pytest.raises(HashInputError, match="reads"):
-        normalise_python(_kpis(), service="service-py", reads="analytics.t")
+        normalise_python(_kpis(), project="service-py", reads="analytics.t")
 
 
-@pytest.mark.parametrize("service", ["", " ", "\t\n", "\u00a0", "\u2003"])
-def test_an_empty_or_blank_service_is_refused(service):
-    with pytest.raises(HashInputError, match="service"):
-        normalise_python(_kpis(), service=service, reads=["analytics.t"])
+@pytest.mark.parametrize("project", ["", " ", "\t\n", "\u00a0", "\u2003"])
+def test_an_empty_or_blank_project_is_refused(project):
+    with pytest.raises(HashInputError, match="project"):
+        normalise_python(_kpis(), project=project, reads=["analytics.t"])
 
 
 # the input is not changed
@@ -935,7 +942,7 @@ def test_normalise_does_not_change_its_input(name):
     doc = _full(name)
     before = copy.deepcopy(doc)
     stored = normalise_python(
-        doc, service="service-py", reads=["analytics.orders"]
+        doc, project="service-py", reads=["analytics.orders"]
     )
     assert doc == before
     stored["customProperties"].clear()
@@ -1132,7 +1139,7 @@ def test_the_full_fixtures_store_and_hash():
 def test_a_set_like_item_that_canonical_json_cannot_write_is_refused():
     doc = _with_property(_kpis(), _custom("term", float("nan"), "atlan"))
     with pytest.raises(CanonicalJsonError):
-        normalise_python(doc, service="service-py", reads=KPIS_READS)
+        normalise_python(doc, project="service-py", reads=KPIS_READS)
 
 
 # the canonical form
@@ -1151,7 +1158,7 @@ def test_the_canonical_form_writes_a_document_in_the_canonical_shape():
         "tags": ["b", "a", "b"],
         "customProperties": [
             {"vendor": "continuo", "property": "modeType", "value": "replace"},
-            {"vendor": "continuo", "property": "service", "value": "core"},
+            {"vendor": "continuo", "property": "project", "value": "core"},
             {"vendor": "acme", "property": "empty", "value": ""},
             {"vendor": "acme", "property": "a", "value": 2.0},
         ],
@@ -1171,7 +1178,7 @@ def test_the_canonical_form_writes_a_document_in_the_canonical_shape():
         "tags": ["a", "b"],
         "customProperties": [
             {"vendor": "acme", "property": "a", "value": 2},
-            {"vendor": "continuo", "property": "service", "value": "core"},
+            {"vendor": "continuo", "property": "project", "value": "core"},
         ],
         "schema": [{"name": "t", "properties": [{"name": "a"}, {"name": "b"}]}],
     }

@@ -32,7 +32,7 @@ The quoted text is the file `analytics.daily_kpis.odcs.yaml`: a script reads a t
 ...       - {name: total_eur, physicalType: "decimal(12, 2)"}
 ... """
 >>> path = "contracts/analytics.daily_kpis.odcs.yaml"
->>> validate.validate_python_contract(yaml_strict.load(text), path=path, service="finance")
+>>> validate.validate_python_contract(yaml_strict.load(text), path=path, project="finance")
 []
 
 ```
@@ -54,7 +54,7 @@ continuo reads its settings from the root `customProperties` items `{vendor: con
 | `schedule` | a schedule name, no whitespace, at most 50 characters | always |
 | `criticality` | `REGULATORY`, `CORE` or `SECONDARY` | always |
 | `kind` | `python-node` (default), `python-csv` or `python-api` | optional |
-| `service` | the [declared service](glossary.md#declared-service) | optional |
+| `project` | the [declared project](glossary.md#declared-project) | optional |
 | `timeoutMinutes` | an integer from 1 to 10080 (`90.0` is refused) | optional |
 | `modeType` | `replace` (default), `append` or `upsert` | optional |
 | `extraColumns` | `raise` (default) or `warn` | optional |
@@ -142,10 +142,10 @@ what each means, how `resolve` fills the rest and which rules check them is in t
 >>> table["customProperties"] = [{"vendor": "continuo", "property": "grain", "value": ["day"]}]
 >>> table["properties"][0]["customProperties"] = [
 ...     {"vendor": "continuo", "property": "aggregate", "value": {"period": "day"}}]
->>> validate.validate_python_contract(doc, path=path, service="finance")
+>>> validate.validate_python_contract(doc, path=path, project="finance")
 []
 >>> table["customProperties"][0]["value"] = []
->>> issues = validate.validate_python_contract(doc, path=path, service="finance")
+>>> issues = validate.validate_python_contract(doc, path=path, project="finance")
 >>> [(issue.path, issue.reason) for issue in issues]
 [('schema[0].customProperties[0].value', 'value')]
 
@@ -153,11 +153,11 @@ what each means, how `resolve` fills the rest and which rules check them is in t
 
 ## The `validate` and `hash` commands
 
-`continuo-contracts validate PATH... [--service SERVICE] [--json]` checks each file, and each
+`continuo-contracts validate PATH... [--project PROJECT] [--json]` checks each file, and each
 `*.odcs.yaml` file directly inside a folder, and logs each issue at ERROR as
 `<file>: <path>: <message>`. `hash` checks one file and prints its
-[contract hash](glossary.md#contract-hash), which covers the service:
-`continuo-contracts hash FILE --service SERVICE [--read TABLE]... [--json]`. Each `--read` is a
+[contract hash](glossary.md#contract-hash), which covers the project:
+`continuo-contracts hash FILE --project PROJECT [--read TABLE]... [--json]`. Each `--read` is a
 table the read queries name, as `<schema>.<table>`: pass the tables that continuo's
 [release](glossary.md#release) passes to get the hash it stores.
 
@@ -165,10 +165,10 @@ table the read queries name, as `<schema>.<table>`: pass the tables that continu
 $ continuo-contracts validate contracts
 INFO this release checks Python contracts
 INFO 1 contract checked, 0 with issues
-$ continuo-contracts hash contracts/analytics.daily_kpis.odcs.yaml --service finance \
+$ continuo-contracts hash contracts/analytics.daily_kpis.odcs.yaml --project finance \
     --read analytics.transactions
 INFO this release checks Python contracts
-sha256:87fc212d4be5ed48feaf69521cfc172f93e8fda263ae09f65357c74d674d3739
+sha256:e2f31f625dc26eb5ba780461ffcb6a2ce844cb2e39f5b2d9a553a433118a0616
 ```
 
 Logs go to stderr, the result to stdout. In the first log line, "release" means this package's
@@ -176,7 +176,7 @@ version. With `--json`, `hash` prints `{"contract_hash", "stored"}` and `validat
 `{"valid", "files": [{"path", "issues": [{"path", "reason", "message"}]}]}`.
 
 The exit status is 0 when every contract is valid and 1 when a contract has an issue. It is 2
-when the command could not run: a bad argument, such as a blank `--service` or a `--read` that is
+when the command could not run: a bad argument, such as a blank `--project` or a `--read` that is
 not `<schema>.<table>`. No `*.odcs.yaml` file to check gives 2 too, and so does a path or file that
 cannot be read or is not UTF-8.
 

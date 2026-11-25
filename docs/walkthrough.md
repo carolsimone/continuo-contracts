@@ -42,11 +42,11 @@ From the folder that holds `finance/`, run the lite check. It runs `dbt parse` (
 or pass `--dbt`) and checks each [node](glossary.md#node). Long lines are cut at `...` here.
 
 ```bash
-$ continuo-contracts dbt check finance --profiles-dir finance/ci --service finance; echo "exit $?"
-INFO LITE CHECK. Passing it does not guarantee that continuo will create this service's ...
+$ continuo-contracts dbt check finance --profiles-dir finance/ci --project finance; echo "exit $?"
+INFO LITE CHECK. Passing it does not guarantee that continuo will create this project's ...
 INFO What only the release does:
 ...
-INFO LITE CHECK. Passing it does not guarantee that continuo will create this service's ...
+INFO LITE CHECK. Passing it does not guarantee that continuo will create this project's ...
 exit 0
 ```
 
@@ -54,8 +54,8 @@ Notice: a passing run prints only the banner and, between the banners, six lines
 continuo's [release](glossary.md#release) does. Then set `criticality: HIGH` and run it again:
 
 ```bash
-$ continuo-contracts dbt check finance --profiles-dir finance/ci --service finance; echo "exit $?"
-INFO LITE CHECK. Passing it does not guarantee that continuo will create this service's ...
+$ continuo-contracts dbt check finance --profiles-dir finance/ci --project finance; echo "exit $?"
+INFO LITE CHECK. Passing it does not guarantee that continuo will create this project's ...
 ERROR model.finance.fx_transactions_eur: customProperties[3].value: `criticality` is 'HIGH', ...
 ...
 exit 1
@@ -96,7 +96,7 @@ no `where` and dbt's default thresholds. A strict `not_null` or `unique` also se
 ...          for k in ("unique", "not_null")]
 >>> doc = dbt.generate(node, tests, manifest={}).document
 >>> doc["id"], {p["property"]: p["value"] for p in doc["customProperties"]}
-('analytics.fx_transactions_eur', {'service': 'finance', 'kind': 'dbt-model', 'schedule': 'daily',
+('analytics.fx_transactions_eur', {'project': 'finance', 'kind': 'dbt-model', 'schedule': 'daily',
  'criticality': 'CORE', 'filePath': 'models/fx_transactions_eur.sql',
  'materialization': {'materialized': 'table'}})
 >>> doc["schema"][0]["properties"][0]
@@ -122,9 +122,9 @@ passes `reads=[]`. So the two hashes differ when the SQL reads a table `reads` d
 ```python
 >>> stored = contract.normalise_dbt(doc, reads=[])
 >>> contract.contract_hash(stored)
-'sha256:bd24e9bd8ad93f9553b2f0b7b37218fdd2eccba1288171400b24c34be786801f'
+'sha256:273a56d5faf4d115663ab4b93ca976e2c132c3f49341b31189686c306ad3d6ca'
 >>> contract.contract_hash(contract.normalise_dbt(doc, reads=["analytics.fx_rates"]))
-'sha256:648b232c419d74df80bbca02438eeff9c25fca303527cf17e64dd231056ddb3c'
+'sha256:5b59551ffd0e397d857087850c89c0e66c22a25416d9e6279da96254650fcdf5'
 >>> facts = dbt.run_facts(stored)
 >>> facts.schedule, facts.criticality, facts.materialized, facts == dbt.run_facts(doc)
 ('daily', 'CORE', 'table', True)

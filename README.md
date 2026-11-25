@@ -22,13 +22,13 @@ tell you. A hash compares only between runs of the same code ([stability][stab])
 ## Check a dbt project in CI
 
 The lite check runs `dbt parse` on the project folder, `shop` here, then writes, checks and hashes
-each node's contract. `--service` is the [service][g-service], the `name:` in `dbt_project.yml`
+each node's contract. `--project` is the [project][g-project], the `name:` in `dbt_project.yml`
 with `_` written `-`. dbt must be on `PATH`, or pass `--dbt PATH`. Here the [seed][g-dbt] file
 `seeds/countries.csv` starts with `code,label`, and `schema.yml` declares `code` and `name`:
 
 ```bash
-$ continuo-contracts dbt check shop --service shop
-INFO LITE CHECK. Passing it does not guarantee that continuo will create this service's contracts at release time.
+$ continuo-contracts dbt check shop --project shop
+INFO LITE CHECK. Passing it does not guarantee that continuo will create this project's contracts at release time.
 ERROR seed.shop.countries: label is in the CSV header but not declared
 ERROR seed.shop.countries: name is declared but not in the CSV header
 INFO What only the release does:
@@ -57,17 +57,17 @@ Python (`py3-none-any`), and its two runtime dependencies are PyYAML and jsonsch
 
 ## Check contracts against an ontology
 
-An [ontology][g-ontology] file names your services, things and their properties. A contract's
+An [ontology][g-ontology] file names your projects, things and their properties. A contract's
 [bindings][g-binding] tie each table and column to it. `ontology check` checks the file alone, and
 `dbt check --ontology` also reads a project's bindings against it, with the rules that need no
-other service. A `WARNING` line never fails the run, and an `ERROR` line exits 1:
+other project. A `WARNING` line never fails the run, and an `ERROR` line exits 1:
 
 ```bash
 $ continuo-contracts ontology check ontology.yaml
-ERROR principals.services.web: domain 'web' is not declared
+ERROR principals.projects.web: domain 'web' is not declared
 INFO 1 error in the ontology file
-$ continuo-contracts dbt check shop --service shop --ontology ontology.yaml
-INFO LITE CHECK. Passing it does not guarantee that continuo will create this service's contracts at release time.
+$ continuo-contracts dbt check shop --project shop --ontology ontology.yaml
+INFO LITE CHECK. Passing it does not guarantee that continuo will create this project's contracts at release time.
 WARNING model.shop.orders: column rate comes from FxRate, which Order does not reach through any reference: the join is not a declared relationship
 INFO What only the release does:
 ...
@@ -158,7 +158,7 @@ Apache License 2.0: see [LICENSE][lic] and [NOTICE][notice]. Report a vulnerabil
 [g-contract]: https://github.com/carolsimone/continuo-contracts/blob/main/docs/glossary.md#contract
 [g-chash]: https://github.com/carolsimone/continuo-contracts/blob/main/docs/glossary.md#contract-hash
 [g-fp]: https://github.com/carolsimone/continuo-contracts/blob/main/docs/glossary.md#fingerprint
-[g-service]: https://github.com/carolsimone/continuo-contracts/blob/main/docs/glossary.md#service
+[g-project]: https://github.com/carolsimone/continuo-contracts/blob/main/docs/glossary.md#project
 [g-lite]: https://github.com/carolsimone/continuo-contracts/blob/main/docs/glossary.md#lite-check
 [g-gate]: https://github.com/carolsimone/continuo-contracts/blob/main/docs/glossary.md#gate
 [g-stored]: https://github.com/carolsimone/continuo-contracts/blob/main/docs/glossary.md#stored-form

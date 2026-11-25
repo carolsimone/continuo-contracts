@@ -246,7 +246,7 @@ def load_manifest(project: str) -> dict[str, Any]:
 
 def kept(manifest: Mapping[str, Any]) -> list[str]:
     """Return the manifest keys of the nodes of `manifest` that get a contract, in key order."""
-    project = dbt.project_service(manifest, "")
+    project = dbt.manifest_project(manifest, "")
     return [
         key
         for key, node in sorted(manifest["nodes"].items())

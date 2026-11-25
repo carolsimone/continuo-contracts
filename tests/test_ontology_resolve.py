@@ -39,8 +39,8 @@ def _column(name, *bindings, **fields):
     return column
 
 
-def _contract(columns, *, entity=None, service="core", schema=(), **root):
-    """A stored contract of `service` with one schema object that holds `columns`."""
+def _contract(columns, *, entity=None, project="core", schema=(), **root):
+    """A stored contract of `project` with one schema object that holds `columns`."""
     table = {"name": "t", "properties": list(columns)}
     custom = [_p(name, value) for name, value in schema]
     if entity is not None:
@@ -48,8 +48,8 @@ def _contract(columns, *, entity=None, service="core", schema=(), **root):
     if custom:
         table["customProperties"] = custom
     properties = [_p("kind", "dbt-model")]
-    if service is not None:
-        properties.append(_p("service", service))
+    if project is not None:
+        properties.append(_p("project", project))
     return canonical_form(
         {"customProperties": properties, "schema": [table], **root}
     )
@@ -177,19 +177,19 @@ def test_resolve_fills_the_domain_the_links_the_types_and_the_personal_mark():
     }
 
 
-def test_the_domain_is_the_domain_of_the_service():
+def test_the_domain_is_the_domain_of_the_project():
     assert (
-        _resolve(_contract([_column("a")], service="finance"))["domain"]
+        _resolve(_contract([_column("a")], project="finance"))["domain"]
         == "finance"
     )
     assert (
-        _resolve(_contract([_column("a")], service="service-py"))["domain"]
+        _resolve(_contract([_column("a")], project="service-py"))["domain"]
         == "analytics"
     )
 
 
-def test_a_service_with_no_domain_gets_no_domain():
-    ont = ontology.load("principals: {services: {core: {kind: dbt}}}")
+def test_a_project_with_no_domain_gets_no_domain():
+    ont = ontology.load("principals: {projects: {core: {kind: dbt}}}")
 
     resolved = _resolve(_contract([_column("a")]), ont)
 
@@ -297,7 +297,7 @@ def test_a_column_is_bound_by_its_name_only_when_the_contract_has_a_thing():
 def test_a_key_part_is_looked_up_before_a_property_of_the_same_name():
     ont = ontology.load(
         """
-principals: {services: {core: {domain: core}}}
+principals: {projects: {core: {domain: core}}}
 entities:
   Thing:
     key: {id: int}
@@ -314,7 +314,7 @@ entities:
 def test_a_key_part_that_is_also_a_personal_property_is_personal_with_the_type_of_the_key():
     ont = ontology.load(
         """
-principals: {services: {core: {domain: core}}}
+principals: {projects: {core: {domain: core}}}
 entities:
   Thing:
     key: {id: int, other: string}
@@ -338,7 +338,7 @@ entities:
 def test_a_declared_classification_wins_over_the_personal_mark_of_a_key_part():
     ont = ontology.load(
         """
-principals: {services: {core: {domain: core}}}
+principals: {projects: {core: {domain: core}}}
 entities:
   Thing:
     key: {id: int}
@@ -354,7 +354,7 @@ entities:
 def test_a_key_part_with_no_property_of_its_name_is_not_personal():
     ont = ontology.load(
         """
-principals: {services: {core: {domain: core}}}
+principals: {projects: {core: {domain: core}}}
 entities:
   Thing:
     key: {id: int}
@@ -412,7 +412,7 @@ def test_the_ontology_key_fills_a_primary_key_only_when_none_is_declared():
 def test_the_position_counts_the_key_in_file_order_from_one():
     ont = ontology.load(
         """
-principals: {services: {core: {domain: core}}}
+principals: {projects: {core: {domain: core}}}
 entities:
   Thing:
     key: {zeta: int, alpha: int, mid: string}
@@ -506,7 +506,7 @@ def test_the_key_fills_only_for_a_key_part_of_the_entity_of_the_contract():
 
 def test_the_key_is_decided_for_each_schema_object():
     stored = {
-        "customProperties": [_p("service", "core")],
+        "customProperties": [_p("project", "core")],
         "schema": [
             {
                 "name": "a",
@@ -899,19 +899,19 @@ def test_a_column_with_more_than_one_binding_is_left_as_written():
     assert columns == _columns(stored)
 
 
-def test_a_service_property_that_is_no_text_leaves_the_contract_unchanged():
+def test_a_project_property_that_is_no_text_leaves_the_contract_unchanged():
     for value in (7, ["core"], {"core": 1}, None):
-        stored = _contract([_column("name")], entity="User", service=None)
-        stored["customProperties"].append(_p("service", value))
+        stored = _contract([_column("name")], entity="User", project=None)
+        stored["customProperties"].append(_p("project", value))
         stored = canonical_form(stored)
 
         assert _resolve(stored) == stored
 
 
-# A service the ontology does not declare.
+# A project the ontology does not declare.
 
 
-def test_resolve_leaves_an_undeclared_service_unchanged():
+def test_resolve_leaves_an_undeclared_project_unchanged():
     stored = _contract(
         [
             _column("name"),
@@ -919,7 +919,7 @@ def test_resolve_leaves_an_undeclared_service_unchanged():
             _column("n", _p("aggregate", {"period": "day"})),
         ],
         entity="User",
-        service="somewhere-else",
+        project="somewhere-else",
     )
 
     resolved = _resolve(stored)
@@ -928,15 +928,15 @@ def test_resolve_leaves_an_undeclared_service_unchanged():
     assert contract_hash(resolved) == contract_hash(stored)
 
 
-def test_a_contract_with_no_service_is_left_unchanged():
-    stored = _contract([_column("name")], entity="User", service=None)
+def test_a_contract_with_no_project_is_left_unchanged():
+    stored = _contract([_column("name")], entity="User", project=None)
 
     assert _resolve(stored) == stored
 
 
-def test_an_undeclared_service_comes_back_in_canonical_form():
+def test_an_undeclared_project_comes_back_in_canonical_form():
     stored = {
-        "customProperties": [_p("service", "somewhere-else")],
+        "customProperties": [_p("project", "somewhere-else")],
         "description": {"purpose": "  padded \r\n"},
         "tags": ["b", "a", "b"],
         "schema": [
@@ -973,8 +973,8 @@ def test_resolve_gives_a_new_dict_and_leaves_its_input_alone():
     assert stored == before
 
 
-def test_resolve_of_an_undeclared_service_is_a_new_dict_too():
-    stored = _contract([_column("name")], service="elsewhere")
+def test_resolve_of_an_undeclared_project_is_a_new_dict_too():
+    stored = _contract([_column("name")], project="elsewhere")
     before = copy.deepcopy(stored)
 
     resolved = _resolve(stored)
@@ -1021,9 +1021,9 @@ def test_resolve_is_idempotent():
     assert contract_hash(_resolve(once)) == contract_hash(once)
 
 
-@pytest.mark.parametrize("service", ["core", "service-py", "elsewhere"])
-def test_resolve_is_idempotent_for_each_kind_of_service(service):
-    once = _resolve(_contract([_column("name")], entity="User", service=service))
+@pytest.mark.parametrize("project", ["core", "service-py", "elsewhere"])
+def test_resolve_is_idempotent_for_each_kind_of_project(project):
+    once = _resolve(_contract([_column("name")], entity="User", project=project))
 
     assert _resolve(once) == once
 
@@ -1067,7 +1067,7 @@ def test_the_resolved_form_of_a_bound_python_contract_is_valid():
     table["properties"].append(
         {"name": "customer", "physicalType": "TEXT", "required": True}
     )
-    stored = normalise_python(doc, service="service-py", reads=[])
+    stored = normalise_python(doc, project="service-py", reads=[])
 
     resolved = _resolve(stored)
 
@@ -1083,7 +1083,7 @@ def test_the_resolved_form_of_a_bound_python_contract_is_valid():
         validate_python_contract(
             resolved,
             path="contracts/py_daily_kpis.odcs.yaml",
-            service="service-py",
+            project="service-py",
         )
         == []
     )
@@ -1094,8 +1094,8 @@ def test_the_resolved_form_of_a_bound_dbt_contract_is_valid():
     stored["customProperties"] = [
         item
         for item in stored["customProperties"]
-        if item["property"] != "service"
-    ] + [_p("service", "core")]
+        if item["property"] != "project"
+    ] + [_p("project", "core")]
     table = stored["schema"][0]
     table["customProperties"] = [
         _p("entity", "Transaction"),
@@ -1136,7 +1136,7 @@ def test_the_resolved_form_of_a_bound_dbt_contract_is_valid():
 def test_a_ref_gives_the_type_of_the_key_it_points_at():
     ont = ontology.load(
         """
-principals: {services: {core: {domain: core}}}
+principals: {projects: {core: {domain: core}}}
 entities:
   A: {key: {id: int}}
   B: {key: {a: "ref A"}}
@@ -1202,7 +1202,7 @@ entities:
 def test_a_property_that_writes_both_ref_and_a_typed_ref_reads_the_ref_key():
     ont = ontology.load(
         """
-principals: {services: {core: {domain: core}}}
+principals: {projects: {core: {domain: core}}}
 entities:
   A: {key: {id: int}}
   B: {key: {id: string}}
@@ -1239,7 +1239,7 @@ entities:
 def test_the_ontology_type_map():
     ont = ontology.load(
         """
-principals: {services: {core: {domain: core}}}
+principals: {projects: {core: {domain: core}}}
 entities:
   T:
     key: {a: int, b: string, c: timestamp, d: date, e: money, f: decimal, g: bool, h: "enum[x]"}
@@ -1264,7 +1264,7 @@ entities:
 def test_only_a_property_marked_personal_is_personal():
     ont = ontology.load(
         """
-principals: {services: {core: {domain: core}}}
+principals: {projects: {core: {domain: core}}}
 entities:
   T:
     key: {id: int}
@@ -1286,7 +1286,7 @@ entities:
 
 
 def test_a_contract_with_no_schema_gets_only_its_domain():
-    stored = canonical_form({"customProperties": [_p("service", "core")]})
+    stored = canonical_form({"customProperties": [_p("project", "core")]})
 
     assert _resolve(stored) == {**stored, "domain": "core"}
 
@@ -1294,7 +1294,7 @@ def test_a_contract_with_no_schema_gets_only_its_domain():
 def test_a_table_with_no_columns_gets_only_its_link():
     stored = canonical_form(
         {
-            "customProperties": [_p("service", "core")],
+            "customProperties": [_p("project", "core")],
             "schema": [{"name": "t", "customProperties": [_p("entity", "User")]}],
         }
     )
@@ -1314,7 +1314,7 @@ def _unloaded(entities):
     """An `Ontology` built by hand, so that `load` does not refuse a name it would refuse."""
     return ontology.Ontology(
         document={
-            "principals": {"services": {"core": {"domain": "core"}}},
+            "principals": {"projects": {"core": {"domain": "core"}}},
             "entities": entities,
         },
         sha256="0" * 64,
@@ -1350,7 +1350,7 @@ def test_a_name_that_a_reference_cannot_carry_is_never_written_as_a_property(
 @pytest.mark.parametrize("name", ["display name", "display.name", "display/name"])
 def test_a_column_with_such_a_name_is_left_unbound_by_a_loaded_ontology(name):
     ont = ontology.load(
-        "principals: {services: {core: {domain: core}}}\n"
+        "principals: {projects: {core: {domain: core}}}\n"
         "entities: {T: {key: {id: int}, properties: {display_name: {type: string}}}}\n"
     )
     stored = _contract([_column("id"), _column(name)], entity="T")
@@ -1369,8 +1369,8 @@ def test_the_resolved_form_of_a_column_with_such_a_name_is_valid(name):
     stored["customProperties"] = [
         item
         for item in stored["customProperties"]
-        if item["property"] != "service"
-    ] + [_p("service", "core")]
+        if item["property"] != "project"
+    ] + [_p("project", "core")]
     table = stored["schema"][0]
     table["customProperties"] = [_p("entity", "T")]
     table["properties"] = [{"name": "id"}, {"name": name}]

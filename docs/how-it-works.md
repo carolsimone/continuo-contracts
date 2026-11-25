@@ -31,8 +31,8 @@ tables the compiled SQL names. The [lite check](glossary.md#lite-check) cannot, 
 compiles nothing, so its hash differs from the release's when the SQL reads an undeclared table.
 
 continuo's [release](glossary.md#release) runs these steps on every node of the project. It
-rejects the manifest as `invalid_artifact` when a kept node has no service or another service than
-the [declared service](glossary.md#declared-service), or when every node is skipped. It rejects it
+rejects the manifest as `invalid_artifact` when a kept node has no project or another project than
+the [declared project](glossary.md#declared-project), or when every node is skipped. It rejects it
 as `duplicate_table` when two nodes give one contract id, `<schema>.<table>`.
 [dbt contracts](dbt-contracts.md) covers the gates and `generate`, and [validation](validation.md)
 the rules.
@@ -59,11 +59,11 @@ enforces the rows and these confinements from `[tool.importlinter]` in `pyprojec
 ## The ontology modules
 
 Two modules read contracts against an [ontology](glossary.md#ontology), a file that names the
-services, things and properties of the data ([ontology](ontology.md)). They take values and return
+projects, things and properties of the data ([ontology](ontology.md)). They take values and return
 values like every module but `cli`: the caller reads the file and the contracts.
 
 - `ontology` loads the file (`ontology.load` reads it with `yaml_strict` and checks its shape
-  against the keys it lists) and answers which services the file declares. It also reads the
+  against the keys it lists) and answers which projects the file declares. It also reads the
   ontology part of a stored contract: `has_bindings` says whether the contract writes a
   [binding](glossary.md#binding), `strip` takes the bindings and the links to the ontology out, and
   `resolve` fills a stored form with what the ontology knows. `resolve` and `strip` end in
@@ -72,8 +72,8 @@ values like every module but `cli`: the caller reads the file and the contracts.
 - `ontology_check` runs the rules over stored contracts in memory: `check` takes the loaded
   `Ontology`, the contracts and the names of the rules, and returns `Finding`s, and
   `ontology_findings` checks the file alone. The [lite check](glossary.md#lite-check) resolves
-  each contract of one service and runs the [per-service rules](glossary.md#per-service-rule). The
-  rules that need the contracts of every service run only at the release.
+  each contract of one project and runs the [per-project rules](glossary.md#per-project-rule). The
+  rules that need the contracts of every project run only at the release.
 
 The lite check hashes the stored form, so a resolved form changes no hash it reports.
 `ontology.json` pins the first resolved forms and their hashes ([test vectors](vectors.md)).
@@ -121,7 +121,7 @@ tags, writing an ODCS default or spelling a type `int` instead of `INTEGER` chan
 >>> from continuo_contracts import contract
 >>> doc = {"id": "analytics.kpis", "tags": ["finance", "daily", "finance"], "schema": [
 ...     {"name": "kpis", "properties": [{"name": "n", "physicalType": "int", "required": False}]}]}
->>> stored = contract.normalise_python(doc, service="shop", reads=[])
+>>> stored = contract.normalise_python(doc, project="shop", reads=[])
 >>> stored["tags"], stored["schema"][0]["properties"]
 (['daily', 'finance'], [{'name': 'n', 'physicalType': 'INTEGER', 'logicalType': 'integer'}])
 

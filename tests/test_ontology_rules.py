@@ -9,7 +9,7 @@ import yaml
 from continuo_contracts import ontology, ontology_check
 from continuo_contracts.contract import canonical_form
 from continuo_contracts.ontology_check import (
-    PER_SERVICE_RULES,
+    PER_PROJECT_RULES,
     RELEASE_RULES,
     RULES,
     SEVERITIES,
@@ -19,12 +19,12 @@ from continuo_contracts.ontology_check import (
 )
 from continuo_contracts.vocabulary import continuo_values
 
-# The texts that `check` writes for a service that the ontology does not declare.
-UNDECLARED_SERVICE = (
-    "not declared in the ontology: none of this service's contracts is checked"
+# The texts that `check` writes for a project that the ontology does not declare.
+UNDECLARED_PROJECT = (
+    "not declared in the ontology: none of this project's contracts is checked"
 )
 UNDECLARED_BINDINGS = (
-    "writes bindings, but its service is not declared in the ontology: "
+    "writes bindings, but its project is not declared in the ontology: "
     "they are kept as written and not checked"
 )
 
@@ -36,7 +36,7 @@ ONTOLOGY = {
             "core": {"owner_team": "core-data"},
             "finance": {"owner_team": "finance-data"},
         },
-        "services": {
+        "projects": {
             "core": {"domain": "core", "kind": "dbt"},
             "finance": {"domain": "finance", "kind": "dbt"},
             "stream": {"domain": "core", "kind": "flink"},
@@ -131,7 +131,7 @@ def column(name, binding=None, **fields):
 
 
 def contract(
-    service,
+    project,
     name,
     *,
     entity=None,
@@ -144,7 +144,7 @@ def contract(
     quality=None,
     physical_name=None,
 ):
-    """A stored contract of `service`: id `analytics.<name>`, one schema object of `columns`.
+    """A stored contract of `project`: id `analytics.<name>`, one schema object of `columns`.
 
     `columns` is a list of `(name, binding)`, as `column` reads them.
     """
@@ -175,7 +175,7 @@ def contract(
         "version": "0",
         "status": "active",
         "customProperties": [
-            _property("service", service),
+            _property("project", project),
             _property("kind", "dbt-model"),
         ],
         "schema": [table],
@@ -256,10 +256,10 @@ def table(stored):
     return stored["schema"][0]
 
 
-def moved_to(stored, service):
-    """`stored` moved to `service`."""
+def moved_to(stored, project):
+    """`stored` moved to `project`."""
     moved = copy.deepcopy(stored)
-    set_custom(moved, "service", service)
+    set_custom(moved, "project", project)
     return moved
 
 
@@ -329,7 +329,7 @@ def test_the_rules_and_severities_are_the_documented_ones():
         "quality",
         "privacy",
     )
-    assert PER_SERVICE_RULES == ("contract", "coverage", "quality", "privacy")
+    assert PER_PROJECT_RULES == ("contract", "coverage", "quality", "privacy")
     assert RELEASE_RULES == (
         "contract",
         "coverage",
@@ -580,28 +580,28 @@ def test_access_rule_readers_must_be_declared_domains():
     )
 
 
-def test_service_domain_must_be_declared():
+def test_project_domain_must_be_declared():
     def mutate(document):
-        document["principals"]["services"]["app"]["domain"] = "ops"
+        document["principals"]["projects"]["app"]["domain"] = "ops"
 
     assert_finding(
         ontology_problems(mutate),
         "error",
         "ontology",
-        "principals.services.app",
+        "principals.projects.app",
         "ops",
     )
 
 
-def test_a_service_with_no_domain_is_an_error():
+def test_a_project_with_no_domain_is_an_error():
     def mutate(document):
-        del document["principals"]["services"]["app"]["domain"]
+        del document["principals"]["projects"]["app"]["domain"]
 
     assert_finding(
         ontology_problems(mutate),
         "error",
         "ontology",
-        "principals.services.app",
+        "principals.projects.app",
         "None",
     )
 
@@ -613,7 +613,7 @@ def test_an_ontology_with_no_principals_and_no_entities_has_no_finding():
 def test_ontology_findings_name_no_contract():
     def mutate(document):
         document["entities"]["User"]["owner"] = "sales"
-        document["principals"]["services"]["app"]["domain"] = "ops"
+        document["principals"]["projects"]["app"]["domain"] = "ops"
 
     found = ontology_problems(mutate)
 
@@ -624,14 +624,14 @@ def test_ontology_findings_name_no_contract():
 # The contract rule.
 
 
-def test_domain_must_match_the_services_domain():
+def test_domain_must_match_the_projects_domain():
     state = base()
     state["txns"]["domain"] = "finance"
 
     assert_finding(run(state), "error", "contract", "analytics.txns", "finance")
 
 
-def test_a_domain_that_is_the_services_domain_passes():
+def test_a_domain_that_is_the_projects_domain_passes():
     state = base()
     state["txns"]["domain"] = "core"
 
@@ -992,14 +992,14 @@ def test_table_grant_opens_the_copy():
 
 def test_owner_domain_reads_every_copy_of_its_things():
     document = ontology_document()
-    document["principals"]["services"]["stream"]["domain"] = "finance"
+    document["principals"]["projects"]["stream"]["domain"] = "finance"
 
     findings = run(base(), document=document)
 
     assert_no_finding(findings, "error", "access", "analytics.txns")
 
 
-def test_a_domain_reads_the_copies_of_its_own_services():
+def test_a_domain_reads_the_copies_of_its_own_projects():
     state = base()
     set_custom(table(state["txns"]), "reads", ["analytics.seed_users"])
 
@@ -1052,7 +1052,7 @@ def test_a_read_of_an_unbound_table_is_a_warning_for_every_kind_of_contract():
         ]
 
 
-def test_a_read_of_a_relation_only_an_undeclared_service_holds_is_a_warning():
+def test_a_read_of_a_relation_only_an_undeclared_project_holds_is_a_warning():
     state = base()
     state["ledger"] = contract("billing", "ledger", columns=[("id", None)])
     set_custom(table(state["txns"]), "reads", ["analytics.ledger"])
@@ -1460,7 +1460,7 @@ def test_a_key_part_that_is_also_a_personal_property_is_classified_once_resolved
 
     assert ontology_findings(chosen) == []
     assert table(resolved)["properties"][0]["classification"] == "personal"
-    findings = check(chosen, [resolved], rules=PER_SERVICE_RULES)
+    findings = check(chosen, [resolved], rules=PER_PROJECT_RULES)
     assert problems(findings) == [], listing(findings)
 
 
@@ -1489,7 +1489,7 @@ def test_thing_with_no_copy_is_info():
     assert_finding(run(base()), "info", "drift", "FxRate")
 
 
-def test_a_thing_whose_domain_has_no_checked_service_is_not_reported():
+def test_a_thing_whose_domain_has_no_checked_project_is_not_reported():
     state = {name: c for name, c in base().items() if name != "revenue"}
 
     findings = run(state)
@@ -1526,36 +1526,36 @@ def test_drift_findings_name_no_contract():
     assert all(f.contract_id is None for f in found)
 
 
-# The scope: only the contracts of declared services are checked.
+# The scope: only the contracts of declared projects are checked.
 
 
-def about_service(findings, state, service):
-    """The findings about `service` itself or about one of its contracts."""
+def about_project(findings, state, project):
+    """The findings about `project` itself or about one of its contracts."""
     ids = {
         c["id"]
         for c in state.values()
-        if continuo_values(c["customProperties"])["service"] == service
+        if continuo_values(c["customProperties"])["project"] == project
     }
-    return [f for f in findings if f.subject == service or f.contract_id in ids]
+    return [f for f in findings if f.subject == project or f.contract_id in ids]
 
 
-def test_an_undeclared_service_is_one_information_finding():
+def test_an_undeclared_project_is_one_information_finding():
     state = base()
     state["invoices"] = contract("billing", "invoices", columns=[("id", None)])
     state["ledger"] = contract("billing", "ledger", columns=[("id", None)])
 
     findings = run(state)
 
-    assert about_service(findings, state, "billing") == [
-        Finding("info", "contract", "billing", UNDECLARED_SERVICE, None)
+    assert about_project(findings, state, "billing") == [
+        Finding("info", "contract", "billing", UNDECLARED_PROJECT, None)
     ]
     assert problems(findings) == []
 
 
-def test_a_binding_in_an_undeclared_service_is_a_warning_and_is_not_checked():
+def test_a_binding_in_an_undeclared_project_is_a_warning_and_is_not_checked():
     state = base()
     # An entity that is no thing and a column bound to no property are errors in a declared
-    # service.
+    # project.
     invoices = contract(
         "billing",
         "invoices",
@@ -1575,9 +1575,9 @@ def test_a_binding_in_an_undeclared_service_is_a_warning_and_is_not_checked():
     assert [f for f in findings if f.severity == "error"] == []
     assert sorted(
         (f.severity, f.rule, f.subject, f.message, f.contract_id)
-        for f in about_service(findings, state, "billing")
+        for f in about_project(findings, state, "billing")
     ) == [
-        ("info", "contract", "billing", UNDECLARED_SERVICE, None),
+        ("info", "contract", "billing", UNDECLARED_PROJECT, None),
         (
             "warning",
             "contract",
@@ -1607,16 +1607,16 @@ def test_the_scope_findings_come_with_any_rules():
     ]
 
 
-def test_the_texts_of_an_undeclared_service_are_exact():
+def test_the_texts_of_an_undeclared_project_are_exact():
     state = base()
     state["invoices"] = contract("billing", "invoices", entity="Invoice")
 
-    texts = {f.message for f in about_service(run(state), state, "billing")}
+    texts = {f.message for f in about_project(run(state), state, "billing")}
 
-    assert texts == {UNDECLARED_SERVICE, UNDECLARED_BINDINGS}
+    assert texts == {UNDECLARED_PROJECT, UNDECLARED_BINDINGS}
 
 
-# Every error names a contract; the rules need no other service; progress.
+# Every error names a contract; the rules need no other project; progress.
 
 
 def broken():
@@ -1676,7 +1676,7 @@ def test_a_broken_ontology_has_errors_that_name_no_contract():
     assert {f.contract_id for f in errors} == {None}
 
 
-def test_per_service_rules_need_no_other_service():
+def test_per_project_rules_need_no_other_project():
     state = broken()
     state["daily"] = contract(
         "finance",
@@ -1687,20 +1687,20 @@ def test_per_service_rules_need_no_other_service():
     )
     contracts = list(state.values())
 
-    together = check(ONT, contracts, rules=PER_SERVICE_RULES)
+    together = check(ONT, contracts, rules=PER_PROJECT_RULES)
 
     assert {f.rule for f in together} >= {"contract", "coverage", "quality"}
-    for service in ("app", "stream", "core", "finance"):
+    for project in ("app", "stream", "core", "finance"):
         mine = [
             c
             for c in contracts
-            if continuo_values(c["customProperties"])["service"] == service
+            if continuo_values(c["customProperties"])["project"] == project
         ]
         ids = {c["id"] for c in mine}
 
-        alone = check(ONT, mine, rules=PER_SERVICE_RULES)
+        alone = check(ONT, mine, rules=PER_PROJECT_RULES)
 
-        assert alone == [f for f in together if f.contract_id in ids], service
+        assert alone == [f for f in together if f.contract_id in ids], project
     assert {f.contract_id for f in together} == {
         "analytics.events",
         "analytics.seed_users",

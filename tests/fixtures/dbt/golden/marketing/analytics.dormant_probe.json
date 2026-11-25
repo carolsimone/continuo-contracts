@@ -1,11 +1,11 @@
 {
- "contract_hash": "sha256:e84288f4aa5066084abe3dc2ce319e4fa5d04f43c8a4e95baad95a2578b31e03",
+ "contract_hash": "sha256:f2c51bd30c8712691a5e8efd15929e4dfacbdd57d1e0a31df97832007f8a70b7",
  "flags": [],
  "generated": {
   "apiVersion": "v3.2.0",
   "customProperties": [
    {
-    "property": "service",
+    "property": "project",
     "value": "marketing",
     "vendor": "continuo"
    },
@@ -79,7 +79,7 @@
     "vendor": "continuo"
    },
    {
-    "property": "service",
+    "property": "project",
     "value": "marketing",
     "vendor": "continuo"
    }

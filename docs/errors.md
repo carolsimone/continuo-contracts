@@ -8,7 +8,7 @@ Which exceptions does the package raise, and when? Every error the package defin
 | Exception | When | The message starts with |
 |---|---|---|
 | `CanonicalJsonError` | a value [canonical JSON](hashing.md) refuses | the JSON path, `$.a[0]` |
-| `HashInputError` | a bad shared unit, `service` or `reads` | the key, service or entry |
+| `HashInputError` | a bad shared unit, `project` or `reads` | the key, project or entry |
 | `ProjectionError` | an unsupported SQL type or Python node | `<schema>.<table>:`, or nothing |
 | `DbtNodeError` | a manifest field the library cannot read | the node or test id, or `manifest` |
 | `FingerprintsFileError` | a malformed `fingerprints.yaml` | the place in the file |
@@ -17,7 +17,7 @@ Which exceptions does the package raise, and when? Every error the package defin
 | `StrictYamlError` | YAML that the strict reader refuses | `line <n>, column <n>:` |
 
 - `HashInputError`: a shared unit key that is empty, holds NUL or LF, or that UTF-8 cannot encode.
-  Also a digest that is not 64 lowercase hex characters, a blank `service`, `reads` given as one
+  Also a digest that is not 64 lowercase hex characters, a blank `project`, `reads` given as one
   string, or a `reads` entry that is not `<schema>.<table>`.
 - `ProjectionError`: it starts with `<schema>.<table>: ` from `code_projection`, `projection_hash`,
   and a `from_mapping` entry (also reached through `node_from_odcs`) whose `reads`, `config`,

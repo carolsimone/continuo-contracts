@@ -57,7 +57,7 @@ _ROWS: Final = (
         "root",
         "authored",
         "written",
-        "service kind schedule criticality timeoutMinutes",
+        "project kind schedule criticality timeoutMinutes",
     ),
     *_rows(
         "root",

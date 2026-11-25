@@ -32,7 +32,7 @@ def test_the_demo_ontology_loads():
 
     assert o.declares("core") and o.domain_of("finance") == "finance"
     assert o.sha256 == hashlib.sha256(DEMO.read_bytes()).hexdigest()
-    assert o.services() == (
+    assert o.projects() == (
         "card-service",
         "core",
         "finance",
@@ -69,8 +69,8 @@ def test_the_ontology_is_frozen():
     [
         ("entities: {User: {personnal: true}}", "entities.User.personnal"),
         (
-            "principals: {services: {core: {domain: 3}}}",
-            "principals.services.core.domain",
+            "principals: {projects: {core: {domain: 3}}}",
+            "principals.projects.core.domain",
         ),
         ("entities: {User: {key: [user_id]}}", "entities.User.key"),
         ("- a list", "<root>"),
@@ -84,8 +84,8 @@ def test_the_ontology_is_frozen():
             "principals.domains.core.boss",
         ),
         (
-            "principals: {services: {core: {size: 1}}}",
-            "principals.services.core.size",
+            "principals: {projects: {core: {size: 1}}}",
+            "principals.projects.core.size",
         ),
         (
             "principals: {teams: {core: {group: x}}}",
@@ -114,8 +114,8 @@ def test_the_ontology_is_frozen():
             "principals.domains.core.owner_team",
         ),
         (
-            "principals: {services: {core: {kind: [dbt]}}}",
-            "principals.services.core.kind",
+            "principals: {projects: {core: {kind: [dbt]}}}",
+            "principals.projects.core.kind",
         ),
         (
             "principals: {teams: {core: {idp_group: null}}}",
@@ -188,7 +188,7 @@ def test_the_ontology_is_frozen():
         ),
         # A name that is blank.
         ("entities: {'': {owner: core}}", "entities"),
-        ("principals: {services: {' ': {domain: core}}}", "principals.services"),
+        ("principals: {projects: {' ': {domain: core}}}", "principals.projects"),
         ("entities: {User: {key: {'': int}}}", "entities.User.key"),
         ("entities: {User: {properties: {'': {}}}}", "entities.User.properties"),
         # A name that `<Thing>.<field>` cannot carry: whitespace, a dot or a slash.
@@ -221,7 +221,7 @@ def test_the_message_is_the_path_a_colon_and_the_reason():
     with pytest.raises(OntologyError) as unknown:
         ontology.load("entities: {User: {personnal: true}}")
     with pytest.raises(OntologyError) as wrong_type:
-        ontology.load("principals: {services: {core: {domain: 3}}}")
+        ontology.load("principals: {projects: {core: {domain: 3}}}")
     with pytest.raises(OntologyError) as not_a_mapping:
         ontology.load("- a list")
     with pytest.raises(OntologyError) as blank:
@@ -232,7 +232,7 @@ def test_the_message_is_the_path_a_colon_and_the_reason():
         "born_in, description, key, owner, properties"
     )
     assert str(wrong_type.value) == (
-        "principals.services.core.domain: must be a string, got a number"
+        "principals.projects.core.domain: must be a string, got a number"
     )
     assert str(not_a_mapping.value) == "<root>: must be a mapping, got a list"
     assert str(blank.value) == "entities: a thing name is not blank, got ' '"
@@ -267,18 +267,18 @@ def test_a_name_that_a_reference_cannot_carry_is_refused_with_the_path_of_its_ma
     assert str(refused.value) == message
 
 
-def test_a_domain_a_service_a_team_and_a_role_keep_names_with_whitespace():
+def test_a_domain_a_project_a_team_and_a_role_keep_names_with_whitespace():
     # Only the names that `<Thing>.<field>` carries are bound: a principal is named as its owner
     # writes it.
     o = ontology.load(
         "principals:\n"
         "  domains: {'core data': {owner_team: 'core team'}}\n"
-        "  services: {'my service': {domain: 'core data'}}\n"
+        "  projects: {'my project': {domain: 'core data'}}\n"
         "  teams: {'core team': {idp_group: 'okta:core'}}\n"
         "  roles: {'data analyst': {idp_group: 'okta:analysts'}}\n"
     )
 
-    assert o.declares("my service")
+    assert o.declares("my project")
 
 
 @pytest.mark.parametrize(
@@ -321,7 +321,7 @@ def test_a_strict_yaml_error_is_an_ontology_error():
 def test_an_empty_mapping_is_an_ontology_that_declares_nothing():
     o = ontology.load("{}")
 
-    assert o.services() == () and not o.declares("core")
+    assert o.projects() == () and not o.declares("core")
     assert o.domain_of("core") is None
 
 
@@ -331,8 +331,8 @@ principals:
   description: who acts on data
   domains:
     core: {owner_team: core-data, description: the core domain}
-  services:
-    core: {domain: core, kind: dbt, description: the core service}
+  projects:
+    core: {domain: core, kind: dbt, description: the core project}
   teams:
     core-data: {idp_group: "okta:core-data", description: the core team}
   roles:
@@ -403,10 +403,10 @@ def test_description_is_a_name_where_a_mapping_lists_names():
     assert o.document["entities"]["description"]["key"] == {"description": "int"}
 
 
-# What the ontology says about a service.
+# What the ontology says about a project.
 
 
-def test_a_service_is_declared_when_the_ontology_names_it():
+def test_a_project_is_declared_when_the_ontology_names_it():
     o = ontology.load(DEMO.read_text())
 
     assert o.declares("service-py") and not o.declares("nobody")
@@ -414,24 +414,24 @@ def test_a_service_is_declared_when_the_ontology_names_it():
     assert o.domain_of("nobody") is None
 
 
-def test_a_service_with_no_domain_has_none():
-    o = ontology.load("principals: {services: {core: {kind: dbt}}}")
+def test_a_project_with_no_domain_has_none():
+    o = ontology.load("principals: {projects: {core: {kind: dbt}}}")
 
     assert o.declares("core") and o.domain_of("core") is None
 
 
-def test_the_services_come_in_sorted_order_whatever_the_file_order():
+def test_the_projects_come_in_sorted_order_whatever_the_file_order():
     o = ontology.load(
-        "principals: {services: {zeta: {domain: a}, alpha: {domain: a}, mid: {}}}"
+        "principals: {projects: {zeta: {domain: a}, alpha: {domain: a}, mid: {}}}"
     )
 
-    assert o.services() == ("alpha", "mid", "zeta")
+    assert o.projects() == ("alpha", "mid", "zeta")
 
 
-def test_an_ontology_with_no_principals_declares_no_service():
+def test_an_ontology_with_no_principals_declares_no_project():
     o = ontology.load("entities: {User: {owner: core}}")
 
-    assert o.services() == () and not o.declares("core")
+    assert o.projects() == () and not o.declares("core")
 
 
 # The binding properties.
@@ -473,7 +473,7 @@ def _bound():
         "version": "0",
         "status": "active",
         "customProperties": [
-            _item("service", "core"),
+            _item("project", "core"),
             _item("entity", "Order"),
         ],
         "schema": [
@@ -559,7 +559,7 @@ def test_strip_keeps_the_domain_and_every_resolved_value():
     # The root `entity` is not a binding of the schema object, so it stays.
     assert stripped["customProperties"] == [
         _item("entity", "Order"),
-        _item("service", "core"),
+        _item("project", "core"),
     ]
 
 

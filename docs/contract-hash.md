@@ -51,11 +51,11 @@ string, raise `HashInputError`. Tables are stored ASCII-lower-cased, sorted by c
 keeping the `value` of the last one that has one. It then joins that value's tables with `reads`
 and, when there is a table, adds `{vendor: continuo, property: reads, value: <tables>}`.
 
-`normalise_python(doc, service=..., reads=...)`:
+`normalise_python(doc, project=..., reads=...)`:
 
-- Sets `version: "0"`, `status: "active"` and the root `continuo` properties `service` and `kind`,
+- Sets `version: "0"`, `status: "active"` and the root `continuo` properties `project` and `kind`,
   overwriting. `kind` is the written one, else `python-node`, and `python-model` becomes
-  `python-node`. An empty or blank `service` raises `HashInputError`.
+  `python-node`. An empty or blank `project` raises `HashInputError`.
 - Sets an absent root `name` or schema object `physicalName` to the schema object's `name`.
 - Removes each column's `logicalType` and `logicalTypeOptions`. When `canonical_sql_type` accepts
   its `physicalType`, it writes the canonical spelling and the logical type below.

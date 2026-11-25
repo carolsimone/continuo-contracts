@@ -68,9 +68,11 @@ contracts.
 - **Changelog.** A behaviour change adds a line to `## [Unreleased]` in [CHANGELOG](CHANGELOG.md).
 - **Fingerprints.** Edit `continuo_contracts/fingerprints.yaml`, never `docs/fingerprints.md`, then
   run `uv run python scripts/render_fingerprints.py`. A test fails until you do.
-- **Hash stability.** A change that moves a hash the vectors or the tests fix ships only with a
-  [re-baseline](docs/glossary.md#re-baseline). That runs in continuo, outside this package: say in
-  the pull request that the change needs one.
+- **Hash stability.** A change that moves a hash the vectors or the tests fix needs continuo to
+  adopt the new hashes. By default that is a [re-baseline](docs/glossary.md#re-baseline), which
+  runs in continuo, outside this package. Only a one-off plan replaces it, such as a clean break
+  that starts continuo's install empty. Say in the pull request which one the change needs, and
+  in the version's TL;DR ([stability](docs/stability.md#hashes)).
 - **Documentation.** One page per topic in `docs/`, opened by the question of its README row,
   except a generated page such as `docs/fingerprints.md`. Examples are doctests that `pytest` runs
   (end a fenced block with a blank line), and `tests/test_docs_links.py` checks every link.

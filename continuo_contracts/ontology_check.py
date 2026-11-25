@@ -8,10 +8,10 @@ stores and resolves the contracts (`ontology.resolve`) and passes them in.
 A `Finding` has a `severity` (`SEVERITIES`), the `rule` that wrote it (`RULES`), a `subject`, a
 `message` and the `contract_id` of the contract it is about. The subject of a finding about a
 contract is its `id`, and the subject of any other finding is a thing, `<Thing>.<property>`, a
-service or a path of the ontology file. Every error of a rule in `RELEASE_RULES` names a contract:
+project or a path of the ontology file. Every error of a rule in `RELEASE_RULES` names a contract:
 the findings with no `contract_id` are the ones of the `ontology` rule, the information and the
 warnings of `drift`, the layers and the warning about a `born_in` of `order`, and the
-information about a service.
+information about a project.
 
 ====================  ==================================================================
 rule                  what it checks
@@ -29,18 +29,18 @@ rule                  what it checks
 `drift`               each property and each thing is held by a copy
 ====================  ==================================================================
 
-`PER_SERVICE_RULES` are the rules that need no other service: run over one service's contracts,
+`PER_PROJECT_RULES` are the rules that need no other project: run over one project's contracts,
 they give the findings that the same rules give over the whole estate. `RELEASE_RULES` adds the
 rules that need the whole estate: `access`, `order` and `drift`.
 
-Only the contracts of a service that the ontology declares are copies, and the rules read only
-those. A service with contracts that the ontology does not declare gets one `info` finding of
+Only the contracts of a project that the ontology declares are copies, and the rules read only
+those. A project with contracts that the ontology does not declare gets one `info` finding of
 the rule `contract`, and each of its contracts that writes a binding gets one `warning` of that
 rule. `check` writes these two for any `rules`. The contracts passed to `check` are stored forms
-that `validate` accepted, already resolved where their service is declared: `check` does not
+that `validate` accepted, already resolved where their project is declared: `check` does not
 resolve them.
 
-A copy is a contract of a declared service. Copies are found by their physical relation, the
+A copy is a contract of a declared project. Copies are found by their physical relation, the
 `id` of the contract without its last name part, then `.` and the `physicalName` of its schema
 object, which is what another contract's `reads` names. The case of the `id`, of the names and of
 a read does not matter: all are compared in lower case. When two contracts hold one relation,
@@ -81,8 +81,8 @@ RULES: Final[tuple[str, ...]] = (
     "quality",
     "privacy",
 )
-# The rules that need nothing from another service.
-PER_SERVICE_RULES: Final[tuple[str, ...]] = (
+# The rules that need nothing from another project.
+PER_PROJECT_RULES: Final[tuple[str, ...]] = (
     "contract",
     "coverage",
     "quality",
@@ -90,17 +90,17 @@ PER_SERVICE_RULES: Final[tuple[str, ...]] = (
 )
 # The rules that a release runs over the whole estate: every rule but `ontology`.
 RELEASE_RULES: Final[tuple[str, ...]] = (
-    *PER_SERVICE_RULES,
+    *PER_PROJECT_RULES,
     "access",
     "order",
     "drift",
 )
 
-_UNDECLARED_SERVICE: Final = (
-    "not declared in the ontology: none of this service's contracts is checked"
+_UNDECLARED_PROJECT: Final = (
+    "not declared in the ontology: none of this project's contracts is checked"
 )
 _UNDECLARED_BINDINGS: Final = (
-    "writes bindings, but its service is not declared in the ontology: "
+    "writes bindings, but its project is not declared in the ontology: "
     "they are kept as written and not checked"
 )
 
@@ -115,7 +115,7 @@ class Finding:
     """One thing a rule found.
 
     `severity` is one of `SEVERITIES` and `rule` one of `RULES`. `subject` is the `id` of the
-    contract the finding is about, or a thing, `<Thing>.<property>`, a service or a path of the
+    contract the finding is about, or a thing, `<Thing>.<property>`, a project or a path of the
     ontology file. `contract_id` is the `id` of that contract, and `None` for a finding that is
     not about one contract.
     """
@@ -129,7 +129,7 @@ class Finding:
 
 @dataclass(frozen=True)
 class _Copy:
-    """What the rules read of one contract of a declared service.
+    """What the rules read of one contract of a declared project.
 
     `entity` is empty and `grain` has no item for a contract that writes none. `bindings` holds
     the columns that write a binding, with the first of `property`, `local` and `aggregate`
@@ -140,7 +140,7 @@ class _Copy:
 
     id: str
     relation: str
-    service: str
+    project: str
     domain: str | None
     entity: str
     grain: Sequence[Any]
@@ -208,7 +208,7 @@ def check(
     `rules` names rules of `RULES` except `ontology`, which `ontology_findings` runs, and a rule
     is run once however often it is named. Raises `ValueError`, before any rule runs, for a name
     that is not a rule `check` can run. `contracts` are stored forms that `validate` accepted,
-    resolved where their service is declared; the module docstring says which of them the rules
+    resolved where their project is declared; the module docstring says which of them the rules
     read and what is said about the others. `progress` is called with no argument after each
     contract of each rule that runs.
 
@@ -225,15 +225,15 @@ def check(
     declared: list[Mapping[str, Any]] = []
     undeclared: dict[str, list[Mapping[str, Any]]] = {}
     for stored in sorted(contracts, key=_contract_id):
-        service = _service(stored)
-        if ontology.declares(service):
+        project = _project(stored)
+        if ontology.declares(project):
             declared.append(stored)
         else:
-            undeclared.setdefault(service, []).append(stored)
+            undeclared.setdefault(project, []).append(stored)
     findings: list[Finding] = []
-    for service, members in undeclared.items():
+    for project, members in undeclared.items():
         findings.append(
-            Finding("info", "contract", service, _UNDECLARED_SERVICE, None)
+            Finding("info", "contract", project, _UNDECLARED_PROJECT, None)
         )
         findings.extend(
             Finding(
@@ -259,7 +259,7 @@ def check(
 def ontology_findings(ontology: Ontology) -> list[Finding]:
     """Return the findings of the `ontology` rule over the file alone, in file order.
 
-    The rule checks that each service names a declared domain, each thing an owner that is a
+    The rule checks that each project names a declared domain, each thing an owner that is a
     declared domain, every `ref` and `derived_from` a thing and a property of it that exist,
     each access rule properties of its thing and readers that are declared domains, and that a
     personal property is named by an access rule. No finding names a contract: `contract_id` is
@@ -271,10 +271,10 @@ def ontology_findings(ontology: Ontology) -> list[Finding]:
     entities: Mapping[str, Any] = document.get("entities", {})
     findings = [
         _ontology_error(
-            f"principals.services.{service}",
+            f"principals.projects.{project}",
             f"domain {spec.get('domain')!r} is not declared",
         )
-        for service, spec in principals.get("services", {}).items()
+        for project, spec in principals.get("projects", {}).items()
         if spec.get("domain") not in domains
     ]
     for name, thing in entities.items():
@@ -442,11 +442,11 @@ def _contract_id(stored: Mapping[str, Any]) -> str:
     return contract_id
 
 
-def _service(stored: Mapping[str, Any]) -> str:
-    service: str = continuo_values(stored.get("customProperties")).get(
-        "service", ""
+def _project(stored: Mapping[str, Any]) -> str:
+    project: str = continuo_values(stored.get("customProperties")).get(
+        "project", ""
     )
-    return service
+    return project
 
 
 def _estate(ontology: Ontology, declared: Sequence[Mapping[str, Any]]) -> _Estate:
@@ -502,7 +502,7 @@ def _copy(stored: Mapping[str, Any]) -> _Copy:
     return _Copy(
         id=contract_id,
         relation=relation,
-        service=_service(stored),
+        project=_project(stored),
         domain=stored.get("domain"),
         entity=values.get("entity", ""),
         grain=values.get("grain", []),
@@ -540,13 +540,13 @@ def _warning(rule: str, copy: _Copy, message: str) -> Finding:
 def _contract_rule(estate: _Estate, copy: _Copy) -> list[Finding]:
     findings: list[Finding] = []
     entities = estate.entities
-    expected = estate.ontology.domain_of(copy.service)
+    expected = estate.ontology.domain_of(copy.project)
     if copy.domain is not None and copy.domain != expected:
         findings.append(
             _error(
                 "contract",
                 copy,
-                f"domain {copy.domain!r} is not {copy.service}'s domain {expected!r}",
+                f"domain {copy.domain!r} is not {copy.project}'s domain {expected!r}",
             )
         )
     if bool(copy.entity) == bool(copy.grain):
@@ -696,7 +696,7 @@ def _coverage_rule(estate: _Estate, copy: _Copy) -> list[Finding]:
 
 def _access_rule(estate: _Estate, copy: _Copy) -> list[Finding]:
     findings: list[Finding] = []
-    reader = estate.ontology.domain_of(copy.service)
+    reader = estate.ontology.domain_of(copy.project)
     for relation in copy.reads:
         target = estate.by_relation.get(relation.lower())
         if target is None:
@@ -711,7 +711,7 @@ def _access_rule(estate: _Estate, copy: _Copy) -> list[Finding]:
             continue
         owner = estate.entities.get(target.entity, {}).get("owner")
         if (
-            reader in (estate.ontology.domain_of(target.service), owner)
+            reader in (estate.ontology.domain_of(target.project), owner)
             or reader in target.readers
         ):
             continue
@@ -720,7 +720,7 @@ def _access_rule(estate: _Estate, copy: _Copy) -> list[Finding]:
                 "access",
                 copy,
                 f"{reader} reads {relation} without a grant: add {reader} to "
-                f"{relation}'s readers in {target.service}'s contract",
+                f"{relation}'s readers in {target.project}'s contract",
             )
         )
     return findings
@@ -887,7 +887,7 @@ def _drift_rule(estate: _Estate, progress: Callable[[], None]) -> list[Finding]:
             held.setdefault(copy.entity, set()).update(_held(copy.entity, copy))
             copies.setdefault(copy.entity, []).append(copy.id)
         progress()
-    scope = {estate.ontology.domain_of(copy.service) for copy in estate.copies}
+    scope = {estate.ontology.domain_of(copy.project) for copy in estate.copies}
     findings: list[Finding] = []
     for name, thing in estate.entities.items():
         if name not in copies:

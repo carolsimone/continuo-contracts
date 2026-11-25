@@ -1,6 +1,6 @@
 [
  {
-  "contract_hash": "sha256:6f1a930a41e8d14c16497652558a185137009c1bd8d05f55e5b530fee90b2bd3",
+  "contract_hash": "sha256:c5bc84a9113641cefe0ed18deb5e10bc47aa0c762cb769b20a6119e50c2463b1",
   "findings": [
    {
     "contract_id": "analytics.fx_transactions_eur",
@@ -11,7 +11,7 @@
    }
   ],
   "name": "dbt_model_with_a_filter_and_a_join",
-  "ontology": "principals:\n  domains:\n    analytics: {owner_team: analytics-eng}\n    core:      {owner_team: core-data}\n    finance:   {owner_team: finance-data}\n  services:\n    core:       {domain: core,      kind: dbt}\n    finance:    {domain: finance,   kind: dbt}\n    service-py: {domain: analytics, kind: python}\n  teams:\n    analytics-eng: {idp_group: \"okta:analytics-eng\"}\n    core-data:     {idp_group: \"okta:core-data\"}\n    finance-data:  {idp_group: \"okta:finance-data\"}\n\nentities:\n  User:\n    owner: core\n    key: {user_id: int}\n    properties:\n      name:       {type: string, personal: true}\n      email:      {type: string, personal: true}\n      birth_year: {type: int,    personal: true}\n      created_at: {type: timestamp}\n    access:\n      - {properties: [name, email, birth_year], readers: [core], purpose: service_operation}\n\n  Transaction:\n    owner: core\n    key: {source: \"enum[card, fx]\", transaction_id: int}\n    properties:\n      user_id:        {ref: User}\n      amount_eur:     {type: money, currency: EUR}\n      fee_amount_eur: {type: money, currency: EUR}\n      created_at:     {type: timestamp}\n\n  FxRate:\n    owner: finance\n    key: {currency: string, rate_date: date}\n    properties:\n      rate_to_eur: {type: decimal}\n",
+  "ontology": "principals:\n  domains:\n    analytics: {owner_team: analytics-eng}\n    core:      {owner_team: core-data}\n    finance:   {owner_team: finance-data}\n  projects:\n    core:       {domain: core,      kind: dbt}\n    finance:    {domain: finance,   kind: dbt}\n    service-py: {domain: analytics, kind: python}\n  teams:\n    analytics-eng: {idp_group: \"okta:analytics-eng\"}\n    core-data:     {idp_group: \"okta:core-data\"}\n    finance-data:  {idp_group: \"okta:finance-data\"}\n\nentities:\n  User:\n    owner: core\n    key: {user_id: int}\n    properties:\n      name:       {type: string, personal: true}\n      email:      {type: string, personal: true}\n      birth_year: {type: int,    personal: true}\n      created_at: {type: timestamp}\n    access:\n      - {properties: [name, email, birth_year], readers: [core], purpose: service_operation}\n\n  Transaction:\n    owner: core\n    key: {source: \"enum[card, fx]\", transaction_id: int}\n    properties:\n      user_id:        {ref: User}\n      amount_eur:     {type: money, currency: EUR}\n      fee_amount_eur: {type: money, currency: EUR}\n      created_at:     {type: timestamp}\n\n  FxRate:\n    owner: finance\n    key: {currency: string, rate_date: date}\n    properties:\n      rate_to_eur: {type: decimal}\n",
   "resolved": {
    "apiVersion": "v3.2.0",
    "customProperties": [
@@ -38,13 +38,13 @@
      "vendor": "continuo"
     },
     {
-     "property": "schedule",
-     "value": "daily",
+     "property": "project",
+     "value": "finance",
      "vendor": "continuo"
     },
     {
-     "property": "service",
-     "value": "finance",
+     "property": "schedule",
+     "value": "daily",
      "vendor": "continuo"
     }
    ],
@@ -345,13 +345,13 @@
      "vendor": "continuo"
     },
     {
-     "property": "schedule",
-     "value": "daily",
+     "property": "project",
+     "value": "finance",
      "vendor": "continuo"
     },
     {
-     "property": "service",
-     "value": "finance",
+     "property": "schedule",
+     "value": "daily",
      "vendor": "continuo"
     }
    ],
@@ -544,10 +544,10 @@
   }
  },
  {
-  "contract_hash": "sha256:bd8660ce4d335cbefd7ef61ab163417d64da13bb5d032b0444f7eaf266671b47",
+  "contract_hash": "sha256:b7fc8e93ea396936274ac556a2db2c2618e8371fec201147a9cbd49a19c64680",
   "findings": [],
   "name": "dbt_seed_with_personal_columns",
-  "ontology": "principals:\n  domains:\n    analytics: {owner_team: analytics-eng}\n    core:      {owner_team: core-data}\n    finance:   {owner_team: finance-data}\n  services:\n    core:       {domain: core,      kind: dbt}\n    finance:    {domain: finance,   kind: dbt}\n    service-py: {domain: analytics, kind: python}\n  teams:\n    analytics-eng: {idp_group: \"okta:analytics-eng\"}\n    core-data:     {idp_group: \"okta:core-data\"}\n    finance-data:  {idp_group: \"okta:finance-data\"}\n\nentities:\n  User:\n    owner: core\n    key: {user_id: int}\n    properties:\n      name:       {type: string, personal: true}\n      email:      {type: string, personal: true}\n      birth_year: {type: int,    personal: true}\n      created_at: {type: timestamp}\n    access:\n      - {properties: [name, email, birth_year], readers: [core], purpose: service_operation}\n\n  Transaction:\n    owner: core\n    key: {source: \"enum[card, fx]\", transaction_id: int}\n    properties:\n      user_id:        {ref: User}\n      amount_eur:     {type: money, currency: EUR}\n      fee_amount_eur: {type: money, currency: EUR}\n      created_at:     {type: timestamp}\n\n  FxRate:\n    owner: finance\n    key: {currency: string, rate_date: date}\n    properties:\n      rate_to_eur: {type: decimal}\n",
+  "ontology": "principals:\n  domains:\n    analytics: {owner_team: analytics-eng}\n    core:      {owner_team: core-data}\n    finance:   {owner_team: finance-data}\n  projects:\n    core:       {domain: core,      kind: dbt}\n    finance:    {domain: finance,   kind: dbt}\n    service-py: {domain: analytics, kind: python}\n  teams:\n    analytics-eng: {idp_group: \"okta:analytics-eng\"}\n    core-data:     {idp_group: \"okta:core-data\"}\n    finance-data:  {idp_group: \"okta:finance-data\"}\n\nentities:\n  User:\n    owner: core\n    key: {user_id: int}\n    properties:\n      name:       {type: string, personal: true}\n      email:      {type: string, personal: true}\n      birth_year: {type: int,    personal: true}\n      created_at: {type: timestamp}\n    access:\n      - {properties: [name, email, birth_year], readers: [core], purpose: service_operation}\n\n  Transaction:\n    owner: core\n    key: {source: \"enum[card, fx]\", transaction_id: int}\n    properties:\n      user_id:        {ref: User}\n      amount_eur:     {type: money, currency: EUR}\n      fee_amount_eur: {type: money, currency: EUR}\n      created_at:     {type: timestamp}\n\n  FxRate:\n    owner: finance\n    key: {currency: string, rate_date: date}\n    properties:\n      rate_to_eur: {type: decimal}\n",
   "resolved": {
    "apiVersion": "v3.2.0",
    "customProperties": [
@@ -574,13 +574,13 @@
      "vendor": "continuo"
     },
     {
-     "property": "schedule",
-     "value": "seed",
+     "property": "project",
+     "value": "core",
      "vendor": "continuo"
     },
     {
-     "property": "service",
-     "value": "core",
+     "property": "schedule",
+     "value": "seed",
      "vendor": "continuo"
     }
    ],
@@ -740,13 +740,13 @@
      "vendor": "continuo"
     },
     {
-     "property": "schedule",
-     "value": "seed",
+     "property": "project",
+     "value": "core",
      "vendor": "continuo"
     },
     {
-     "property": "service",
-     "value": "core",
+     "property": "schedule",
+     "value": "seed",
      "vendor": "continuo"
     }
    ],
@@ -801,10 +801,10 @@
   }
  },
  {
-  "contract_hash": "sha256:456966511dcedf6b27ccb60b29ca48f1a42aacf05c9bad5897bdb4b017822fee",
+  "contract_hash": "sha256:ece84d1a79ef909a57b32e6f6a38a31c2a8b50c91e86ed883b9010662c3e24db",
   "findings": [],
   "name": "python_node_with_aggregates",
-  "ontology": "principals:\n  domains:\n    analytics: {owner_team: analytics-eng}\n    core:      {owner_team: core-data}\n    finance:   {owner_team: finance-data}\n  services:\n    core:       {domain: core,      kind: dbt}\n    finance:    {domain: finance,   kind: dbt}\n    service-py: {domain: analytics, kind: python}\n  teams:\n    analytics-eng: {idp_group: \"okta:analytics-eng\"}\n    core-data:     {idp_group: \"okta:core-data\"}\n    finance-data:  {idp_group: \"okta:finance-data\"}\n\nentities:\n  User:\n    owner: core\n    key: {user_id: int}\n    properties:\n      name:       {type: string, personal: true}\n      email:      {type: string, personal: true}\n      birth_year: {type: int,    personal: true}\n      created_at: {type: timestamp}\n    access:\n      - {properties: [name, email, birth_year], readers: [core], purpose: service_operation}\n\n  Transaction:\n    owner: core\n    key: {source: \"enum[card, fx]\", transaction_id: int}\n    properties:\n      user_id:        {ref: User}\n      amount_eur:     {type: money, currency: EUR}\n      fee_amount_eur: {type: money, currency: EUR}\n      created_at:     {type: timestamp}\n\n  FxRate:\n    owner: finance\n    key: {currency: string, rate_date: date}\n    properties:\n      rate_to_eur: {type: decimal}\n",
+  "ontology": "principals:\n  domains:\n    analytics: {owner_team: analytics-eng}\n    core:      {owner_team: core-data}\n    finance:   {owner_team: finance-data}\n  projects:\n    core:       {domain: core,      kind: dbt}\n    finance:    {domain: finance,   kind: dbt}\n    service-py: {domain: analytics, kind: python}\n  teams:\n    analytics-eng: {idp_group: \"okta:analytics-eng\"}\n    core-data:     {idp_group: \"okta:core-data\"}\n    finance-data:  {idp_group: \"okta:finance-data\"}\n\nentities:\n  User:\n    owner: core\n    key: {user_id: int}\n    properties:\n      name:       {type: string, personal: true}\n      email:      {type: string, personal: true}\n      birth_year: {type: int,    personal: true}\n      created_at: {type: timestamp}\n    access:\n      - {properties: [name, email, birth_year], readers: [core], purpose: service_operation}\n\n  Transaction:\n    owner: core\n    key: {source: \"enum[card, fx]\", transaction_id: int}\n    properties:\n      user_id:        {ref: User}\n      amount_eur:     {type: money, currency: EUR}\n      fee_amount_eur: {type: money, currency: EUR}\n      created_at:     {type: timestamp}\n\n  FxRate:\n    owner: finance\n    key: {currency: string, rate_date: date}\n    properties:\n      rate_to_eur: {type: decimal}\n",
   "resolved": {
    "apiVersion": "v3.2.0",
    "customProperties": [
@@ -816,6 +816,11 @@
     {
      "property": "kind",
      "value": "python-node",
+     "vendor": "continuo"
+    },
+    {
+     "property": "project",
+     "value": "service-py",
      "vendor": "continuo"
     },
     {
@@ -833,11 +838,6 @@
     {
      "property": "script",
      "value": "scripts/py_daily_kpis.py",
-     "vendor": "continuo"
-    },
-    {
-     "property": "service",
-     "value": "service-py",
      "vendor": "continuo"
     }
    ],
@@ -944,6 +944,11 @@
      "vendor": "continuo"
     },
     {
+     "property": "project",
+     "value": "service-py",
+     "vendor": "continuo"
+    },
+    {
      "property": "readQueries",
      "value": {
       "daily": "select created_at, amount_eur from analytics.daily_transactions"
@@ -958,11 +963,6 @@
     {
      "property": "script",
      "value": "scripts/py_daily_kpis.py",
-     "vendor": "continuo"
-    },
-    {
-     "property": "service",
-     "value": "service-py",
      "vendor": "continuo"
     }
    ],
@@ -1053,25 +1053,25 @@
   }
  },
  {
-  "contract_hash": "sha256:f38c4a9dc614139087869df2085c38f6727e012a6d930126fd7afe8545813768",
+  "contract_hash": "sha256:e4c02d6713de6b6b456a639a7895339726f7e0647675d4d43421367227dc0a96",
   "findings": [
    {
     "contract_id": "analytics.seed_users",
-    "message": "writes bindings, but its service is not declared in the ontology: they are kept as written and not checked",
+    "message": "writes bindings, but its project is not declared in the ontology: they are kept as written and not checked",
     "rule": "contract",
     "severity": "warning",
     "subject": "analytics.seed_users"
    },
    {
     "contract_id": null,
-    "message": "not declared in the ontology: none of this service's contracts is checked",
+    "message": "not declared in the ontology: none of this project's contracts is checked",
     "rule": "contract",
     "severity": "info",
     "subject": "core"
    }
   ],
-  "name": "service_not_declared",
-  "ontology": "principals:\n  domains:\n    finance: {owner_team: finance-data}\n  services:\n    finance: {domain: finance, kind: dbt}\n  teams:\n    finance-data: {idp_group: \"okta:finance-data\"}\n\nentities:\n  FxRate:\n    owner: finance\n    key: {currency: string, rate_date: date}\n    properties:\n      rate_to_eur: {type: decimal}\n",
+  "name": "project_not_declared",
+  "ontology": "principals:\n  domains:\n    finance: {owner_team: finance-data}\n  projects:\n    finance: {domain: finance, kind: dbt}\n  teams:\n    finance-data: {idp_group: \"okta:finance-data\"}\n\nentities:\n  FxRate:\n    owner: finance\n    key: {currency: string, rate_date: date}\n    properties:\n      rate_to_eur: {type: decimal}\n",
   "resolved": {
    "apiVersion": "v3.2.0",
    "customProperties": [
@@ -1098,13 +1098,13 @@
      "vendor": "continuo"
     },
     {
-     "property": "schedule",
-     "value": "seed",
+     "property": "project",
+     "value": "core",
      "vendor": "continuo"
     },
     {
-     "property": "service",
-     "value": "core",
+     "property": "schedule",
+     "value": "seed",
      "vendor": "continuo"
     }
    ],
@@ -1183,13 +1183,13 @@
      "vendor": "continuo"
     },
     {
-     "property": "schedule",
-     "value": "seed",
+     "property": "project",
+     "value": "core",
      "vendor": "continuo"
     },
     {
-     "property": "service",
-     "value": "core",
+     "property": "schedule",
+     "value": "seed",
      "vendor": "continuo"
     }
    ],
