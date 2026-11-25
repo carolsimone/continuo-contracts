@@ -419,8 +419,8 @@ def skip_reason(node: Mapping[str, Any], *, project: str) -> str | None:
     tags = _tags(node)
     if _LOCAL_STUB_TAG in tags:
         return _LOCAL_STUB
-    own = node_project(node)
-    if not tags and project and own != project:
+    node_project_name = node_project(node)
+    if not tags and project and node_project_name != project:
         return _INSTALLED_PACKAGE
     return None
 

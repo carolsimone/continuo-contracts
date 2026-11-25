@@ -289,7 +289,7 @@ def check_manifest(
 
     `manifest` is a `manifest.json` as `json.load` returns it. `declared_project` is the project
     the release names: the release compares the project of every node it keeps with it, and it
-    is the manifest's project when the manifest names none, as in
+    is used as the project when the manifest's `metadata.project_name` is empty, as in
     `dbt.manifest_project`. The empty string declares no project, and then no node's project is
     compared with it, as the release compares none when its request declares no project.
     `read_header` gives the column names in the first row of a seed's CSV file, from the seed's

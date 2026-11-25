@@ -506,18 +506,18 @@ def _read_manifest(path: Path) -> dict[str, Any]:
     return document
 
 
-def _seed_folders(project: Path) -> list[Path]:
-    """Return the real paths of the seed folders of the dbt project `project`.
+def _seed_folders(project_dir: Path) -> list[Path]:
+    """Return the real paths of the seed folders of the dbt project `project_dir`.
 
-    They are the folders that the list `seed-paths` of `project/dbt_project.yml` names, each
-    read from `project` (an absolute one as it is), with its symbolic links resolved. An entry
+    They are the folders that the list `seed-paths` of `project_dir/dbt_project.yml` names, each
+    read from `project_dir` (an absolute one as it is), with its symbolic links resolved. An entry
     that is not a string or that holds a NUL names no folder. The file is read as
     `yaml_strict.load` reads it, and the folder is `seeds` when the file is missing or cannot be
     read, is not a mapping, or has no string in a list under `seed-paths`, as dbt's default is.
     """
     try:
         document = yaml_strict.load(
-            (project / "dbt_project.yml").read_text(encoding="utf-8")
+            (project_dir / "dbt_project.yml").read_text(encoding="utf-8")
         )
     except OSError, UnicodeError, StrictYamlError:
         document = None
@@ -528,7 +528,7 @@ def _seed_folders(project: Path) -> list[Path]:
         else []
     )
     return [
-        Path(os.path.realpath(project / name))
+        Path(os.path.realpath(project_dir / name))
         for name in names or [_SEED_FOLDER]
         if "\0" not in name
     ]
@@ -558,28 +558,30 @@ def _first_row(path: Path, delimiter: str) -> list[str]:
 
 
 def _header_reader(
-    project: Path,
+    project_dir: Path,
 ) -> Callable[[Mapping[str, Any]], list[str] | None]:
-    """Return the `read_header` of the lite check for the seeds of the dbt project `project`.
+    """Return the `read_header` of the lite check for the seeds of the dbt project `project_dir`.
 
-    A seed's header is the first row of its CSV file `project/<original_file_path>`, read as
+    A seed's header is the first row of its CSV file `project_dir/<original_file_path>`, read as
     UTF-8 with an optional byte order mark and with the delimiter of the seed's `config` (a comma
     when it has none), so a CRLF line ending changes nothing. An empty file has an empty header.
     Only a regular file whose real path, its symbolic links resolved, lies in a folder of
-    `_seed_folders(project)` is read, and only its first MiB. Any other file gives `None`, as does
-    a file that cannot be read: one that is missing, whose path holds a NUL, that is not UTF-8,
+    `_seed_folders(project_dir)` is read, and only its first MiB. Any other file gives `None`, as
+    does a file that cannot be read: one that is missing, whose path holds a NUL, that is not UTF-8,
     whose first row is longer than a MiB, that has a field over the limit of `csv`, or whose
     delimiter is not one character or is one `csv` refuses, such as a quote, a newline or a
     carriage return. A manifest therefore cannot name another file for the check to show.
     """
-    folders = _seed_folders(project)
+    folders = _seed_folders(project_dir)
 
     def read(node: Mapping[str, Any]) -> list[str] | None:
         # A node that the lite check reads a header of is a kept seed, so `config` is a mapping
         # and `original_file_path` a non-empty string.
         delimiter = node["config"].get("delimiter") or ","
         try:
-            real = Path(os.path.realpath(project / node["original_file_path"]))
+            real = Path(
+                os.path.realpath(project_dir / node["original_file_path"])
+            )
             if not real.is_file() or not any(
                 real.is_relative_to(folder) for folder in folders
             ):
@@ -717,8 +719,8 @@ def _report_document(report: lite.LiteReport) -> dict[str, Any]:
 
 
 def _dbt_check(args: argparse.Namespace) -> int:
-    project: Path = args.project_dir
-    _require_folder(project)
+    project_dir: Path = args.project_dir
+    _require_folder(project_dir)
     # The ontology is read before anything runs, so a file that does not load costs no dbt run.
     onto = _load_ontology(args.ontology) if args.ontology is not None else None
     if args.manifest is not None:
@@ -737,8 +739,8 @@ def _dbt_check(args: argparse.Namespace) -> int:
     try:
         report = lite.check_manifest(
             manifest,
-            declared_project=args.project or _folder_project(project),
-            read_header=_header_reader(project),
+            declared_project=args.project or _folder_project(project_dir),
+            read_header=_header_reader(project_dir),
             ontology=onto,
         )
     except DbtNodeError as error:
@@ -917,7 +919,7 @@ def _parser() -> argparse.ArgumentParser:
         help=(
             "the project the release names: the check compares the project of every node it "
             "keeps with it, as the release does, so a node of another project is an error; it "
-            "is also the manifest's project when the manifest names none "
+            "is used as the project when the manifest's metadata.project_name is empty "
             "(default: the name of PROJECT_DIR, with _ written -)"
         ),
     )
