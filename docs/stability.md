@@ -8,8 +8,10 @@ A hash that the [test vectors](vectors.md) fix does not move between versions. A
 `content_hash` changes the hash of every node that continuo runs. A moved `contract_hash` gives
 every node it covers a new contract version.
 
-The one exception is a version that ships with a [re-baseline](glossary.md#re-baseline) and says
-so in its TL;DR, the summary at the top of its section in `CHANGELOG.md`. A version that moves no
+The exception is a version that moves a hash and says so in its TL;DR, the summary at the top of
+its section in `CHANGELOG.md`, with how continuo adopts it. That is a
+[re-baseline](glossary.md#re-baseline), unless the TL;DR names another plan, such as a clean
+break that starts continuo's install empty. A version that moves no
 hash says so there ("No hash moves", or "No hash of <version> moves").
 
 0.4.0 moves no hash for a contract that writes no [binding](glossary.md#binding): the vector files
@@ -30,9 +32,9 @@ hash once:
   supported case: see [Contracts](#contracts).
 
 0.5.0 moves every `contract_hash` once. The `continuo` property that names a node's project is
-`project`, which was `service`, so every stored form holds `project` and hashes differently. It
-ships without a re-baseline: continuo adopts it by starting its install empty and releasing every
-project again, so no stored hash is recomputed. No `content_hash` and no `source_sha256` moves.
+``project`, which was `service`, so every stored form holds `project` and hashes differently.
+continuo adopts it with a clean break instead of a re-baseline: its install starts empty and every
+project is released again, so there is no stored hash to recompute. No `content_hash` and no `source_sha256` moves.
 
 ## Contracts
 

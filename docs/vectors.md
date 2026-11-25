@@ -67,7 +67,8 @@ Compute each case's output from its input fields and compare it, types included 
 ## Change a vector
 
 The rule for the seven files other than `dbt_contracts.json`, `ontology.json` among them, is that
-they change only in a version that ships with a [re-baseline](glossary.md#re-baseline), as 0.5.0
+they change only in a version that moves a hash, which [stability](stability.md#hashes) says how
+continuo adopts: a [re-baseline](glossary.md#re-baseline), or a clean break, as for 0.5.0, which
 changed `contracts.json` and `ontology.json` when the `continuo` property `service` became
 `project`. The procedure for `dbt_contracts.json` is
 `uv run python scripts/write_dbt_goldens.py`, which writes it from the fixture manifests.
